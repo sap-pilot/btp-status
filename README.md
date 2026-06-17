@@ -67,11 +67,13 @@ npm run watch:client
 ### Production Build
 
 ```bash
-npm run build   # builds React → server/public/, then compiles server TypeScript
+npm run build   # builds React → server/public/, compiles server TypeScript, then runs mbt build -p=cf
 npm start       # runs Express on PORT (default 3000)
 ```
 
 Open http://localhost:3000/overview
+
+> `npm run build` also produces the MTA archive at `mta_archives/btp-status_<version>.mtar` ready for `cf deploy`. Requires `mbt` to be installed (`npm install -g mbt`).
 
 ## Configuration
 
