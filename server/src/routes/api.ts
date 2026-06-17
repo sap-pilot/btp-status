@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { getAllServices } from '../services/configService.js';
 import { listResponseFiles, readResponseFile, browseResponseFiles } from '../services/responseStore.js';
 import { checkService } from '../services/healthCheckService.js';
+import { syncFromRemote } from '../services/syncService.js';
+import { config } from '../config.js';
 import { logger } from '../logger.js';
 import type { ServiceWithHistory } from '../types/index.js';
 
@@ -54,6 +56,24 @@ router.get('/overview', async (req, res, next) => {
       })),
     );
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/info', (_req, res) => {
+  res.json({ syncRemote: !!config.SYNC_REMOTE });
+});
+
+router.post('/sync', async (_req, res, next) => {
+  if (!config.SYNC_REMOTE) {
+    res.status(400).json({ ok: false, reason: 'SYNC_REMOTE not configured' });
+    return;
+  }
+  try {
+    logger.info({ from: _req.ip }, 'On-demand sync triggered');
+    const stats = await syncFromRemote(config.SYNC_REMOTE);
+    res.json({ ok: !stats.error, ...stats });
   } catch (err) {
     next(err);
   }

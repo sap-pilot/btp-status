@@ -12,6 +12,16 @@ const gunzipAsync = promisify(gunzip);
 const BATCH_SIZE = 10;
 
 let syncTimer: ReturnType<typeof setInterval> | null = null;
+let syncInProgress = false;
+
+export interface SyncStats {
+  files: number;
+  transferredMB: string;
+  decompressedMB: string;
+  elapsedSec: string;
+  busy?: true;
+  error?: string;
+}
 
 interface FetchResult {
   body: string;
@@ -61,7 +71,13 @@ async function downloadOne(
   return { transferred, decompressed };
 }
 
-export async function syncFromRemote(remoteBase: string): Promise<void> {
+export async function syncFromRemote(remoteBase: string): Promise<SyncStats> {
+  if (syncInProgress) {
+    logger.warn({ remote: remoteBase }, 'Sync already in progress, skipping');
+    return { files: 0, transferredMB: '0.00', decompressedMB: '0.00', elapsedSec: '0.0', busy: true };
+  }
+
+  syncInProgress = true;
   logger.info({ remote: remoteBase }, 'Remote sync starting');
   const start = Date.now();
 
@@ -81,9 +97,11 @@ export async function syncFromRemote(remoteBase: string): Promise<void> {
 
     logger.info({ total: missing.length }, 'Files to sync from remote');
 
+    const elapsedSec = () => ((Date.now() - start) / 1000).toFixed(1);
+
     if (missing.length === 0) {
       logger.info({ elapsedMs: Date.now() - start }, 'Remote sync complete — already up to date');
-      return;
+      return { files: 0, transferredMB: '0.00', decompressedMB: '0.00', elapsedSec: elapsedSec() };
     }
 
     let totalTransferred = 0;
@@ -99,18 +117,27 @@ export async function syncFromRemote(remoteBase: string): Promise<void> {
       logger.debug({ done: Math.min(i + BATCH_SIZE, missing.length), total: missing.length }, 'Sync batch complete');
     }
 
-    const elapsedSec = ((Date.now() - start) / 1000).toFixed(1);
-    logger.info(
-      {
-        files: missing.length,
-        transferredMB: (totalTransferred / 1_048_576).toFixed(2),
-        decompressedMB: (totalDecompressed / 1_048_576).toFixed(2),
-        elapsedSec,
-      },
-      'Remote sync complete',
-    );
+    const stats: SyncStats = {
+      files: missing.length,
+      transferredMB: (totalTransferred / 1_048_576).toFixed(2),
+      decompressedMB: (totalDecompressed / 1_048_576).toFixed(2),
+      elapsedSec: elapsedSec(),
+    };
+
+    logger.info(stats, 'Remote sync complete');
+    return stats;
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
     logger.error({ err, remote: remoteBase }, 'Remote sync failed');
+    return {
+      files: 0,
+      transferredMB: '0.00',
+      decompressedMB: '0.00',
+      elapsedSec: ((Date.now() - start) / 1000).toFixed(1),
+      error: msg,
+    };
+  } finally {
+    syncInProgress = false;
   }
 }
 

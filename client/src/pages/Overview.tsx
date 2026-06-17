@@ -5,7 +5,7 @@ import StatusDots from '@/components/StatusDots';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Activity, AlertCircle, RefreshCw, Sun, Moon, ExternalLink, Zap } from 'lucide-react';
+import { Activity, AlertCircle, RefreshCw, Sun, Moon, ExternalLink, Zap, CloudDownload } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useWindowWidth } from '@/hooks/useWindowWidth';
 
@@ -63,6 +63,15 @@ export default function Overview() {
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [refreshTick, setRefreshTick] = useState(0);
   const [testingAll, setTestingAll] = useState(false);
+  const [syncAvailable, setSyncAvailable] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/info')
+      .then(r => r.json() as Promise<{ syncRemote: boolean }>)
+      .then(d => setSyncAvailable(d.syncRemote))
+      .catch(() => null);
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -79,6 +88,16 @@ export default function Overview() {
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false));
   }, [hours, refreshTick]);
+
+  async function runSync() {
+    setSyncing(true);
+    try {
+      await fetch('/api/sync', { method: 'POST' });
+    } finally {
+      setSyncing(false);
+      setRefreshTick(t => t + 1);
+    }
+  }
 
   async function runAllTests() {
     setTestingAll(true);
@@ -129,6 +148,17 @@ export default function Overview() {
             >
               {healthyServices}/{totalServices} healthy
             </Badge>
+            {syncAvailable && (
+              <button
+                onClick={() => void runSync()}
+                disabled={syncing}
+                className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 text-xs"
+                title="Sync response files from remote"
+              >
+                <CloudDownload className={`h-4 w-4 ${syncing ? 'animate-pulse text-blue-400' : ''}`} />
+                {syncing ? 'Syncing…' : 'Sync'}
+              </button>
+            )}
             <button
               onClick={() => void runAllTests()}
               disabled={testingAll || data.length === 0}

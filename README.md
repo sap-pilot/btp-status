@@ -147,6 +147,8 @@ When `interval` is set to a value greater than `0`, the server automatically run
 | `GET /api/overview?hours=24` | Overview data for all services (JSON) |
 | `GET /api/history/:name?hours=24` | History file list for a service (JSON) |
 | `GET /api/history/:name/:filename` | Full request/response detail for one check (JSON) |
+| `GET /api/info` | Server capabilities: `{ syncRemote: boolean }` — used by the UI to conditionally show the Sync button |
+| `POST /api/sync` | Trigger an on-demand remote sync; returns `{ ok, files, transferredMB, decompressedMB, elapsedSec }` or `{ ok: false, busy: true }` if a sync is already running |
 | `GET /api/browse` | List all response files grouped by service folder: `{ folders: { name: [filename, ...] } }` |
 | `GET /api/download?path=folder/file.json` | Download a single response file (path restricted to `response/` directory) |
 
