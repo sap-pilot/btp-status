@@ -19,8 +19,10 @@
 - Overview header logo replaced: `Activity` icon swapped for `favicon-32x32.png`
 - Express static file caching: JS and CSS assets served with `Cache-Control: public, max-age=31536000, immutable` (Vite content-hashed filenames make this safe); images/favicons with `public, max-age=86400`; HTML always `no-cache` so clients pick up new asset hashes on deploy
 
+- Test modal: each endpoint now has a collapse/expand toggle (chevron button); content area uses `overflow-y-auto` so long results scroll within the modal height rather than pushing it off-screen
+
 ### Changed
-- `package.json` version bumped to `0.0.2`; `mta.yaml` version synced to `0.0.2`
+- `package.json` version bumped to `0.2.0`; `mta.yaml` version synced to `0.2.0`
 - `npm run bd` now deploys with `--strategy blue-green --skip-testing-phase` to minimise disruption: CF starts a parallel green instance, waits for it to become healthy, then cuts over traffic before removing the old instance
 - `keep-existing: env: true` added to `mta.yaml` so environment variables set via `cf set-env` (e.g. `CONFIG_JSON`, `SYNC_REMOTE`) are preserved across deployments and not reset to `mta.yaml` defaults
 

@@ -9,9 +9,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { PlayCircle, RotateCw, Copy, Check } from 'lucide-react';
+import { PlayCircle, RotateCw, Copy, Check, ChevronDown, ChevronRight } from 'lucide-react';
 
 interface ConditionResult {
   condition: string;
@@ -80,6 +79,15 @@ export default function TestModal({ serviceName, open, onClose, onComplete }: Pr
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+
+  function toggleCollapse(idx: number) {
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx); else next.add(idx);
+      return next;
+    });
+  }
 
   const healthUrl = `${window.location.origin}/health/${encodeURIComponent(serviceName)}`;
 
@@ -94,6 +102,7 @@ export default function TestModal({ serviceName, open, onClose, onComplete }: Pr
     setResult(null);
     setError(null);
     setElapsed(null);
+    setCollapsed(new Set());
     onClose();
   }
 
@@ -102,6 +111,7 @@ export default function TestModal({ serviceName, open, onClose, onComplete }: Pr
     setResult(null);
     setError(null);
     setElapsed(null);
+    setCollapsed(new Set());
     const start = Date.now();
     try {
       const resp = await fetch(`/api/check/${encodeURIComponent(serviceName)}`);
@@ -174,14 +184,23 @@ export default function TestModal({ serviceName, open, onClose, onComplete }: Pr
 
         {/* Results */}
         {result && (
-          <ScrollArea className="flex-1 min-h-0">
-            <div className="space-y-5 pr-2">
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="space-y-5 pr-1">
               {result.details.map((ep, epIdx) => (
                 <div key={ep.index}>
                   {epIdx > 0 && <Separator className="mb-4" />}
 
-                  {/* Endpoint header */}
+                  {/* Endpoint header with collapse toggle */}
                   <div className="flex items-center gap-2 mb-3">
+                    <button
+                      onClick={() => toggleCollapse(epIdx)}
+                      className="text-muted-foreground hover:text-foreground flex-shrink-0"
+                      title={collapsed.has(epIdx) ? 'Expand' : 'Collapse'}
+                    >
+                      {collapsed.has(epIdx)
+                        ? <ChevronRight className="h-4 w-4" />
+                        : <ChevronDown className="h-4 w-4" />}
+                    </button>
                     <span className={`w-2 h-2 rounded-full flex-shrink-0 ${ep.passed ? 'bg-green-500' : 'bg-red-500'}`} />
                     <span className="text-sm font-semibold">{ep.name}</span>
                     <span className="text-xs text-muted-foreground">{ep.responseTime}ms</span>
@@ -193,8 +212,8 @@ export default function TestModal({ serviceName, open, onClose, onComplete }: Pr
                     </Badge>
                   </div>
 
-                  {/* Per-endpoint tabs */}
-                  <Tabs defaultValue="conditions">
+                  {/* Per-endpoint tabs — hidden when collapsed */}
+                  {!collapsed.has(epIdx) && <Tabs defaultValue="conditions">
                     <TabsList className="h-8">
                       <TabsTrigger value="conditions" className="text-xs h-7">
                         Conditions
@@ -290,11 +309,11 @@ export default function TestModal({ serviceName, open, onClose, onComplete }: Pr
                         </pre>
                       </Section>
                     </TabsContent>
-                  </Tabs>
+                  </Tabs>}
                 </div>
               ))}
             </div>
-          </ScrollArea>
+          </div>
         )}
 
         {!result && !error && !running && (
