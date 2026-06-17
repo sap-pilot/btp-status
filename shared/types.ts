@@ -12,6 +12,7 @@ export interface ServiceConfig {
   name: string;
   enabled: boolean;
   interval?: number;
+  homepage?: string;
   endpoints: EndpointConfig[];
 }
 
@@ -46,10 +47,6 @@ export interface HistoryFile {
   overallStatus: 200 | 500;
 }
 
-export interface ServiceWithHistory {
-  group: string;
-  name: string;
-  enabled: boolean;
-  endpoints: EndpointConfig[];
+export interface ServiceWithHistory extends ServiceConfig {
   history: HistoryFile[];
 }
