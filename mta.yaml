@@ -12,6 +12,8 @@ modules:
       buildpack: nodejs_buildpack
       host: btp-status-${org}-${space}
       enable-ssh: true
+      keep-existing:
+        env: true
     build-parameters:
       builder: custom
       commands:

@@ -260,6 +260,8 @@ npm run bd
 
 `npm run bd` builds the MTA archive with `mbt build` and deploys it using the **blue-green strategy** (`--strategy blue-green --skip-testing-phase`), which starts a parallel "green" instance, waits for it to be healthy, then routes traffic and removes the old "blue" instance — minimising downtime and avoiding dropped requests during deploys.
 
+`keep-existing: env: true` in `mta.yaml` instructs the MTA deployer to **preserve existing environment variables** (e.g. `CONFIG_JSON`, `SYNC_REMOTE`) on the app during deployment, so runtime config set via `cf set-env` is not wiped by a redeploy.
+
 To build and deploy manually:
 
 ```bash
