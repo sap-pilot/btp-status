@@ -98,6 +98,12 @@ export default function Overview() {
             <span className="text-xs text-muted-foreground">
               Refreshed {lastRefresh.toLocaleTimeString()}
             </span>
+            <Badge
+              variant={healthyServices === totalServices ? 'default' : 'destructive'}
+              className={healthyServices === totalServices ? 'bg-green-600 hover:bg-green-600' : ''}
+            >
+              {healthyServices}/{totalServices} healthy
+            </Badge>
             <button
               onClick={() => setHours(h => { setTimeout(() => setHours(h), 0); return h; })}
               className="text-muted-foreground hover:text-foreground"
@@ -129,16 +135,7 @@ export default function Overview() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        {/* Summary */}
-        <div className="flex items-center gap-4">
-          <Badge
-            variant={healthyServices === totalServices ? 'default' : 'destructive'}
-            className={healthyServices === totalServices ? 'bg-green-600 hover:bg-green-600' : ''}
-          >
-            {healthyServices}/{totalServices} services healthy
-          </Badge>
-          {loading && <span className="text-xs text-muted-foreground">Loading…</span>}
-        </div>
+        {loading && <span className="text-xs text-muted-foreground">Loading…</span>}
 
         {error && (
           <div className="flex items-center gap-2 text-destructive text-sm">

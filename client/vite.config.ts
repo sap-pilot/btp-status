@@ -20,9 +20,7 @@ function getCommitHash(): string {
 }
 
 function getBuildDate(): string {
-  // PST = UTC-8 (fixed offset; does not observe DST)
-  const pst = new Date(Date.now() - 8 * 60 * 60 * 1000);
-  return pst.toISOString().slice(0, 10);
+  return new Date().toISOString().slice(0, 10); // UTC date
 }
 
 export default defineConfig({
