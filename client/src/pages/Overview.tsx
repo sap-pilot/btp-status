@@ -110,7 +110,7 @@ export default function Overview() {
               className="text-muted-foreground hover:text-foreground"
               title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
             >
-              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
             </button>
             <Select value={String(hours)} onValueChange={v => setHours(Number(v))}>
               <SelectTrigger className="w-36 h-8 text-xs">
