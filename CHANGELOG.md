@@ -9,6 +9,8 @@
 - Dark/light theme toggle (Moon/Sun icon) in the header of both Overview and History pages; preference persisted in `localStorage`
 - Build-time version badge in the Overview header: `v{version}+{commit}.{build-date-PST}`
 
+- Optional `homepage` URL per service: when set, an ↗ icon button appears next to the service name on the overview dashboard and opens the URL in a new tab
+
 ### Changed
 - `npm run dev` builds the React client once then starts Express on a single port (removed dual-server / Vite proxy setup)
 - `Copy URL` button in the Test modal copies the `/health/:name` probe URL; result summary (PASS/FAIL, elapsed, endpoints) moved into the dialog title row
