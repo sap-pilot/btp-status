@@ -6,7 +6,9 @@
 - `GET /api/browse` — returns the full folder/file structure under `./response/` as `{ folders: { serviceName: [filename, ...] } }`
 - `GET /api/download?path=folder/filename.json` — downloads a single response file; path is validated (no `..`, no absolute paths, must be exactly `folder/filename`)
 - `SYNC_REMOTE` environment variable: when set, the server fetches the remote instance's `/api/browse` at startup, computes missing files, and downloads them in batches of 10; logs each file path at `DEBUG` level and logs total transferred/decompressed MB and elapsed time at `INFO` on completion
+- `SYNC_INTERVAL` environment variable (default `900`): seconds between periodic remote sync runs; minimum enforced at 60 s; the same diff/download logic as the startup sync is reused; scheduler uses `unref()` so it does not block graceful shutdown
 - Gzip compression middleware using native `node:zlib`: all text/JSON/JS/CSS/HTML/XML responses are gzip-compressed; binary images (JPG, PNG, etc.) are passed through uncompressed; respects `Accept-Encoding` and cleans up `Content-Length`
+- `enable-ssh: true` added to `btp-status-srv` parameters in `mta.yaml`
 
 ### Changed
 - `package.json` version bumped to `0.0.2`; `mta.yaml` version synced to `0.0.2`

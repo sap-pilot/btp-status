@@ -3,7 +3,7 @@ import { config } from './config.js';
 import { loadConfig } from './services/configService.js';
 import { logger } from './logger.js';
 import { startScheduler, stopScheduler } from './services/schedulerService.js';
-import { syncFromRemote } from './services/syncService.js';
+import { syncFromRemote, startSyncScheduler, stopSyncScheduler } from './services/syncService.js';
 import healthRouter from './routes/health.js';
 import apiRouter from './routes/api.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -40,12 +40,14 @@ const server = app.listen(config.PORT, () => {
     syncFromRemote(config.SYNC_REMOTE).catch(err =>
       logger.error({ err }, 'Remote sync error'),
     );
+    startSyncScheduler(config.SYNC_REMOTE);
   }
 });
 
 function shutdown(signal: string) {
   logger.info({ signal }, 'Shutting down');
   stopScheduler();
+  stopSyncScheduler();
   server.close(() => process.exit(0));
 }
 

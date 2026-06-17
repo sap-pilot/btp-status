@@ -11,6 +11,8 @@ import { browseResponseFiles } from './responseStore.js';
 const gunzipAsync = promisify(gunzip);
 const BATCH_SIZE = 10;
 
+let syncTimer: ReturnType<typeof setInterval> | null = null;
+
 interface FetchResult {
   body: string;
   transferred: number;
@@ -109,5 +111,24 @@ export async function syncFromRemote(remoteBase: string): Promise<void> {
     );
   } catch (err) {
     logger.error({ err, remote: remoteBase }, 'Remote sync failed');
+  }
+}
+
+export function startSyncScheduler(remoteBase: string): void {
+  if (syncTimer) return;
+  const intervalMs = config.SYNC_INTERVAL * 1000;
+  logger.info({ remote: remoteBase, intervalSec: config.SYNC_INTERVAL }, 'Remote sync scheduler started');
+  syncTimer = setInterval(() => {
+    syncFromRemote(remoteBase).catch(err =>
+      logger.error({ err }, 'Scheduled remote sync error'),
+    );
+  }, intervalMs);
+  syncTimer.unref();
+}
+
+export function stopSyncScheduler(): void {
+  if (syncTimer) {
+    clearInterval(syncTimer);
+    syncTimer = null;
   }
 }
