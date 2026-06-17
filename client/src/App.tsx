@@ -7,7 +7,8 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/overview" element={<Overview />} />
-        <Route path="/history/:name" element={<History />} />
+        <Route path="/service/:name" element={<History />} />
+        <Route path="/history/:name" element={<Navigate to="/overview" replace />} />
         <Route path="/" element={<Navigate to="/overview" replace />} />
         <Route path="*" element={<Navigate to="/overview" replace />} />
       </Routes>

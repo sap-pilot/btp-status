@@ -5,7 +5,7 @@ import StatusDots from '@/components/StatusDots';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Activity, AlertCircle, RefreshCw, Sun, Moon, ExternalLink } from 'lucide-react';
+import { Activity, AlertCircle, RefreshCw, Sun, Moon, ExternalLink, Zap } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 
 const HOUR_OPTIONS = [
@@ -52,6 +52,8 @@ export default function Overview() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [testingAll, setTestingAll] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -67,7 +69,21 @@ export default function Overview() {
       })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false));
-  }, [hours]);
+  }, [hours, refreshTick]);
+
+  async function runAllTests() {
+    setTestingAll(true);
+    try {
+      await Promise.all(
+        data.map(svc =>
+          fetch(`/api/check/${encodeURIComponent(svc.name)}`).catch(() => null),
+        ),
+      );
+    } finally {
+      setTestingAll(false);
+      setRefreshTick(t => t + 1);
+    }
+  }
 
   const groups = data.reduce<Record<string, ServiceWithHistory[]>>((acc, svc) => {
     const g = svc.group || 'Default';
@@ -105,7 +121,16 @@ export default function Overview() {
               {healthyServices}/{totalServices} healthy
             </Badge>
             <button
-              onClick={() => setHours(h => { setTimeout(() => setHours(h), 0); return h; })}
+              onClick={() => void runAllTests()}
+              disabled={testingAll || data.length === 0}
+              className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 text-xs"
+              title="Run health checks for all services"
+            >
+              <Zap className={`h-4 w-4 ${testingAll ? 'animate-pulse text-yellow-400' : ''}`} />
+              {testingAll ? 'Running…' : 'Test all'}
+            </button>
+            <button
+              onClick={() => setRefreshTick(t => t + 1)}
               className="text-muted-foreground hover:text-foreground"
               title="Refresh"
             >
@@ -187,7 +212,7 @@ export default function Overview() {
                               }`}
                             />
                             <Link
-                              to={`/history/${encodeURIComponent(svc.name)}`}
+                              to={`/service/${encodeURIComponent(svc.name)}`}
                               className="text-sm font-medium hover:text-primary transition-colors truncate"
                             >
                               {svc.name}

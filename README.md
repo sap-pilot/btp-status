@@ -9,7 +9,7 @@ A lightweight, file-backed status page and health checker for SAP BTP services. 
 - **HTTP health checks** with Gatus-style condition evaluation (`[STATUS]`, `[BODY]`, `[HEADER.*]`, `[RESPONSE_TIME]`, `len()`, `pat()`)
 - **Azure Traffic Manager integration** — `GET /health/:name` returns `200 OK` when all conditions pass, `500` with failure details when any condition fails
 - **Gatus-style overview dashboard** at `/overview` — services grouped by group name with colored status timeline dots
-- **Per-service history** at `/history/:name` — uptime %, avg response time, full check history table
+- **Per-service detail** at `/service/:name` — uptime %, avg response time, full check history table
 - **Drill-down modal** — inspect every request/response/condition result for any past check
 - **File-based storage** — no database required; responses saved as JSON files under `./response/`
 - **Dark-themed React UI** built with shadcn/ui + Tailwind CSS
@@ -141,7 +141,7 @@ When `interval` is set to a value greater than `0`, the server automatically run
 |----------|-------------|
 | `GET /health/:name` | Run health check; returns `200 OK` or `500 <failure details>` (Azure Traffic Manager) |
 | `GET /overview` | Overview dashboard UI |
-| `GET /history/:name` | Service history UI (includes "Run Test" button) |
+| `GET /service/:name` | Service detail UI — history timeline, drill-down, "Run Test" button |
 | `GET /api/services` | List all services (JSON) |
 | `GET /api/check/:name` | Run health check, return structured JSON with per-endpoint request/response/conditions (used by Test popup) |
 | `GET /api/overview?hours=24` | Overview data for all services (JSON) |

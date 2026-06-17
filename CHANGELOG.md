@@ -10,6 +10,8 @@
 - Build-time version badge in the Overview header: `v{version}+{commit}.{build-date-PST}`
 
 - Optional `homepage` URL per service: when set, an ↗ icon button appears next to the service name on the overview dashboard and opens the URL in a new tab
+- "Test all" button (⚡) in the overview header: runs health checks for all services in parallel, shows a pulsing "Running…" state while active, then auto-refreshes the dashboard on completion
+- Service detail page moved from `/history/:name` to `/service/:name`; old URL redirects to `/overview`
 
 ### Changed
 - `npm run dev` builds the React client once then starts Express on a single port (removed dual-server / Vite proxy setup)
