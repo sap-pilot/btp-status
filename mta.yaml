@@ -8,7 +8,7 @@ modules:
     path: server
     parameters:
       memory: 256M
-      disk-quota: 512M
+      disk-quota: 2G
       buildpack: nodejs_buildpack
       host: btp-status-${org}-${space}
       enable-ssh: true
