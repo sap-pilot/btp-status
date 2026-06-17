@@ -5,7 +5,8 @@ import StatusDots from '@/components/StatusDots';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Activity, AlertCircle, RefreshCw } from 'lucide-react';
+import { Activity, AlertCircle, RefreshCw, Sun, Moon } from 'lucide-react';
+import { useTheme } from '@/hooks/useTheme';
 
 const HOUR_OPTIONS = [
   { value: '1', label: 'Last 1 hour' },
@@ -45,6 +46,7 @@ function getUptimePct(history: HistoryFile[]): number {
 }
 
 export default function Overview() {
+  const { theme, toggleTheme } = useTheme();
   const [hours, setHours] = useState(24);
   const [data, setData] = useState<ServiceWithHistory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,6 +90,9 @@ export default function Overview() {
           <div className="flex items-center gap-2">
             <Activity className="h-5 w-5 text-green-500" />
             <h1 className="text-lg font-semibold">BTP Service Status</h1>
+            <span className="text-xs text-muted-foreground font-mono">
+              v{__APP_VERSION__}+{__COMMIT_HASH__}.{__BUILD_DATE__}
+            </span>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-muted-foreground">
@@ -99,6 +104,13 @@ export default function Overview() {
               title="Refresh"
             >
               <RefreshCw className="h-4 w-4" />
+            </button>
+            <button
+              onClick={toggleTheme}
+              className="text-muted-foreground hover:text-foreground"
+              title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            >
+              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
             <Select value={String(hours)} onValueChange={v => setHours(Number(v))}>
               <SelectTrigger className="w-36 h-8 text-xs">
