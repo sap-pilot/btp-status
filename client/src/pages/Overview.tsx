@@ -153,20 +153,29 @@ export default function Overview() {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <table className="w-full">
+              <table className="w-full table-fixed">
+                <colgroup>
+                  <col className="w-56" />  {/* service name — fixed */}
+                  <col />                   {/* timeline — takes remaining space */}
+                  <col className="w-40" />  {/* stats — fixed */}
+                </colgroup>
                 <tbody>
                   {services.map(svc => {
                     const combined = getServiceOverallHistory(svc);
                     const uptime = getUptimePct(combined);
                     const lastStatus = combined[0]?.overallStatus;
-                    const lastMs = combined[0]?.responseTime;
+                    const lastMs = combined[0]?.responseTime ?? null;
+                    const avgMs = combined.length > 0
+                      ? Math.round(combined.reduce((s, h) => s + h.responseTime, 0) / combined.length)
+                      : null;
 
                     return (
                       <tr
                         key={svc.name}
                         className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                       >
-                        <td className="px-4 py-3">
+                        {/* Service name — fixed width so all timelines start at the same X */}
+                        <td className="px-4 py-3 align-middle">
                           <div className="flex items-center gap-2">
                             <span
                               className={`w-2 h-2 rounded-full flex-shrink-0 ${
@@ -200,25 +209,33 @@ export default function Overview() {
                             {svc.endpoints.length} endpoint{svc.endpoints.length !== 1 ? 's' : ''}
                           </div>
                         </td>
-                        <td className="px-4 py-3">
-                          <StatusDots history={combined} maxDots={48} />
+
+                        {/* Timeline — fills all remaining width */}
+                        <td className="px-4 py-3 align-middle">
+                          <StatusDots history={combined} maxDots={72} showUptime={false} showAvg={false} />
                         </td>
-                        <td className="px-4 py-3 text-right">
-                          <Badge
-                            variant={uptime >= 90 ? 'outline' : uptime >= 70 ? 'secondary' : 'destructive'}
-                            className={`text-xs ${
-                              uptime >= 90
-                                ? 'border-green-600 text-green-400'
-                                : uptime >= 70
-                                ? 'text-yellow-400'
-                                : ''
-                            }`}
-                          >
-                            {combined.length > 0 ? `${uptime}%` : 'no data'}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 text-right text-xs text-muted-foreground">
-                          {lastMs != null ? `latest ${lastMs}ms` : '—'}
+
+                        {/* Stats — fixed width, badge + avg/latest stacked */}
+                        <td className="px-4 py-3 align-middle">
+                          <div className="flex flex-col items-end gap-1">
+                            <Badge
+                              variant={uptime >= 90 ? 'outline' : uptime >= 70 ? 'secondary' : 'destructive'}
+                              className={`text-xs ${
+                                uptime >= 90
+                                  ? 'border-green-600 text-green-400'
+                                  : uptime >= 70
+                                  ? 'text-yellow-400'
+                                  : ''
+                              }`}
+                            >
+                              {combined.length > 0 ? `${uptime}% up` : 'no data'}
+                            </Badge>
+                            {avgMs != null && lastMs != null && (
+                              <span className="text-xs text-muted-foreground whitespace-nowrap" title="average / latest response time (ms)">
+                                {avgMs}/{lastMs}ms
+                              </span>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

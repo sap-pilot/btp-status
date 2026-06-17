@@ -4,13 +4,14 @@ interface StatusDotsProps {
   history: HistoryFile[];
   maxDots?: number;
   showAvg?: boolean;
+  showUptime?: boolean;
 }
 
 function formatTs(ms: number): string {
   return new Date(ms).toLocaleString();
 }
 
-export default function StatusDots({ history, maxDots = 48, showAvg = true }: StatusDotsProps) {
+export default function StatusDots({ history, maxDots = 48, showAvg = true, showUptime = true }: StatusDotsProps) {
   const nonEmpty = history.length;
   const upCount = history.filter(h => h.overallStatus === 200).length;
   const uptime = nonEmpty > 0 ? Math.round((upCount / nonEmpty) * 100) : 100;
@@ -52,9 +53,11 @@ export default function StatusDots({ history, maxDots = 48, showAvg = true }: St
           );
         })}
       </div>
-      <span className="text-xs text-muted-foreground whitespace-nowrap">
-        {uptime}% up
-      </span>
+      {showUptime && (
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
+          {uptime}% up
+        </span>
+      )}
       {showAvg && avgMs > 0 && (
         <span className="text-xs text-muted-foreground whitespace-nowrap">
           avg {avgMs}ms
