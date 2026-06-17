@@ -1,0 +1,77 @@
+{
+  "services": [
+    {
+      "group": "WorkZone",
+      "name": "dcore-prod",
+      "enabled": true,
+      "endpoints": [
+        {
+          "name": "Launch Redirect",
+          "url": "https://pcfaws-02.launchpad.cfapps.us10.ondemand.com/site/dcore-prod",
+          "method": "GET",
+          "headers": {},
+          "body": null,
+          "conditions": [
+            "[STATUS] == 301",
+            "[RESPONSE_TIME] < 3000"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "WorkZone",
+      "name": "hrp-prod",
+      "enabled": true,
+      "endpoints": [
+        {
+          "name": "API Health",
+          "url": "https://example.hana.ondemand.com/api/health",
+          "method": "GET",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "body": null,
+          "conditions": [
+            "[STATUS] == 200",
+            "[RESPONSE_TIME] < 2000",
+            "[BODY].status == \"healthy\""
+          ]
+        },
+        {
+          "name": "Login Page",
+          "url": "https://example.hana.ondemand.com/login",
+          "method": "GET",
+          "headers": {},
+          "body": null,
+          "conditions": [
+            "[STATUS] == 200",
+            "[BODY] == pat(*login*)"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "Integration",
+      "name": "erp-webhook",
+      "enabled": true,
+      "endpoints": [
+        {
+          "name": "Webhook Ping",
+          "url": "https://example.com/webhook/ping",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json",
+            "X-API-Key": "your-api-key"
+          },
+          "body": "{\"ping\":true}",
+          "conditions": [
+            "[STATUS] == 200",
+            "[RESPONSE_TIME] < 5000",
+            "[HEADER.content-type] == pat(*application/json*)",
+            "len([BODY].services) > 0"
+          ]
+        }
+      ]
+    }
+  ]
+}

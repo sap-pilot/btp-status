@@ -1,0 +1,21 @@
+_schema-version: "3.3"
+ID: btp-status
+version: 0.1.0
+
+modules:
+  - name: btp-status-srv
+    type: nodejs
+    path: server
+    parameters:
+      memory: 256M
+      disk-quota: 512M
+      buildpack: nodejs_buildpack
+    build-parameters:
+      builder: custom
+      commands:
+        - npm ci --prefix ..
+        - npm run build --prefix ..
+    properties:
+      CONFIG_FILE: ./config.json
+
+resources: []
