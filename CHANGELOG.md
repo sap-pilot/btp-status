@@ -35,13 +35,14 @@
   - `WARN` — each individual failed condition with actual vs expected values (yellow)
   - `ERROR` — network/connection errors from fetch (red, includes full error object + stack)
   - Log level configurable via `LOG_LEVEL` env var (default: `debug`)
-- `GET /api/check/:name` — new JSON endpoint for manual test runs; returns structured condition results
+- `GET /api/check/:name` — JSON endpoint for manual test runs; returns structured results including full request/response data per endpoint
 - **"Run Test" button** on `/history/:name` page:
   - Opens a popup dialog to trigger an on-demand health check
-  - Shows per-endpoint pass/fail and per-condition actual vs expected values in real time
+  - Per-endpoint tabs: **Conditions** (pass/fail table with actual vs expected), **Request** (method, URL, headers, body), **Response** (status, response time, headers, body — JSON auto-prettified)
   - Automatically refreshes the history table and timeline once the test completes
+- `CONFIG_JSON` environment variable: supply the full service config as a JSON string, bypassing the config file entirely — takes priority over `CONFIG_FILE` (useful for BTP environment properties and MTA extension descriptors)
 - Express serves React build directly (single process, single port — no separate Vite dev server)
 - React frontend (Vite + TypeScript) with shadcn/ui components and dark theme
 - Express backend with route/controller/service layering
 - SAP BTP Cloud Foundry deployment via MTA (`mta.yaml`)
-- Environment variable configuration: `PORT`, `CONFIG_FILE`, `RESPONSE_DIR`, `LOG_LEVEL`
+- Environment variable configuration: `PORT`, `CONFIG_JSON`, `CONFIG_FILE`, `RESPONSE_DIR`, `LOG_LEVEL`

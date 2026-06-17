@@ -58,6 +58,9 @@ export interface EndpointCheckResult {
   name: string;
   conditions: ConditionResult[];
   passed: boolean;
+  request: { url: string; method: string; headers: Record<string, string>; body: string | null };
+  response: { status: number; headers: Record<string, string>; body: string };
+  responseTime: number;
 }
 
 export interface CheckResult {

@@ -42,9 +42,9 @@ Operators: `==`, `!=`, `<`, `>`, `<=`, `>=`
 # 1. Install dependencies
 npm install
 
-# 2. Copy sample config and edit
-cp config-sample.json config.json
-# Edit config.json with your real service endpoints
+# 2. Copy sample config into the server folder and edit
+cp config-sample.json server/config.json
+# Edit server/config.json with your real service endpoints
 
 # 3. Build client once, then start Express (serves UI + API on :3000)
 npm run dev
@@ -73,7 +73,12 @@ Open http://localhost:3000/overview
 
 ## Configuration
 
-Create `config.json` (based on `config-sample.json`):
+The server resolves configuration in this priority order:
+
+1. **`CONFIG_JSON` env var** — JSON string with the full config (useful for BTP env properties, no file needed)
+2. **`CONFIG_FILE` env var / default** — path to a JSON file (default: `./config.json` relative to the `server/` working directory, i.e. `server/config.json` from the repo root)
+
+Create `server/config.json` (based on `config-sample.json`):
 
 ```json
 {
@@ -125,7 +130,7 @@ Create `config.json` (based on `config-sample.json`):
 | `GET /overview` | Overview dashboard UI |
 | `GET /history/:name` | Service history UI (includes "Run Test" button) |
 | `GET /api/services` | List all services (JSON) |
-| `GET /api/check/:name` | Run health check, return structured JSON results (used by Test popup) |
+| `GET /api/check/:name` | Run health check, return structured JSON with per-endpoint request/response/conditions (used by Test popup) |
 | `GET /api/overview?hours=24` | Overview data for all services (JSON) |
 | `GET /api/history/:name?hours=24` | History file list for a service (JSON) |
 | `GET /api/history/:name/:filename` | Full request/response detail for one check (JSON) |
@@ -171,7 +176,7 @@ The server uses [pino](https://getpino.io) with colorized pretty-print output.
 
 | Level | When |
 |-------|------|
-| `INFO` | Server startup · incoming `/health/:name` requests · pass/fail result · manual test trigger |
+| `INFO` | Server startup · config source (file vs env var) · incoming `/health/:name` requests · pass/fail result · manual test trigger |
 | `DEBUG` | Outgoing HTTP method + URL · response status, time, body preview (first 300 chars) |
 | `WARN` | Each failed condition — shows actual vs expected value (yellow) |
 | `ERROR` | Network/connection errors from fetch (red, full error object + stack) |
@@ -188,7 +193,8 @@ The server uses [pino](https://getpino.io) with colorized pretty-print output.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `3000` | HTTP listen port (Cloud Foundry sets this automatically) |
-| `CONFIG_FILE` | `./config.json` | Path to config JSON file |
+| `CONFIG_JSON` | — | Full config as a JSON string; takes priority over `CONFIG_FILE` (ideal for BTP env properties) |
+| `CONFIG_FILE` | `./config.json` | Path to config JSON file (relative to `server/` working dir; resolved as `server/config.json` from repo root) |
 | `RESPONSE_DIR` | `./response` | Directory for response file storage |
 | `LOG_LEVEL` | `debug` | Pino log level: `trace`, `debug`, `info`, `warn`, `error` |
 
@@ -217,7 +223,23 @@ cf deploy mta_archives/btp-status_0.1.0.mtar
 
 ### Post-deploy config
 
-Upload your `config.json` to the app container or set `CONFIG_FILE` to point to a bound service that provides the config. The simplest approach is to include `config.json` in the `server/` directory before building the MTA.
+Two options for providing the service config on BTP:
+
+**Option A — include the file** (simplest): place `server/config.json` in the repo before building the MTA. It will be bundled into the deployed module.
+
+**Option B — env var** (no file, suitable for secrets/dynamic configs): set `CONFIG_JSON` to the full config JSON string in the MTA environment properties or via a `*.mtaext` extension descriptor:
+
+```yaml
+# config-dev.mtaext
+_schema-version: "3.3"
+extends: btp-status
+modules:
+  - name: btp-status-srv
+    properties:
+      CONFIG_JSON: '{"services":[...]}'
+```
+
+Then deploy with: `cf deploy mta_archives/btp-status_0.1.0.mtar -e config-dev.mtaext`
 
 ### Operations
 

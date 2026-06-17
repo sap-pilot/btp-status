@@ -96,7 +96,15 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
     };
 
     await saveResponse(serviceName, record);
-    details.push({ index: i, name: epName, conditions, passed });
+    details.push({
+      index: i,
+      name: epName,
+      conditions,
+      passed,
+      request: { url: ep.url, method, headers: reqHeaders, body: ep.body },
+      response: { status: respStatus, headers: respHeaders, body: respBody },
+      responseTime,
+    });
   }
 
   const allPassed = details.every(d => d.passed);
