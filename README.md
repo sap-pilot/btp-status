@@ -1,5 +1,7 @@
 # BTP Service Status
 
+> **Disclaimer:** This project is provided as-is. No support, maintenance, or updates are guaranteed. Use at your own risk.
+
 A lightweight, file-backed status page and health checker for SAP BTP services. Compatible with Azure Traffic Manager's HTTP probe mechanism and provides a Gatus-style admin dashboard for reviewing availability history.
 
 ## Features
