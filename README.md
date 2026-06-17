@@ -67,13 +67,11 @@ npm run watch:client
 ### Production Build
 
 ```bash
-npm run build   # builds React → server/public/, compiles server TypeScript, then runs mbt build -p=cf
+npm run build   # builds React → server/public/, then compiles server TypeScript
 npm start       # runs Express on PORT (default 3000)
 ```
 
 Open http://localhost:3000/overview
-
-> `npm run build` also produces the MTA archive at `mta_archives/btp-status_<version>.mtar` ready for `cf deploy`. Requires `mbt` to be installed (`npm install -g mbt`).
 
 ## Configuration
 
@@ -120,6 +118,7 @@ Create `server/config.json` (based on `config-sample.json`):
 | `name` | string | Unique service identifier (used in URLs) |
 | `enabled` | boolean | Set `false` to exclude from checks |
 | `interval` | number | Auto-check interval in seconds; `0` or omitted disables automatic checks |
+| `homepage` | string | Optional homepage URL; when set, an ↗ button appears next to the service name on the dashboard and opens the URL in a new tab |
 | `endpoints[].name` | string | Display name for this endpoint |
 | `endpoints[].url` | string | URL to probe |
 | `endpoints[].method` | string | HTTP method (`GET`, `POST`, etc.) |
