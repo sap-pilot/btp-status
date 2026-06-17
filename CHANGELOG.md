@@ -1,6 +1,6 @@
 # Changelog
 
-## [v0.0.2] - 2026-06-17
+## [v0.2.0] - 2026-06-17
 
 ### Added
 - `GET /api/browse` — returns the full folder/file structure under `./response/` as `{ folders: { serviceName: [filename, ...] } }`
@@ -24,7 +24,7 @@
 - `npm run bd` now deploys with `--strategy blue-green --skip-testing-phase` to minimise disruption: CF starts a parallel green instance, waits for it to become healthy, then cuts over traffic before removing the old instance
 - `keep-existing: env: true` added to `mta.yaml` so environment variables set via `cf set-env` (e.g. `CONFIG_JSON`, `SYNC_REMOTE`) are preserved across deployments and not reset to `mta.yaml` defaults
 
-## [v0.0.1] - 2026-06-16
+## [v0.1.0] - 2026-06-16
 
 ### Added
 - `interval` property on each service config: when set to a value greater than `0`, the server automatically runs a health check every `interval` seconds
