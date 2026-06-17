@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { PlayCircle, RotateCw } from 'lucide-react';
+import { PlayCircle, RotateCw, Copy, Check } from 'lucide-react';
 
 interface ConditionResult {
   condition: string;
@@ -79,6 +79,16 @@ export default function TestModal({ serviceName, open, onClose, onComplete }: Pr
   const [result, setResult] = useState<CheckResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const healthUrl = `${window.location.origin}/health/${encodeURIComponent(serviceName)}`;
+
+  function copyUrl() {
+    navigator.clipboard.writeText(healthUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => null);
+  }
 
   function handleClose() {
     setResult(null);
@@ -114,15 +124,38 @@ export default function TestModal({ serviceName, open, onClose, onComplete }: Pr
     <Dialog open={open} onOpenChange={o => { if (!o) handleClose(); }}>
       <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col gap-3">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <PlayCircle className="h-4 w-4" />
-            Test — {serviceName}
+          <DialogTitle className="flex items-center gap-2 flex-wrap">
+            <PlayCircle className="h-4 w-4 flex-shrink-0" />
+            <span>Test — {serviceName}</span>
+            {result && (
+              <Badge
+                variant={result.success ? 'outline' : 'destructive'}
+                className={result.success ? 'border-green-600 text-green-400' : ''}
+              >
+                {result.success ? 'PASS' : 'FAIL'}
+              </Badge>
+            )}
+            {elapsed !== null && (
+              <span className="text-xs font-normal text-muted-foreground">{elapsed}ms total</span>
+            )}
+            {result && (
+              <span className="text-xs font-normal text-muted-foreground">
+                {passedCount}/{totalCount} endpoints passed
+              </span>
+            )}
           </DialogTitle>
         </DialogHeader>
 
-        {/* Toolbar */}
-        <div className="flex items-center gap-3 flex-shrink-0">
-          <Button size="sm" onClick={runTest} disabled={running} className="gap-2">
+        {/* URL + action buttons */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="font-mono text-xs text-muted-foreground bg-muted rounded px-2 py-1.5 truncate flex-1 min-w-0">
+            {healthUrl}
+          </span>
+          <Button size="sm" variant="outline" onClick={copyUrl} className="gap-1.5 flex-shrink-0">
+            {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied ? 'Copied!' : 'Copy URL'}
+          </Button>
+          <Button size="sm" onClick={runTest} disabled={running} className="gap-1.5 flex-shrink-0">
             {running ? (
               <><RotateCw className="h-3.5 w-3.5 animate-spin" />Running…</>
             ) : result ? (
@@ -131,23 +164,6 @@ export default function TestModal({ serviceName, open, onClose, onComplete }: Pr
               <><PlayCircle className="h-3.5 w-3.5" />Run Test</>
             )}
           </Button>
-
-          {result && (
-            <Badge
-              variant={result.success ? 'outline' : 'destructive'}
-              className={result.success ? 'border-green-600 text-green-400' : ''}
-            >
-              {result.success ? 'PASS' : 'FAIL'}
-            </Badge>
-          )}
-          {elapsed !== null && (
-            <span className="text-xs text-muted-foreground">{elapsed}ms total</span>
-          )}
-          {result && (
-            <span className="text-xs text-muted-foreground ml-auto">
-              {passedCount}/{totalCount} endpoints passed
-            </span>
-          )}
         </div>
 
         {error && (
