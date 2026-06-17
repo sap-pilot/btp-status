@@ -250,15 +250,21 @@ cf install-plugin multiapps         # CF MTA plugin (once per CF CLI install)
 ### Build & Deploy
 
 ```bash
-# Build the MTA archive
-mbt build
-
 # Log in
 cf login -a https://api.cf.<region>.hana.ondemand.com
 cf target -o <org> -s <space>
 
-# Deploy
-cf deploy mta_archives/btp-status_0.1.0.mtar
+# One-shot build + blue-green deploy (recommended)
+npm run bd
+```
+
+`npm run bd` builds the MTA archive with `mbt build` and deploys it using the **blue-green strategy** (`--strategy blue-green --skip-testing-phase`), which starts a parallel "green" instance, waits for it to be healthy, then routes traffic and removes the old "blue" instance — minimising downtime and avoiding dropped requests during deploys.
+
+To build and deploy manually:
+
+```bash
+mbt build -p=cf --mtar=btp-status.mtar
+cf deploy mta_archives/btp-status.mtar -f --retries 1 --strategy blue-green --skip-testing-phase
 ```
 
 ### Post-deploy config

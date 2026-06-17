@@ -21,6 +21,7 @@
 
 ### Changed
 - `package.json` version bumped to `0.0.2`; `mta.yaml` version synced to `0.0.2`
+- `npm run bd` now deploys with `--strategy blue-green --skip-testing-phase` to minimise disruption: CF starts a parallel green instance, waits for it to become healthy, then cuts over traffic before removing the old instance
 
 ## [v0.0.1] - 2026-06-16
 
