@@ -10,12 +10,6 @@ export default defineConfig({
       '@shared': path.resolve(__dirname, '../shared'),
     },
   },
-  server: {
-    proxy: {
-      '/api': 'http://localhost:3000',
-      '/health': 'http://localhost:3000',
-    },
-  },
   build: {
     outDir: '../server/public',
     emptyOutDir: true,

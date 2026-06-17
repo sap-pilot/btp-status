@@ -3,11 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "vite",
     "build": "tsc -b && vite build",
+    "watch": "vite build --watch",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "preview": "vite preview",
     "test": "echo 'No client tests'"
   },
   "dependencies": {

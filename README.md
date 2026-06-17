@@ -46,11 +46,21 @@ npm install
 cp config-sample.json config.json
 # Edit config.json with your real service endpoints
 
-# 3. Start dev servers (Vite on :5173, Express on :3000)
+# 3. Build client once, then start Express (serves UI + API on :3000)
 npm run dev
 ```
 
-Open http://localhost:5173/overview
+Open http://localhost:3000/overview
+
+When iterating on the frontend, rebuild the client in a second terminal while the server keeps running:
+
+```bash
+# Terminal 1 — Express with auto-restart on server file changes
+npm run dev:server
+
+# Terminal 2 — Vite rebuild on every client file change
+npm run watch:client
+```
 
 ### Production Build
 
