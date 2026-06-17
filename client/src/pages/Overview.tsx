@@ -5,7 +5,7 @@ import StatusDots from '@/components/StatusDots';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Activity, AlertCircle, RefreshCw, Sun, Moon, ExternalLink, Zap } from 'lucide-react';
+import { AlertCircle, RefreshCw, Sun, Moon, ExternalLink, Zap } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useWindowWidth } from '@/hooks/useWindowWidth';
 
@@ -132,7 +132,7 @@ export default function Overview() {
       <header className="border-b border-border sticky top-0 bg-background z-10">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Activity className="h-5 w-5 text-green-500" />
+            <img src="/images/favicon-32x32.png" alt="" className="h-5 w-5" />
             <h1 className="text-lg font-semibold">BTP Service Status</h1>
             <span className="text-xs text-muted-foreground font-mono">
               v{__APP_VERSION__}+{__COMMIT_HASH__}.{__BUILD_DATE__}
@@ -305,7 +305,7 @@ export default function Overview() {
 
         {!loading && data.length === 0 && !error && (
           <div className="text-center text-muted-foreground py-16">
-            <Activity className="h-10 w-10 mx-auto mb-3 opacity-30" />
+            <img src="/images/favicon-32x32.png" alt="" className="h-10 w-10 mx-auto mb-3 opacity-30" />
             <p className="text-sm">No services configured.</p>
             <p className="text-xs mt-1">Create a config.json and restart the server.</p>
           </div>
