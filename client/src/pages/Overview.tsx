@@ -5,7 +5,7 @@ import StatusDots from '@/components/StatusDots';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Activity, AlertCircle, RefreshCw, Sun, Moon } from 'lucide-react';
+import { Activity, AlertCircle, RefreshCw, Sun, Moon, ExternalLink } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 
 const HOUR_OPTIONS = [
@@ -157,14 +157,6 @@ export default function Overview() {
             </CardHeader>
             <CardContent className="p-0">
               <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border text-xs text-muted-foreground">
-                    <th className="text-left px-4 py-2 font-medium w-48">Service</th>
-                    <th className="text-left px-4 py-2 font-medium">Status Timeline</th>
-                    <th className="text-right px-4 py-2 font-medium w-24">Uptime</th>
-                    <th className="text-right px-4 py-2 font-medium w-24">Last Check</th>
-                  </tr>
-                </thead>
                 <tbody>
                   {services.map(svc => {
                     const combined = getServiceOverallHistory(svc);
@@ -194,6 +186,18 @@ export default function Overview() {
                             >
                               {svc.name}
                             </Link>
+                            {svc.homepage && (
+                              <a
+                                href={svc.homepage}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={`Open ${svc.name} homepage`}
+                                className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+                                onClick={e => e.stopPropagation()}
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                            )}
                           </div>
                           <div className="text-xs text-muted-foreground pl-4 mt-0.5">
                             {svc.endpoints.length} endpoint{svc.endpoints.length !== 1 ? 's' : ''}
@@ -217,7 +221,7 @@ export default function Overview() {
                           </Badge>
                         </td>
                         <td className="px-4 py-3 text-right text-xs text-muted-foreground">
-                          {lastMs != null ? `${lastMs}ms` : '—'}
+                          {lastMs != null ? `latest ${lastMs}ms` : '—'}
                         </td>
                       </tr>
                     );

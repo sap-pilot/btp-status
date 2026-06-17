@@ -5,6 +5,7 @@
       "name": "dcore-prod",
       "enabled": true,
       "interval": 300,
+      "homepage": "https://{subdomain}.launchpad.cfapps.us10.ondemand.com/site/{site}",
       "endpoints": [
         {
           "name": "Launch Redirect",
@@ -24,6 +25,7 @@
       "name": "hrp-prod",
       "enabled": true,
       "interval": 60,
+      "homepage": "https://example.hana.ondemand.com",
       "endpoints": [
         {
           "name": "API Health",

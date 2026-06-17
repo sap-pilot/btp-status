@@ -145,7 +145,7 @@ export default function History() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <StatusDots history={files} maxDots={72} />
+            <StatusDots history={files} maxDots={72} showAvg={false} />
           </CardContent>
         </Card>
 
