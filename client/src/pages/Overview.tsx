@@ -53,7 +53,7 @@ export default function Overview() {
   // table-fixed: service col w-56 (224px) + stats col w-40 (160px) + 3×px-4 cells (96px)
   // timeline td inner width = content - 224 - 160 - 96 = content - 480
   // each dot slot = w-2.5 (10px) + gap-0.5 (2px) = 12px
-  const timelineWidth = Math.min(windowWidth, 1280) - 32 - 480;
+  const timelineWidth = Math.min(windowWidth, 1280) - 32 - 360;
   const maxDots = Math.max(8, Math.floor(timelineWidth / 12));
 
   const [hours, setHours] = useState(24);

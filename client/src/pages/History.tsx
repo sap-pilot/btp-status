@@ -37,7 +37,7 @@ export default function History() {
   const windowWidth = useWindowWidth();
   // max-w-5xl (1024px) page with px-4 (32px) + CardContent p-6 (48px) = 80px overhead
   // each dot slot = w-2.5 (10px) + gap-0.5 (2px) = 12px
-  const dotAreaWidth = Math.min(windowWidth, 1024) - 80;
+  const dotAreaWidth = Math.min(windowWidth, 1024) - 140;
   const maxDots = Math.max(8, Math.floor(dotAreaWidth / 12));
 
   const [hours, setHours] = useState(24);
