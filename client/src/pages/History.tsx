@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { HistoryFile, ServiceConfig } from '@shared/types';
 import StatusDots from '@/components/StatusDots';
+import ResponseTimeChart from '@/components/ResponseTimeChart';
 import ResponseDetailModal from '@/components/ResponseDetailModal';
 import TestModal from '@/components/TestModal';
 import { Badge } from '@/components/ui/badge';
@@ -153,6 +154,18 @@ export default function History() {
           </CardHeader>
           <CardContent>
             <StatusDots history={files} maxDots={maxDots} showAvg={false} />
+          </CardContent>
+        </Card>
+
+        {/* Response Time Chart */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Response Time
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponseTimeChart files={files} service={service} />
           </CardContent>
         </Card>
 

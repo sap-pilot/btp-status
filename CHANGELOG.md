@@ -20,6 +20,7 @@
 - Express static file caching: JS and CSS assets served with `Cache-Control: public, max-age=31536000, immutable` (Vite content-hashed filenames make this safe); images/favicons with `public, max-age=86400`; HTML always `no-cache` so clients pick up new asset hashes on deploy
 
 - Test modal: each endpoint now has a collapse/expand toggle (chevron button); content area uses `overflow-y-auto` so long results scroll within the modal height rather than pushing it off-screen
+- Response time line chart on the Service detail page: pure SVG chart (no dependencies) rendered between the status timeline and the stats cards; one line series per endpoint with a distinct colour; responsive width via `ResizeObserver`; Y axis uses a "nice" rounded maximum; X axis shows time labels (date+time when range spans multiple days); dots rendered on each data point when total records ≤ 200 (native `<title>` tooltip shows endpoint name, time, and ms); colour legend shown below the chart when there are multiple endpoints
 
 ### Changed
 - `package.json` version bumped to `0.2.0`; `mta.yaml` version synced to `0.2.0`

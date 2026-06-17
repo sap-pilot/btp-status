@@ -9,7 +9,7 @@ A lightweight, file-backed status page and health checker for SAP BTP services. 
 - **HTTP health checks** with Gatus-style condition evaluation (`[STATUS]`, `[BODY]`, `[HEADER.*]`, `[RESPONSE_TIME]`, `len()`, `pat()`)
 - **Azure Traffic Manager integration** — `GET /health/:name` returns `200 OK` when all conditions pass, `500` with failure details when any condition fails
 - **Gatus-style overview dashboard** at `/overview` — services grouped by group name with colored status timeline dots
-- **Per-service detail** at `/service/:name` — uptime %, avg response time, full check history table
+- **Per-service detail** at `/service/:name` — uptime %, avg response time, full check history table, response time line chart per endpoint
 - **Drill-down modal** — inspect every request/response/condition result for any past check
 - **File-based storage** — no database required; responses saved as JSON files under `./response/`
 - **Dark-themed React UI** built with shadcn/ui + Tailwind CSS
