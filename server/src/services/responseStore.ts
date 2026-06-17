@@ -1,4 +1,4 @@
-import { mkdir, writeFile, readdir, readFile } from 'node:fs/promises';
+import { mkdir, writeFile, readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { config } from '../config.js';
 import type { ResponseRecord, HistoryFile } from '../types/index.js';
@@ -79,6 +79,37 @@ function parseFileDate(s: string): number {
   return new Date(yr, mo, dy, hr, mn, sc).getTime();
 }
 
-function sanitizeName(name: string): string {
+export function sanitizeName(name: string): string {
   return name.replace(/[^a-zA-Z0-9\-_]/g, '_');
+}
+
+export async function browseResponseFiles(): Promise<Record<string, string[]>> {
+  const result: Record<string, string[]> = {};
+  try {
+    const entries = await readdir(config.RESPONSE_DIR, { withFileTypes: true });
+    await Promise.all(
+      entries
+        .filter(e => e.isDirectory())
+        .map(async (dir) => {
+          try {
+            const files = await readdir(join(config.RESPONSE_DIR, dir.name));
+            result[dir.name] = files.filter(f => f.endsWith('.json')).sort();
+          } catch {
+            result[dir.name] = [];
+          }
+        }),
+    );
+  } catch {
+    // response dir doesn't exist yet
+  }
+  return result;
+}
+
+export async function responseFileSize(folder: string, filename: string): Promise<number> {
+  try {
+    const info = await stat(join(config.RESPONSE_DIR, sanitizeName(folder), filename));
+    return info.size;
+  } catch {
+    return 0;
+  }
 }

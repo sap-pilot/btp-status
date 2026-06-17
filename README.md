@@ -147,6 +147,8 @@ When `interval` is set to a value greater than `0`, the server automatically run
 | `GET /api/overview?hours=24` | Overview data for all services (JSON) |
 | `GET /api/history/:name?hours=24` | History file list for a service (JSON) |
 | `GET /api/history/:name/:filename` | Full request/response detail for one check (JSON) |
+| `GET /api/browse` | List all response files grouped by service folder: `{ folders: { name: [filename, ...] } }` |
+| `GET /api/download?path=folder/file.json` | Download a single response file (path restricted to `response/` directory) |
 
 ### Azure Traffic Manager
 
@@ -209,7 +211,29 @@ The server uses [pino](https://getpino.io) with colorized pretty-print output.
 | `CONFIG_JSON` | — | Full config as a JSON string; takes priority over `CONFIG_FILE` (ideal for BTP env properties) |
 | `CONFIG_FILE` | `./config.json` | Path to config JSON file (relative to `server/` working dir; resolved as `server/config.json` from repo root) |
 | `RESPONSE_DIR` | `./response` | Directory for response file storage |
+| `SYNC_REMOTE` | — | Base URL of another BTP Status instance (e.g. `https://btp-status-prod.cfapps.eu10.hana.ondemand.com`). On startup, missing response files are downloaded in batches from the remote `/api/browse` + `/api/download` endpoints and saved to the local `RESPONSE_DIR`. |
 | `LOG_LEVEL` | `debug` | Pino log level: `trace`, `debug`, `info`, `warn`, `error` |
+
+## Remote Sync
+
+Set `SYNC_REMOTE` to the base URL of another running BTP Status instance to seed the local response directory on startup:
+
+```bash
+SYNC_REMOTE=https://btp-status-prod.cfapps.eu10.hana.ondemand.com npm start
+```
+
+On boot the server will:
+1. Call `GET /api/browse` on the remote to get its full file list
+2. Compare against the local `./response/` directory
+3. Download all missing files in parallel batches of 10 via `GET /api/download?path=…`
+4. Log each downloaded path at `DEBUG` level
+5. Log total files, transferred MB, decompressed MB, and elapsed seconds at `INFO`
+
+Files already present locally are never re-downloaded. This is useful for bootstrapping a new instance with historical data from a primary deployment.
+
+## Gzip Compression
+
+All HTTP responses — API JSON, HTML, CSS, JavaScript — are automatically gzip-compressed using native `node:zlib` when the client sends `Accept-Encoding: gzip`. Binary image types (JPEG, PNG, GIF, etc.) are passed through uncompressed. No additional dependency is required.
 
 ## Deployment (SAP BTP MTA)
 

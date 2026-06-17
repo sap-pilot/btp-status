@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.0.2] - 2026-06-17
+
+### Added
+- `GET /api/browse` — returns the full folder/file structure under `./response/` as `{ folders: { serviceName: [filename, ...] } }`
+- `GET /api/download?path=folder/filename.json` — downloads a single response file; path is validated (no `..`, no absolute paths, must be exactly `folder/filename`)
+- `SYNC_REMOTE` environment variable: when set, the server fetches the remote instance's `/api/browse` at startup, computes missing files, and downloads them in batches of 10; logs each file path at `DEBUG` level and logs total transferred/decompressed MB and elapsed time at `INFO` on completion
+- Gzip compression middleware using native `node:zlib`: all text/JSON/JS/CSS/HTML/XML responses are gzip-compressed; binary images (JPG, PNG, etc.) are passed through uncompressed; respects `Accept-Encoding` and cleans up `Content-Length`
+
+### Changed
+- `package.json` version bumped to `0.0.2`; `mta.yaml` version synced to `0.0.2`
+
 ## [v0.0.1] - 2026-06-16
 
 ### Added

@@ -3,12 +3,15 @@ import { config } from './config.js';
 import { loadConfig } from './services/configService.js';
 import { logger } from './logger.js';
 import { startScheduler, stopScheduler } from './services/schedulerService.js';
+import { syncFromRemote } from './services/syncService.js';
 import healthRouter from './routes/health.js';
 import apiRouter from './routes/api.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { compress } from './middleware/compress.js';
 import { serveStatic } from './static.js';
 
 const app = express();
+app.use(compress);
 app.use(express.json());
 
 try {
@@ -33,6 +36,11 @@ app.use(errorHandler);
 const server = app.listen(config.PORT, () => {
   logger.info({ port: config.PORT }, 'BTP Status server started');
   startScheduler();
+  if (config.SYNC_REMOTE) {
+    syncFromRemote(config.SYNC_REMOTE).catch(err =>
+      logger.error({ err }, 'Remote sync error'),
+    );
+  }
 });
 
 function shutdown(signal: string) {
