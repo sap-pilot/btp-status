@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Activity, AlertCircle, RefreshCw, Sun, Moon, ExternalLink, Zap } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { useWindowWidth } from '@/hooks/useWindowWidth';
 
 const HOUR_OPTIONS = [
   { value: '1', label: 'Last 1 hour' },
@@ -47,6 +48,14 @@ function getUptimePct(history: HistoryFile[]): number {
 
 export default function Overview() {
   const { theme, toggleTheme } = useTheme();
+  const windowWidth = useWindowWidth();
+  // max-w-7xl (1280px) page with px-4 (32px) → page content width
+  // table-fixed: service col w-56 (224px) + stats col w-40 (160px) + 3×px-4 cells (96px)
+  // timeline td inner width = content - 224 - 160 - 96 = content - 480
+  // each dot slot = w-2.5 (10px) + gap-0.5 (2px) = 12px
+  const timelineWidth = Math.min(windowWidth, 1280) - 32 - 480;
+  const maxDots = Math.max(8, Math.floor(timelineWidth / 12));
+
   const [hours, setHours] = useState(24);
   const [data, setData] = useState<ServiceWithHistory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -237,7 +246,7 @@ export default function Overview() {
 
                         {/* Timeline — fills all remaining width */}
                         <td className="px-4 py-3 align-middle">
-                          <StatusDots history={combined} maxDots={72} showUptime={false} showAvg={false} />
+                          <StatusDots history={combined} maxDots={maxDots} showUptime={false} showAvg={false} />
                         </td>
 
                         {/* Stats — fixed width, badge + avg/latest stacked */}

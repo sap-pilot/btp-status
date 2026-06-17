@@ -10,6 +10,8 @@
 - Gzip compression middleware using native `node:zlib`: all text/JSON/JS/CSS/HTML/XML responses are gzip-compressed; binary images (JPG, PNG, etc.) are passed through uncompressed; respects `Accept-Encoding` and cleans up `Content-Length`
 - `enable-ssh: true` added to `btp-status-srv` parameters in `mta.yaml`
 
+- Responsive status dots: `maxDots` on both Overview and History pages is derived from `window.innerWidth` via a `useWindowWidth` hook so the timeline shrinks gracefully on tablet and phone viewports instead of overflowing (Overview formula accounts for the fixed service/stats columns; History formula accounts for card padding)
+
 ### Changed
 - `package.json` version bumped to `0.0.2`; `mta.yaml` version synced to `0.0.2`
 

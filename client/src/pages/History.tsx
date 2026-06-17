@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ArrowLeft, AlertCircle, PlayCircle, Sun, Moon } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { useWindowWidth } from '@/hooks/useWindowWidth';
 
 const HOUR_OPTIONS = [
   { value: '1', label: 'Last 1 hour' },
@@ -33,6 +34,12 @@ function formatTs(ms: number): string {
 export default function History() {
   const { name = '' } = useParams<{ name: string }>();
   const { theme, toggleTheme } = useTheme();
+  const windowWidth = useWindowWidth();
+  // max-w-5xl (1024px) page with px-4 (32px) + CardContent p-6 (48px) = 80px overhead
+  // each dot slot = w-2.5 (10px) + gap-0.5 (2px) = 12px
+  const dotAreaWidth = Math.min(windowWidth, 1024) - 80;
+  const maxDots = Math.max(8, Math.floor(dotAreaWidth / 12));
+
   const [hours, setHours] = useState(24);
   const [files, setFiles] = useState<HistoryFile[]>([]);
   const [service, setService] = useState<ServiceConfig | null>(null);
@@ -145,7 +152,7 @@ export default function History() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <StatusDots history={files} maxDots={72} showAvg={false} />
+            <StatusDots history={files} maxDots={maxDots} showAvg={false} />
           </CardContent>
         </Card>
 
