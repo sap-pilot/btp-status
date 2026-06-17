@@ -14,7 +14,8 @@
 - Server no longer crashes when `config.json` is missing at startup: logs a `WARN` and starts with zero services so the process stays alive until an admin supplies `CONFIG_JSON` via env var and restarts
 - `GET /api/info` endpoint: returns server capabilities (`{ syncRemote: boolean }`) used by the UI to show/hide the Sync button
 - `POST /api/sync` endpoint: triggers an on-demand remote sync (diff + batch download); returns stats (`files`, `transferredMB`, `decompressedMB`, `elapsedSec`); returns `400` if `SYNC_REMOTE` is not configured; concurrent calls are safely serialised (second call returns `busy: true` immediately)
-- **Sync button** (cloud-download icon) in the Overview header: appears only when `SYNC_REMOTE` is configured; shows a pulsing blue animation while syncing; auto-refreshes the dashboard on completion
+- **Sync button** in the Overview header: appears only when `SYNC_REMOTE` is configured; uses the refresh icon (spinning blue while active); positioned after the "Test all" button; auto-refreshes the dashboard on completion; replaced the standalone Refresh button
+- Favicon added: `favicon.ico` + PNG sizes (16×16, 32×32, 180×180, 192×192, 512×512) served from `client/public/` so Vite bundles them into the build
 
 ### Changed
 - `package.json` version bumped to `0.0.2`; `mta.yaml` version synced to `0.0.2`

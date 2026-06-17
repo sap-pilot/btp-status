@@ -65,13 +65,13 @@ router.get('/info', (_req, res) => {
   res.json({ syncRemote: !!config.SYNC_REMOTE });
 });
 
-router.post('/sync', async (_req, res, next) => {
+router.post('/sync', async (req, res, next) => {
   if (!config.SYNC_REMOTE) {
     res.status(400).json({ ok: false, reason: 'SYNC_REMOTE not configured' });
     return;
   }
   try {
-    logger.info({ from: _req.ip }, 'On-demand sync triggered');
+    logger.info({ from: req.ip }, 'On-demand sync triggered');
     const stats = await syncFromRemote(config.SYNC_REMOTE);
     res.json({ ok: !stats.error, ...stats });
   } catch (err) {

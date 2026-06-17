@@ -5,7 +5,7 @@ import StatusDots from '@/components/StatusDots';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Activity, AlertCircle, RefreshCw, Sun, Moon, ExternalLink, Zap, CloudDownload } from 'lucide-react';
+import { Activity, AlertCircle, RefreshCw, Sun, Moon, ExternalLink, Zap } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useWindowWidth } from '@/hooks/useWindowWidth';
 
@@ -148,17 +148,6 @@ export default function Overview() {
             >
               {healthyServices}/{totalServices} healthy
             </Badge>
-            {syncAvailable && (
-              <button
-                onClick={() => void runSync()}
-                disabled={syncing}
-                className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 text-xs"
-                title="Sync response files from remote"
-              >
-                <CloudDownload className={`h-4 w-4 ${syncing ? 'animate-pulse text-blue-400' : ''}`} />
-                {syncing ? 'Syncing…' : 'Sync'}
-              </button>
-            )}
             <button
               onClick={() => void runAllTests()}
               disabled={testingAll || data.length === 0}
@@ -168,13 +157,17 @@ export default function Overview() {
               <Zap className={`h-4 w-4 ${testingAll ? 'animate-pulse text-yellow-400' : ''}`} />
               {testingAll ? 'Running…' : 'Test all'}
             </button>
-            <button
-              onClick={() => setRefreshTick(t => t + 1)}
-              className="text-muted-foreground hover:text-foreground"
-              title="Refresh"
-            >
-              <RefreshCw className="h-4 w-4" />
-            </button>
+            {syncAvailable && (
+              <button
+                onClick={() => void runSync()}
+                disabled={syncing}
+                className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 text-xs"
+                title="Sync response files from remote"
+              >
+                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin text-blue-400' : ''}`} />
+                {syncing ? 'Syncing…' : 'Sync'}
+              </button>
+            )}
             <button
               onClick={toggleTheme}
               className="text-muted-foreground hover:text-foreground"
