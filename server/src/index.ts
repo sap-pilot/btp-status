@@ -1,6 +1,7 @@
 import express from 'express';
 import { config } from './config.js';
 import { loadConfig } from './services/configService.js';
+import { logger } from './logger.js';
 import healthRouter from './routes/health.js';
 import apiRouter from './routes/api.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -10,10 +11,10 @@ const app = express();
 app.use(express.json());
 
 try {
-  loadConfig();
-  console.log(`Config loaded from ${config.CONFIG_FILE}`);
+  const cfg = loadConfig();
+  logger.info({ configFile: config.CONFIG_FILE, services: cfg.services.length }, 'Config loaded');
 } catch (err) {
-  console.error(`Failed to load config from ${config.CONFIG_FILE}:`, err);
+  logger.error({ err, configFile: config.CONFIG_FILE }, 'Failed to load config');
   process.exit(1);
 }
 
@@ -23,11 +24,11 @@ app.use('/api', apiRouter);
 try {
   serveStatic(app);
 } catch {
-  // public dir not present in dev mode
+  // public dir not present before first client build
 }
 
 app.use(errorHandler);
 
 app.listen(config.PORT, () => {
-  console.log(`BTP Status running on port ${config.PORT}`);
+  logger.info({ port: config.PORT }, 'BTP Status server started');
 });

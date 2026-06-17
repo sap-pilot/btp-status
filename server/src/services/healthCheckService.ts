@@ -1,32 +1,29 @@
 import { getService } from './configService.js';
 import { evaluateCondition } from './conditionEvaluator.js';
 import { saveResponse } from './responseStore.js';
-import type { ConditionResult, ResponseRecord } from '../types/index.js';
+import { logger } from '../logger.js';
+import type { ConditionResult, ResponseRecord, CheckResult, EndpointCheckResult } from '../types/index.js';
 
-export interface HealthCheckResult {
-  success: boolean;
-  message: string;
-  details: EndpointResult[];
-}
+export type { CheckResult, EndpointCheckResult };
 
-interface EndpointResult {
-  index: number;
-  name: string;
-  conditions: ConditionResult[];
-  passed: boolean;
-}
-
-export async function checkService(serviceName: string): Promise<HealthCheckResult> {
+export async function checkService(serviceName: string): Promise<CheckResult> {
   const service = getService(serviceName);
   if (!service) {
     throw Object.assign(new Error(`Service '${serviceName}' not found`), { status: 404 });
   }
 
-  const details: EndpointResult[] = [];
+  const details: EndpointCheckResult[] = [];
 
   for (let i = 0; i < service.endpoints.length; i++) {
     const ep = service.endpoints[i];
+    const epName = ep.name ?? `Endpoint ${i}`;
     const reqHeaders = normalizeHeaders(ep.headers);
+    const method = ep.method ?? 'GET';
+
+    logger.debug(
+      { service: serviceName, endpoint: epName, method, url: ep.url },
+      'Sending request',
+    );
 
     const start = Date.now();
     let respStatus = 0;
@@ -37,40 +34,69 @@ export async function checkService(serviceName: string): Promise<HealthCheckResu
 
     try {
       const resp = await fetch(ep.url, {
-        method: ep.method ?? 'GET',
+        method,
         headers: reqHeaders,
         body: ep.body ?? undefined,
         redirect: 'manual',
       });
       responseTime = Date.now() - start;
       respStatus = resp.status;
-      resp.headers.forEach((v, k) => {
-        respHeaders[k] = v;
-      });
+      resp.headers.forEach((v, k) => { respHeaders[k] = v; });
       respBody = await resp.text();
+
+      logger.debug(
+        {
+          service: serviceName,
+          endpoint: epName,
+          status: respStatus,
+          responseTime,
+          bodyPreview: respBody.slice(0, 300),
+        },
+        'Response received',
+      );
     } catch (err) {
       responseTime = Date.now() - start;
-      fetchError = String(err);
+      fetchError = err instanceof Error ? err.message : String(err);
       respBody = fetchError;
+
+      logger.error(
+        { service: serviceName, endpoint: epName, url: ep.url, responseTime, err },
+        'Request failed with network error',
+      );
     }
 
     const ctx = { status: respStatus, responseTime, body: respBody, headers: respHeaders };
     const conditions: ConditionResult[] = ep.conditions.map(c => evaluateCondition(c, ctx));
     const passed = fetchError === null && conditions.every(c => c.passed);
 
+    for (const c of conditions) {
+      if (!c.passed) {
+        logger.warn(
+          {
+            service: serviceName,
+            endpoint: epName,
+            condition: c.condition,
+            actual: c.actual,
+            expected: c.expected,
+          },
+          'Condition failed',
+        );
+      }
+    }
+
     const record: ResponseRecord = {
-      request: { url: ep.url, method: ep.method ?? 'GET', headers: reqHeaders, body: ep.body },
+      request: { url: ep.url, method, headers: reqHeaders, body: ep.body },
       response: { status: respStatus, headers: respHeaders, body: respBody },
       timestamp: new Date().toISOString(),
       responseTime,
       endpointIndex: i,
-      endpointName: ep.name ?? `Endpoint ${i}`,
+      endpointName: epName,
       conditions,
       overallStatus: passed ? 200 : 500,
     };
 
     await saveResponse(serviceName, record);
-    details.push({ index: i, name: ep.name ?? `Endpoint ${i}`, conditions, passed });
+    details.push({ index: i, name: epName, conditions, passed });
   }
 
   const allPassed = details.every(d => d.passed);

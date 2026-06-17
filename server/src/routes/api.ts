@@ -1,12 +1,25 @@
 import { Router } from 'express';
 import { getAllServices } from '../services/configService.js';
 import { listResponseFiles, readResponseFile } from '../services/responseStore.js';
+import { checkService } from '../services/healthCheckService.js';
+import { logger } from '../logger.js';
 import type { ServiceWithHistory } from '../types/index.js';
 
 const router = Router();
 
 router.get('/services', (_req, res) => {
   res.json(getAllServices());
+});
+
+router.get('/check/:name', async (req, res, next) => {
+  const { name } = req.params;
+  logger.info({ service: name, from: req.ip }, 'Manual test triggered');
+  try {
+    const result = await checkService(name);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
 });
 
 router.get('/history/:name', async (req, res, next) => {

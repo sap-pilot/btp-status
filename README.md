@@ -121,10 +121,11 @@ Create `config.json` (based on `config-sample.json`):
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /health/:name` | Run health check; returns `200 OK` or `500 <failure details>` |
+| `GET /health/:name` | Run health check; returns `200 OK` or `500 <failure details>` (Azure Traffic Manager) |
 | `GET /overview` | Overview dashboard UI |
-| `GET /history/:name` | Service history UI |
+| `GET /history/:name` | Service history UI (includes "Run Test" button) |
 | `GET /api/services` | List all services (JSON) |
+| `GET /api/check/:name` | Run health check, return structured JSON results (used by Test popup) |
 | `GET /api/overview?hours=24` | Overview data for all services (JSON) |
 | `GET /api/history/:name?hours=24` | History file list for a service (JSON) |
 | `GET /api/history/:name/:filename` | Full request/response detail for one check (JSON) |
@@ -164,6 +165,24 @@ File content:
 }
 ```
 
+## Logging
+
+The server uses [pino](https://getpino.io) with colorized pretty-print output.
+
+| Level | When |
+|-------|------|
+| `INFO` | Server startup · incoming `/health/:name` requests · pass/fail result · manual test trigger |
+| `DEBUG` | Outgoing HTTP method + URL · response status, time, body preview (first 300 chars) |
+| `WARN` | Each failed condition — shows actual vs expected value (yellow) |
+| `ERROR` | Network/connection errors from fetch (red, full error object + stack) |
+
+```
+[10:02:31] INFO  (service=dcore-prod from=::1) Health check request received
+[10:02:31] DEBUG (service=dcore-prod endpoint="Launch Redirect" method=GET url=https://…) Sending request
+[10:02:32] DEBUG (service=dcore-prod endpoint="Launch Redirect" status=301 responseTime=743) Response received
+[10:02:32] INFO  (service=dcore-prod) Health check passed
+```
+
 ## Environment Variables
 
 | Variable | Default | Description |
@@ -171,6 +190,7 @@ File content:
 | `PORT` | `3000` | HTTP listen port (Cloud Foundry sets this automatically) |
 | `CONFIG_FILE` | `./config.json` | Path to config JSON file |
 | `RESPONSE_DIR` | `./response` | Directory for response file storage |
+| `LOG_LEVEL` | `debug` | Pino log level: `trace`, `debug`, `info`, `warn`, `error` |
 
 ## Deployment (SAP BTP MTA)
 

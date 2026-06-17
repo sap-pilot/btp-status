@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { HistoryFile, ServiceConfig } from '@shared/types';
 import StatusDots from '@/components/StatusDots';
 import ResponseDetailModal from '@/components/ResponseDetailModal';
+import TestModal from '@/components/TestModal';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, AlertCircle } from 'lucide-react';
+import { ArrowLeft, AlertCircle, PlayCircle } from 'lucide-react';
 
 const HOUR_OPTIONS = [
   { value: '1', label: 'Last 1 hour' },
@@ -33,6 +35,7 @@ export default function History() {
   const [files, setFiles] = useState<HistoryFile[]>([]);
   const [service, setService] = useState<ServiceConfig | null>(null);
   const [selected, setSelected] = useState<HistoryFile | null>(null);
+  const [testOpen, setTestOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,7 +46,7 @@ export default function History() {
       .catch(() => null);
   }, [name]);
 
-  useEffect(() => {
+  const fetchHistory = useCallback(() => {
     setLoading(true);
     setError(null);
     fetch(`/api/history/${encodeURIComponent(name)}?hours=${hours}`)
@@ -55,6 +58,8 @@ export default function History() {
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false));
   }, [name, hours]);
+
+  useEffect(() => { fetchHistory(); }, [fetchHistory]);
 
   const upCount = files.filter(f => f.overallStatus === 200).length;
   const uptime = files.length > 0 ? Math.round((upCount / files.length) * 100) : 100;
@@ -89,18 +94,29 @@ export default function History() {
               </Badge>
             )}
           </div>
-          <Select value={String(hours)} onValueChange={v => setHours(Number(v))}>
-            <SelectTrigger className="w-36 h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {HOUR_OPTIONS.map(o => (
-                <SelectItem key={o.value} value={o.value} className="text-xs">
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => setTestOpen(true)}
+            >
+              <PlayCircle className="h-3.5 w-3.5" />
+              Run Test
+            </Button>
+            <Select value={String(hours)} onValueChange={v => setHours(Number(v))}>
+              <SelectTrigger className="w-36 h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {HOUR_OPTIONS.map(o => (
+                  <SelectItem key={o.value} value={o.value} className="text-xs">
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </header>
 
@@ -213,6 +229,13 @@ export default function History() {
         file={selected}
         serviceName={name}
         onClose={() => setSelected(null)}
+      />
+
+      <TestModal
+        serviceName={name}
+        open={testOpen}
+        onClose={() => setTestOpen(false)}
+        onComplete={fetchHistory}
       />
     </div>
   );

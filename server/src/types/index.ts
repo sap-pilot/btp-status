@@ -52,3 +52,16 @@ export interface ServiceWithHistory {
   endpoints: EndpointConfig[];
   history: HistoryFile[];
 }
+
+export interface EndpointCheckResult {
+  index: number;
+  name: string;
+  conditions: ConditionResult[];
+  passed: boolean;
+}
+
+export interface CheckResult {
+  success: boolean;
+  message: string;
+  details: EndpointCheckResult[];
+}
