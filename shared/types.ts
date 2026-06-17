@@ -11,6 +11,7 @@ export interface ServiceConfig {
   group: string;
   name: string;
   enabled: boolean;
+  interval?: number;
   endpoints: EndpointConfig[];
 }
 

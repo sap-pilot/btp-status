@@ -117,12 +117,22 @@ Create `server/config.json` (based on `config-sample.json`):
 | `group` | string | Group name for dashboard grouping |
 | `name` | string | Unique service identifier (used in URLs) |
 | `enabled` | boolean | Set `false` to exclude from checks |
+| `interval` | number | Auto-check interval in seconds; `0` or omitted disables automatic checks |
 | `endpoints[].name` | string | Display name for this endpoint |
 | `endpoints[].url` | string | URL to probe |
 | `endpoints[].method` | string | HTTP method (`GET`, `POST`, etc.) |
 | `endpoints[].headers` | object | Request headers (key-value pairs) |
 | `endpoints[].body` | string\|null | Request body (JSON string or null) |
 | `endpoints[].conditions` | string[] | Conditions to validate (Gatus syntax) |
+
+### Automatic Checks
+
+When `interval` is set to a value greater than `0`, the server automatically runs a health check for that service every `interval` seconds — no external scheduler or cron job required.
+
+- If a check is already running when the next interval fires, that tick is **skipped** (no pile-up).
+- Errors inside a check are caught and logged; the timer continues unaffected.
+- All timers are released with `unref()` so they do not block graceful process shutdown.
+- On `SIGTERM` / `SIGINT` the scheduler stops cleanly before the HTTP server closes.
 
 ## API Endpoints
 

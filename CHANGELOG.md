@@ -3,6 +3,20 @@
 ## [v0.0.1] - 2026-06-16
 
 ### Added
+- `interval` property on each service config: when set to a value greater than `0`, the server automatically runs a health check every `interval` seconds
+- Resilient background scheduler (`schedulerService`): skips overlapping runs, catches and logs errors without stopping the timer, restores missing timers as a safety net
+- Graceful shutdown: `SIGTERM` / `SIGINT` stop the scheduler and close the HTTP server cleanly
+- Dark/light theme toggle (Moon/Sun icon) in the header of both Overview and History pages; preference persisted in `localStorage`
+- Build-time version badge in the Overview header: `v{version}+{commit}.{build-date-PST}`
+
+### Changed
+- `npm run dev` builds the React client once then starts Express on a single port (removed dual-server / Vite proxy setup)
+- `Copy URL` button in the Test modal copies the `/health/:name` probe URL; result summary (PASS/FAIL, elapsed, endpoints) moved into the dialog title row
+
+### Fixed
+- Moon icon shown in dark mode, Sun icon shown in light mode (was reversed)
+
+### Added
 
 - Initial release
 - HTTP health check endpoint `GET /health/:name` compatible with Azure Traffic Manager (HTTP 200/500)

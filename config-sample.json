@@ -4,16 +4,17 @@
       "group": "WorkZone",
       "name": "dcore-prod",
       "enabled": true,
+      "interval": 300,
       "endpoints": [
         {
           "name": "Launch Redirect",
-          "url": "https://pcfaws-02.launchpad.cfapps.us10.ondemand.com/site/dcore-prod",
+          "url": "https://{subdomain}.launchpad.cfapps.us10.ondemand.com/site/{site}",
           "method": "GET",
           "headers": {},
           "body": null,
           "conditions": [
-            "[STATUS] == 301",
-            "[RESPONSE_TIME] < 3000"
+            "[STATUS] == 200",
+            "[RESPONSE_TIME] < 30000"
           ]
         }
       ]
@@ -22,6 +23,7 @@
       "group": "WorkZone",
       "name": "hrp-prod",
       "enabled": true,
+      "interval": 60,
       "endpoints": [
         {
           "name": "API Health",
@@ -54,6 +56,7 @@
       "group": "Integration",
       "name": "erp-webhook",
       "enabled": true,
+      "interval": 0,
       "endpoints": [
         {
           "name": "Webhook Ping",

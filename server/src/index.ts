@@ -2,6 +2,7 @@ import express from 'express';
 import { config } from './config.js';
 import { loadConfig } from './services/configService.js';
 import { logger } from './logger.js';
+import { startScheduler, stopScheduler } from './services/schedulerService.js';
 import healthRouter from './routes/health.js';
 import apiRouter from './routes/api.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -29,6 +30,16 @@ try {
 
 app.use(errorHandler);
 
-app.listen(config.PORT, () => {
+const server = app.listen(config.PORT, () => {
   logger.info({ port: config.PORT }, 'BTP Status server started');
+  startScheduler();
 });
+
+function shutdown(signal: string) {
+  logger.info({ signal }, 'Shutting down');
+  stopScheduler();
+  server.close(() => process.exit(0));
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
