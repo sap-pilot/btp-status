@@ -11,6 +11,7 @@
 - `enable-ssh: true` added to `btp-status-srv` parameters in `mta.yaml`
 
 - Responsive status dots: `maxDots` on both Overview and History pages is derived from `window.innerWidth` via a `useWindowWidth` hook so the timeline shrinks gracefully on tablet and phone viewports instead of overflowing (Overview formula accounts for the fixed service/stats columns; History formula accounts for card padding)
+- Server no longer crashes when `config.json` is missing at startup: logs a `WARN` and starts with zero services so the process stays alive until an admin supplies `CONFIG_JSON` via env var and restarts
 
 ### Changed
 - `package.json` version bumped to `0.0.2`; `mta.yaml` version synced to `0.0.2`

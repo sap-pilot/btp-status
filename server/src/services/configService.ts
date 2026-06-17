@@ -11,10 +11,25 @@ export function loadConfig(): AppConfig {
     appConfig = JSON.parse(process.env.CONFIG_JSON) as AppConfig;
     return appConfig;
   }
-  logger.info({ path: config.CONFIG_FILE }, 'Loading config from file');
-  const raw = readFileSync(config.CONFIG_FILE, 'utf-8');
-  appConfig = JSON.parse(raw) as AppConfig;
-  return appConfig;
+  try {
+    logger.info({ path: config.CONFIG_FILE }, 'Loading config from file');
+    const raw = readFileSync(config.CONFIG_FILE, 'utf-8');
+    appConfig = JSON.parse(raw) as AppConfig;
+    return appConfig;
+  } catch (err: unknown) {
+    const isNotFound =
+      typeof err === 'object' && err !== null && (err as NodeJS.ErrnoException).code === 'ENOENT';
+    if (isNotFound) {
+      logger.warn(
+        { path: config.CONFIG_FILE },
+        'Config file not found — starting with no services. Set CONFIG_JSON env var or provide the config file and restart.',
+      );
+    } else {
+      logger.warn({ err, path: config.CONFIG_FILE }, 'Failed to parse config — starting with no services');
+    }
+    appConfig = { services: [] };
+    return appConfig;
+  }
 }
 
 export function getConfig(): AppConfig {

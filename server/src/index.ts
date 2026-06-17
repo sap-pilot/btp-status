@@ -14,13 +14,8 @@ const app = express();
 app.use(compress);
 app.use(express.json());
 
-try {
-  const cfg = loadConfig();
-  logger.info({ configFile: config.CONFIG_FILE, services: cfg.services.length }, 'Config loaded');
-} catch (err) {
-  logger.error({ err, configFile: config.CONFIG_FILE }, 'Failed to load config');
-  process.exit(1);
-}
+const cfg = loadConfig();
+logger.info({ configFile: config.CONFIG_FILE, services: cfg.services.length }, 'Config initialized');
 
 app.use('/health', healthRouter);
 app.use('/api', apiRouter);
