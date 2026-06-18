@@ -35,7 +35,7 @@ export async function runBrowserIasLogin(
     await page.fill('#j_username', ep.username ?? '');
     logger.debug({ service: serviceName, endpoint: ep.name }, 'Browser: filled username');
 
-    await page.click('#next-button');
+    await page.click('#logOnFormSubmit');
 
     await page.waitForSelector('#j_password', { timeout });
     await page.fill('#j_password', ep.password ?? '');
