@@ -3,9 +3,12 @@ import { getAllServices } from '../services/configService.js';
 import { listResponseFiles, readResponseFile, browseResponseFiles } from '../services/responseStore.js';
 import { checkService } from '../services/healthCheckService.js';
 import { syncFromRemote } from '../services/syncService.js';
+import { getOverride, setOverride } from '../services/overrideService.js';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
-import type { ServiceWithHistory } from '../types/index.js';
+import type { ServiceMode, ServiceWithHistory } from '../types/index.js';
+
+const VALID_MODES = new Set<string>(['enabled', 'unavailable', 'disabled']);
 
 const router = Router();
 
@@ -63,6 +66,21 @@ router.get('/overview', async (req, res, next) => {
 
 router.get('/info', (_req, res) => {
   res.json({ syncRemote: !!config.SYNC_REMOTE });
+});
+
+router.get('/service-mode/:name', (req, res) => {
+  res.json({ mode: getOverride(req.params.name) });
+});
+
+router.post('/service-mode/:name', (req, res) => {
+  const mode = (req.body as { mode?: string })?.mode;
+  if (!mode || !VALID_MODES.has(mode)) {
+    res.status(400).json({ error: 'mode must be enabled, unavailable, or disabled' });
+    return;
+  }
+  setOverride(req.params.name, mode as ServiceMode);
+  logger.info({ service: req.params.name, mode }, 'Service mode updated');
+  res.json({ ok: true, mode });
 });
 
 router.post('/sync', async (req, res, next) => {

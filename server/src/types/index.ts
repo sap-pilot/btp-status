@@ -70,3 +70,5 @@ export interface CheckResult {
   message: string;
   details: EndpointCheckResult[];
 }
+
+export type ServiceMode = 'enabled' | 'unavailable' | 'disabled';

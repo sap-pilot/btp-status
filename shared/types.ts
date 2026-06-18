@@ -50,3 +50,5 @@ export interface HistoryFile {
 export interface ServiceWithHistory extends ServiceConfig {
   history: HistoryFile[];
 }
+
+export type ServiceMode = 'enabled' | 'unavailable' | 'disabled';

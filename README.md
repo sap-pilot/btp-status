@@ -6,6 +6,7 @@ A lightweight, file-backed status page and health checker for SAP BTP services. 
 
 ## Features
 
+- **Service mode control** — per-service mode selector (Enabled / Mark as Unavailable / Disabled) on the detail page; mode overrides affect `/health/:name` responses and the background scheduler without restarting the server
 - **HTTP health checks** with Gatus-style condition evaluation (`[STATUS]`, `[BODY]`, `[HEADER.*]`, `[RESPONSE_TIME]`, `len()`, `pat()`)
 - **Azure Traffic Manager integration** — `GET /health/:name` returns `200 OK` when all conditions pass, `500` with failure details when any condition fails
 - **Gatus-style overview dashboard** at `/overview` — services grouped by group name with colored status timeline dots
@@ -148,9 +149,23 @@ When `interval` is set to a value greater than `0`, the server automatically run
 | `GET /api/history/:name?hours=24` | History file list for a service (JSON) |
 | `GET /api/history/:name/:filename` | Full request/response detail for one check (JSON) |
 | `GET /api/info` | Server capabilities: `{ syncRemote: boolean }` — used by the UI to conditionally show the Sync button |
+| `GET /api/service-mode/:name` | Current override mode for a service: `{ mode: "enabled" \| "unavailable" \| "disabled" }` |
+| `POST /api/service-mode/:name` | Set override mode for a service (JSON body `{ "mode": "..." }`); resets to `enabled` on server restart |
 | `POST /api/sync` | Trigger an on-demand remote sync; returns `{ ok, files, transferredMB, decompressedMB, elapsedSec }` or `{ ok: false, busy: true }` if a sync is already running |
 | `GET /api/browse` | List all response files grouped by service folder: `{ folders: { name: [filename, ...] } }` |
 | `GET /api/download?path=folder/file.json` | Download a single response file (path restricted to `response/` directory) |
+
+### Service Mode
+
+On any service's detail page (`/service/:name`), the **mode selector** in the header lets you override how BTP Status treats that service without restarting the server:
+
+| Mode | `/health/:name` | Scheduler |
+|------|----------------|-----------|
+| **Enabled** (green) | Returns `200`/`500` based on real check results | Runs normally |
+| **Mark as Unavailable** (red) | Always returns `500` (checks still run and are recorded) | Runs normally |
+| **Disabled** (amber) | Returns `500 "service is marked as disabled"` immediately | Skips this service |
+
+Overrides are in-memory and reset to **Enabled** on server restart (a redeploy automatically restores normal operation).
 
 ### Azure Traffic Manager
 

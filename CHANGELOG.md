@@ -1,5 +1,21 @@
 # Changelog
 
+## [v0.3.0] - 2026-06-18
+
+### Added
+- **Service mode selector** on the Service detail page: a colour-coded select in the header lets admins switch each service between three modes without restarting the server
+  - **Enabled** (green): normal behaviour — checks run on schedule and `/health/:name` returns `200`/`500` based on results
+  - **Mark as Unavailable** (red): scheduled checks continue to run and results are recorded for history, but `/health/:name` always returns `500` (signals unavailability to Azure Traffic Manager even when the underlying service is healthy)
+  - **Disabled** (amber): the scheduler stops running checks for this service and `/health/:name` returns `500 "service is marked as disabled"` immediately without running a check
+- Confirmation dialog (AlertDialog) appears before applying "Mark as Unavailable" or "Disabled" so admins do not accidentally flip a live service
+- Tooltip on the mode selector explains each mode's effect on hover
+- `GET /api/service-mode/:name` — returns the current override mode for a service (`{ mode: "enabled" | "unavailable" | "disabled" }`)
+- `POST /api/service-mode/:name` — sets the override mode for a service (`{ mode }` in JSON body)
+- Overrides are held in-memory and reset to `enabled` on server restart (intentional — a redeploy restores normal operation)
+
+### Changed
+- Version bumped to `0.3.0` across all package files and `mta.yaml`
+
 ## [v0.2.0] - 2026-06-17
 
 ### Added

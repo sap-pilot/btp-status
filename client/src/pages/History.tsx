@@ -1,10 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import type { HistoryFile, ServiceConfig } from '@shared/types';
+import type { HistoryFile, ServiceConfig, ServiceMode } from '@shared/types';
 import StatusDots from '@/components/StatusDots';
 import ResponseTimeChart from '@/components/ResponseTimeChart';
 import ResponseDetailModal from '@/components/ResponseDetailModal';
 import TestModal from '@/components/TestModal';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,6 +32,18 @@ const HOUR_OPTIONS = [
   { value: '48', label: 'Last 48 hours' },
   { value: '72', label: 'Last 72 hours' },
 ];
+
+const MODE_TOOLTIP =
+  'Enabled: checks run normally and /health returns 200/500 based on results. ' +
+  'Mark as Unavailable: checks still run and are recorded, but /health always returns 500 ' +
+  '(signals unavailability to Azure Traffic Manager). ' +
+  'Disabled: scheduled checks stop and /health returns 500 "service is marked as disabled".';
+
+function modeTriggerClass(mode: ServiceMode): string {
+  if (mode === 'enabled') return 'bg-green-950 border-green-700 text-green-400 hover:bg-green-900';
+  if (mode === 'unavailable') return 'bg-red-950 border-red-700 text-red-400 hover:bg-red-900';
+  return 'bg-amber-950 border-amber-700 text-amber-400 hover:bg-amber-900';
+}
 
 function formatTs(ms: number): string {
   const d = new Date(ms);
@@ -49,10 +71,21 @@ export default function History() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [mode, setMode] = useState<ServiceMode>('enabled');
+  const [pendingMode, setPendingMode] = useState<ServiceMode | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
   useEffect(() => {
     fetch('/api/services')
       .then(r => r.json() as Promise<ServiceConfig[]>)
       .then(svcs => setService(svcs.find(s => s.name === name) ?? null))
+      .catch(() => null);
+  }, [name]);
+
+  useEffect(() => {
+    fetch(`/api/service-mode/${encodeURIComponent(name)}`)
+      .then(r => r.json() as Promise<{ mode: ServiceMode }>)
+      .then(d => setMode(d.mode))
       .catch(() => null);
   }, [name]);
 
@@ -70,6 +103,40 @@ export default function History() {
   }, [name, hours]);
 
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
+
+  async function applyMode(m: ServiceMode) {
+    try {
+      await fetch(`/api/service-mode/${encodeURIComponent(name)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: m }),
+      });
+      setMode(m);
+    } catch { /* ignore; mode display stays as-is */ }
+  }
+
+  function handleModeChange(newMode: string) {
+    if (newMode === mode) return;
+    if (newMode === 'enabled') {
+      void applyMode('enabled');
+    } else {
+      setPendingMode(newMode as ServiceMode);
+      setConfirmOpen(true);
+    }
+  }
+
+  async function confirmModeChange() {
+    if (!pendingMode) return;
+    const m = pendingMode;
+    setPendingMode(null);
+    setConfirmOpen(false);
+    await applyMode(m);
+  }
+
+  function cancelModeChange() {
+    setPendingMode(null);
+    setConfirmOpen(false);
+  }
 
   const upCount = files.filter(f => f.overallStatus === 200).length;
   const uptime = files.length > 0 ? Math.round((upCount / files.length) * 100) : 100;
@@ -105,6 +172,19 @@ export default function History() {
             )}
           </div>
           <div className="flex items-center gap-2">
+            {/* Service mode selector */}
+            <div title={MODE_TOOLTIP}>
+              <Select value={mode} onValueChange={handleModeChange}>
+                <SelectTrigger className={`h-8 text-xs w-52 ${modeTriggerClass(mode)}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="enabled" className="text-xs">Enabled</SelectItem>
+                  <SelectItem value="unavailable" className="text-xs">Mark as Unavailable</SelectItem>
+                  <SelectItem value="disabled" className="text-xs">Disabled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <Button
               size="sm"
               variant="outline"
@@ -266,6 +346,31 @@ export default function History() {
         onClose={() => setTestOpen(false)}
         onComplete={fetchHistory}
       />
+
+      {/* Confirmation dialog for destructive mode changes */}
+      <AlertDialog open={confirmOpen} onOpenChange={open => { if (!open) cancelModeChange(); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingMode === 'unavailable' ? 'Mark service as unavailable?' : 'Disable service?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingMode === 'unavailable'
+                ? 'Scheduled health checks will continue running and results will be recorded, but /health/:name will always return 500 — signalling unavailability to Azure Traffic Manager. Select "Enabled" to restore normal behaviour.'
+                : 'Scheduled health checks will stop running for this service and /health/:name will return 500 "service is marked as disabled". Select "Enabled" to resume checks.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { void confirmModeChange(); }}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
