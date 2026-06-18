@@ -35,7 +35,7 @@ const HOUR_OPTIONS = [
 
 const MODE_TOOLTIP =
   'Enabled: checks run normally and /health returns 200/500 based on results. ' +
-  'Mark as Unavailable: checks still run and are recorded, but /health always returns 500 ' +
+  'Unavailable: checks still run and are recorded, but /health always returns 500 ' +
   '(signals unavailability to Azure Traffic Manager). ' +
   'Disabled: scheduled checks stop and /health returns 500 "service is marked as disabled".';
 
@@ -180,7 +180,7 @@ export default function History() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="enabled" className="text-xs">Enabled</SelectItem>
-                  <SelectItem value="unavailable" className="text-xs">Mark as Unavailable</SelectItem>
+                  <SelectItem value="unavailable" className="text-xs">Unavailable</SelectItem>
                   <SelectItem value="disabled" className="text-xs">Disabled</SelectItem>
                 </SelectContent>
               </Select>
@@ -352,7 +352,7 @@ export default function History() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {pendingMode === 'unavailable' ? 'Mark service as unavailable?' : 'Disable service?'}
+              {pendingMode === 'unavailable' ? 'Mark service as Unavailable?' : 'Disable service?'}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {pendingMode === 'unavailable'

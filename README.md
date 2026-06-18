@@ -162,7 +162,7 @@ On any service's detail page (`/service/:name`), the **mode selector** in the he
 | Mode | `/health/:name` | Scheduler |
 |------|----------------|-----------|
 | **Enabled** (green) | Returns `200`/`500` based on real check results | Runs normally |
-| **Mark as Unavailable** (red) | Always returns `500` (checks still run and are recorded) | Runs normally |
+| **Unavailable** (red) | Always returns `500` (checks still run and are recorded) | Runs normally |
 | **Disabled** (amber) | Returns `500 "service is marked as disabled"` immediately | Skips this service |
 
 Overrides are in-memory and reset to **Enabled** on server restart (a redeploy automatically restores normal operation).
