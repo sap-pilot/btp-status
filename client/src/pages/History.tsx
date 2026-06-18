@@ -175,7 +175,7 @@ export default function History() {
             {/* Service mode selector */}
             <div title={MODE_TOOLTIP}>
               <Select value={mode} onValueChange={handleModeChange}>
-                <SelectTrigger className={`h-8 text-xs w-52 ${modeTriggerClass(mode)}`}>
+                <SelectTrigger className={`h-8 text-xs w-32 ${modeTriggerClass(mode)}`}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
