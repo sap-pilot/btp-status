@@ -1,6 +1,7 @@
 import { getService } from './configService.js';
 import { evaluateCondition } from './conditionEvaluator.js';
 import { saveResponse } from './responseStore.js';
+import { getOverride } from './overrideService.js';
 import { logger } from '../logger.js';
 import type { ConditionResult, ResponseRecord, CheckResult, EndpointCheckResult } from '../types/index.js';
 
@@ -12,6 +13,7 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
     throw Object.assign(new Error(`Service '${serviceName}' not found`), { status: 404 });
   }
 
+  const overrideMode = getOverride(serviceName);
   const details: EndpointCheckResult[] = [];
 
   for (let i = 0; i < service.endpoints.length; i++) {
@@ -67,6 +69,17 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
 
     const ctx = { status: respStatus, responseTime, body: respBody, headers: respHeaders };
     const conditions: ConditionResult[] = ep.conditions.map(c => evaluateCondition(c, ctx));
+
+    // Inject a virtual failing condition so test results and saved records reflect the override
+    if (overrideMode !== 'enabled') {
+      conditions.push({
+        condition: '[SERVICE_MODE] == enabled',
+        passed: false,
+        actual: overrideMode,
+        expected: 'enabled',
+      });
+    }
+
     const passed = fetchError === null && conditions.every(c => c.passed);
 
     for (const c of conditions) {
