@@ -27,6 +27,7 @@ interface EndpointCheckResult {
   request: { url: string; method: string; headers: Record<string, string>; body: string | null };
   response: { status: number; headers: Record<string, string>; body: string };
   responseTime: number;
+  screenshotUrl?: string;
 }
 
 interface CheckResult {
@@ -212,6 +213,18 @@ export default function TestModal({ serviceName, open, onClose, onComplete }: Pr
                     </Badge>
                   </div>
 
+                  {/* Screenshot (browser checks) */}
+                  {!collapsed.has(epIdx) && ep.screenshotUrl && (
+                    <div className="mb-3">
+                      <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1.5">Screenshot</div>
+                      <img
+                        src={ep.screenshotUrl}
+                        alt="Login screenshot"
+                        className="w-full rounded border border-border"
+                      />
+                    </div>
+                  )}
+
                   {/* Per-endpoint tabs — hidden when collapsed */}
                   {!collapsed.has(epIdx) && <Tabs defaultValue="conditions">
                     <TabsList className="h-8">
@@ -223,15 +236,19 @@ export default function TestModal({ serviceName, open, onClose, onComplete }: Pr
                           </span>
                         )}
                       </TabsTrigger>
-                      <TabsTrigger value="request" className="text-xs h-7">Request</TabsTrigger>
-                      <TabsTrigger value="response" className="text-xs h-7">
-                        Response
-                        {ep.response.status > 0 && (
-                          <span className={`ml-1.5 ${ep.response.status < 400 ? 'text-green-400' : 'text-red-400'}`}>
-                            {ep.response.status}
-                          </span>
-                        )}
-                      </TabsTrigger>
+                      {ep.request.method !== 'BROWSER' && (
+                        <TabsTrigger value="request" className="text-xs h-7">Request</TabsTrigger>
+                      )}
+                      {ep.request.method !== 'BROWSER' && (
+                        <TabsTrigger value="response" className="text-xs h-7">
+                          Response
+                          {ep.response.status > 0 && (
+                            <span className={`ml-1.5 ${ep.response.status < 400 ? 'text-green-400' : 'text-red-400'}`}>
+                              {ep.response.status}
+                            </span>
+                          )}
+                        </TabsTrigger>
+                      )}
                     </TabsList>
 
                     {/* Conditions tab */}

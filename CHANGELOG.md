@@ -3,6 +3,15 @@
 ## [v0.3.0] - 2026-06-18
 
 ### Added
+- **Browser-based IAS login check** (`mode: "browser-ias-login"` on an endpoint): launches headless Chromium via Playwright, navigates to the configured URL, fills `#j_username` and `#j_password`, clicks the SAP IAS login form submit button, then waits until the current URL contains `waitForUrl` within `timeout` ms; a screenshot is captured after success or failure
+  - Screenshot saved as `yyyyMMdd-HHmmss_{idx}_{ms}ms_{status}.png` alongside the JSON response record; same folder, same naming pattern as JSON files
+  - Screenshot exposed via `/api/browse` (listed in the service folder), `/api/download?path=…` (served as `image/png`)
+  - History detail modal: **Screenshot** tab appears automatically when a record has a screenshot; Request/Response tabs hidden for browser checks (not applicable)
+  - Test popup: screenshot displayed inline below the endpoint header after a browser check run; Request/Response tabs hidden for browser endpoints
+  - `[URL] matches <waitForUrl>` condition shown in Conditions tab so pass/fail reason is visible
+  - The service mode override (`Unavailable` / `Disabled`) applies to browser checks exactly as for HTTP checks — virtual `[SERVICE_MODE]` condition injected and record saved with `overallStatus 500`
+- `GET /api/download?path=folder/file.png` now returns the raw screenshot buffer with `Content-Type: image/png`
+- `EndpointConfig` extended with optional fields: `mode`, `username`, `password`, `waitForUrl`, `timeout`; existing fields (`method`, `headers`, `body`, `conditions`) made optional to support browser-only endpoints defined without them
 - **Service mode selector** on the Service detail page: a colour-coded select in the header lets admins switch each service between three modes without restarting the server
   - **Enabled** (green): normal behaviour — checks run on schedule and `/health/:name` returns `200`/`500` based on results
   - **Unavailable** (red): scheduled checks continue to run and results are recorded for history, but `/health/:name` always returns `500` (signals unavailability to Azure Traffic Manager even when the underlying service is healthy)

@@ -2,13 +2,13 @@
   "services": [
     {
       "group": "WorkZone",
-      "name": "dcore-prod",
+      "name": "dcore-sandbox",
       "enabled": true,
       "interval": 300,
       "homepage": "https://{subdomain}.launchpad.cfapps.us10.ondemand.com/site/{site}",
       "endpoints": [
         {
-          "name": "Launch Redirect",
+          "name": "Workzone Redirect",
           "url": "https://{subdomain}.launchpad.cfapps.us10.ondemand.com/site/{site}",
           "method": "GET",
           "headers": {},
@@ -17,6 +17,15 @@
             "[STATUS] == 200",
             "[RESPONSE_TIME] < 30000"
           ]
+        },
+        {
+          "mode": "browser-ias-login",
+          "name": "Workzone Login",
+          "url": "https://{subdomain}.launchpad.cfapps.us10.ondemand.com/site/{site}?sap_idp={idp}",
+          "username": "nonprod.monitor@sap-test.de",
+          "password": "my-password",
+          "waitForUrl": "https://{subdomain}.launchpad.cfapps.us10.hana.ondemand.com/site/{site}sap_idp={idp}#Shell-home",
+          "timeout": 30000
         }
       ]
     },

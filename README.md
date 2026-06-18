@@ -6,8 +6,9 @@ A lightweight, file-backed status page and health checker for SAP BTP services. 
 
 ## Features
 
-- **Service mode control** — per-service mode selector (Enabled / Mark as Unavailable / Disabled) on the detail page; mode overrides affect `/health/:name` responses and the background scheduler without restarting the server
+- **Service mode control** — per-service mode selector (Enabled / Unavailable / Disabled) on the detail page; mode overrides affect `/health/:name` responses and the background scheduler without restarting the server
 - **HTTP health checks** with Gatus-style condition evaluation (`[STATUS]`, `[BODY]`, `[HEADER.*]`, `[RESPONSE_TIME]`, `len()`, `pat()`)
+- **Browser-based IAS login check** (`mode: browser-ias-login`) — headless Chromium fills the SAP IAS login form, waits for a target URL, captures a screenshot; the screenshot is stored alongside the JSON record, shown in the history detail modal and the Test popup
 - **Azure Traffic Manager integration** — `GET /health/:name` returns `200 OK` when all conditions pass, `500` with failure details when any condition fails
 - **Gatus-style overview dashboard** at `/overview` — services grouped by group name with colored status timeline dots
 - **Per-service detail** at `/service/:name` — uptime %, avg response time, full check history table, response time line chart per endpoint
@@ -126,6 +127,43 @@ Create `server/config.json` (based on `config-sample.json`):
 | `endpoints[].headers` | object | Request headers (key-value pairs) |
 | `endpoints[].body` | string\|null | Request body (JSON string or null) |
 | `endpoints[].conditions` | string[] | Conditions to validate (Gatus syntax) |
+| `endpoints[].mode` | string | `browser-ias-login` to use headless Chromium instead of an HTTP request |
+| `endpoints[].username` | string | IAS username (browser-ias-login only) |
+| `endpoints[].password` | string | IAS password (browser-ias-login only) |
+| `endpoints[].waitForUrl` | string | URL substring to wait for after login (browser-ias-login only) |
+| `endpoints[].timeout` | number | Overall browser session timeout in ms (default `30000`; browser-ias-login only) |
+
+### Browser-based IAS Login Check
+
+Set `mode: "browser-ias-login"` on an endpoint to use a headless Chromium session instead of a plain HTTP request:
+
+```json
+{
+  "mode": "browser-ias-login",
+  "name": "Workzone Login",
+  "url": "https://<tenant>.launchpad.cfapps.<region>.hana.ondemand.com/site/<site>?sap_idp=<idp>",
+  "username": "monitor@example.com",
+  "password": "secret",
+  "waitForUrl": "/site/<site>#Shell-home",
+  "timeout": 30000
+}
+```
+
+The check flow:
+1. Launch headless Chromium, navigate to `url` (which triggers the IAS redirect)
+2. Fill `#j_username`, click `#next-button`
+3. Fill `#j_password`, click `#logOnFormSubmit`
+4. Wait until the current URL contains `waitForUrl` — success if it does before `timeout`, failure otherwise
+5. Capture a screenshot regardless of outcome
+6. Save screenshot as `yyyyMMdd-HHmmss_{idx}_{ms}ms_{status}.png` alongside the JSON record
+
+The screenshot appears in:
+- `/api/browse` and `/api/download` (same folder as JSON records)
+- The **Screenshot** tab when clicking a history row on the Service detail page
+- The **Test** popup after "Run Test" or "Test all"
+
+> **Chromium setup**: run `npx playwright install chromium` once after `npm install`.  
+> On SAP BTP Cloud Foundry, Chromium is not bundled with the Node.js buildpack — see [BTP deployment notes](#deployment-sat-btp-mta) for options.
 
 ### Automatic Checks
 

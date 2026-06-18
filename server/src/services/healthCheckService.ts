@@ -2,6 +2,7 @@ import { getService } from './configService.js';
 import { evaluateCondition } from './conditionEvaluator.js';
 import { saveResponse } from './responseStore.js';
 import { getOverride } from './overrideService.js';
+import { runBrowserIasLogin } from './browserCheckService.js';
 import { logger } from '../logger.js';
 import type { ConditionResult, ResponseRecord, CheckResult, EndpointCheckResult } from '../types/index.js';
 
@@ -19,6 +20,69 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
   for (let i = 0; i < service.endpoints.length; i++) {
     const ep = service.endpoints[i];
     const epName = ep.name ?? `Endpoint ${i}`;
+
+    // ── Browser-based IAS login check ──────────────────────────────────────
+    if (ep.mode === 'browser-ias-login') {
+      const result = await runBrowserIasLogin(ep, serviceName);
+
+      const conditions: ConditionResult[] = [{
+        condition: `[URL] matches ${ep.waitForUrl ?? '(waitForUrl not set)'}`,
+        passed: result.passed,
+        actual: result.message,
+        expected: ep.waitForUrl ?? '(not set)',
+      }];
+
+      if (overrideMode !== 'enabled') {
+        conditions.push({
+          condition: '[SERVICE_MODE] == enabled',
+          passed: false,
+          actual: overrideMode,
+          expected: 'enabled',
+        });
+      }
+
+      const passed = conditions.every(c => c.passed);
+
+      for (const c of conditions) {
+        if (!c.passed) {
+          logger.warn(
+            { service: serviceName, endpoint: epName, condition: c.condition, actual: c.actual },
+            'Condition failed',
+          );
+        }
+      }
+
+      const record: ResponseRecord = {
+        request: { url: ep.url, method: 'BROWSER', headers: {}, body: null },
+        response: { status: passed ? 200 : 500, headers: {}, body: result.message },
+        timestamp: new Date().toISOString(),
+        responseTime: result.responseTime,
+        endpointIndex: i,
+        endpointName: epName,
+        conditions,
+        overallStatus: passed ? 200 : 500,
+      };
+
+      const jsonFile = await saveResponse(serviceName, record, result.screenshot);
+      const screenshotFile = jsonFile.replace(/\.json$/, '.png');
+      const hasScreenshot = result.screenshot.length > 0;
+
+      details.push({
+        index: i,
+        name: epName,
+        conditions,
+        passed,
+        request: { url: ep.url, method: 'BROWSER', headers: {}, body: null },
+        response: { status: passed ? 200 : 500, headers: {}, body: result.message },
+        responseTime: result.responseTime,
+        screenshotUrl: hasScreenshot
+          ? `/api/download?path=${encodeURIComponent(serviceName)}/${encodeURIComponent(screenshotFile)}`
+          : undefined,
+      });
+      continue;
+    }
+
+    // ── Standard HTTP check ─────────────────────────────────────────────────
     const reqHeaders = normalizeHeaders(ep.headers);
     const method = ep.method ?? 'GET';
 
@@ -68,7 +132,7 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
     }
 
     const ctx = { status: respStatus, responseTime, body: respBody, headers: respHeaders };
-    const conditions: ConditionResult[] = ep.conditions.map(c => evaluateCondition(c, ctx));
+    const conditions: ConditionResult[] = (ep.conditions ?? []).map(c => evaluateCondition(c, ctx));
 
     // Inject a virtual failing condition so test results and saved records reflect the override
     if (overrideMode !== 'enabled') {
@@ -98,7 +162,7 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
     }
 
     const record: ResponseRecord = {
-      request: { url: ep.url, method, headers: reqHeaders, body: ep.body },
+      request: { url: ep.url, method, headers: reqHeaders, body: ep.body ?? null },
       response: { status: respStatus, headers: respHeaders, body: respBody },
       timestamp: new Date().toISOString(),
       responseTime,
@@ -114,7 +178,7 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
       name: epName,
       conditions,
       passed,
-      request: { url: ep.url, method, headers: reqHeaders, body: ep.body },
+      request: { url: ep.url, method, headers: reqHeaders, body: ep.body ?? null },
       response: { status: respStatus, headers: respHeaders, body: respBody },
       responseTime,
     });

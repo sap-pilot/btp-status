@@ -14,13 +14,23 @@ function formatTimestamp(d: Date): string {
 export async function saveResponse(
   serviceName: string,
   record: ResponseRecord,
+  screenshot?: Buffer,
 ): Promise<string> {
   const dir = join(config.RESPONSE_DIR, sanitizeName(serviceName));
   await mkdir(dir, { recursive: true });
 
   const ts = formatTimestamp(new Date());
-  const filename = `${ts}_${record.endpointIndex}_${record.responseTime}ms_${record.overallStatus}.json`;
-  await writeFile(join(dir, filename), JSON.stringify(record, null, 2), 'utf-8');
+  const base = `${ts}_${record.endpointIndex}_${record.responseTime}ms_${record.overallStatus}`;
+
+  let finalRecord = record;
+  if (screenshot && screenshot.length > 0) {
+    const pngFilename = `${base}.png`;
+    await writeFile(join(dir, pngFilename), screenshot);
+    finalRecord = { ...record, screenshotFile: pngFilename };
+  }
+
+  const filename = `${base}.json`;
+  await writeFile(join(dir, filename), JSON.stringify(finalRecord, null, 2), 'utf-8');
   return filename;
 }
 
@@ -31,12 +41,16 @@ export async function listResponseFiles(
   const dir = join(config.RESPONSE_DIR, sanitizeName(serviceName));
   try {
     const files = await readdir(dir);
+    const fileSet = new Set(files);
     const cutoff = Date.now() - hours * 3_600_000;
     const results: HistoryFile[] = [];
     for (const f of files) {
       if (!f.endsWith('.json')) continue;
       const meta = parseFilename(f);
-      if (meta && meta.timestamp >= cutoff) results.push(meta);
+      if (meta && meta.timestamp >= cutoff) {
+        const pngName = f.replace(/\.json$/, '.png');
+        results.push(fileSet.has(pngName) ? { ...meta, screenshotFile: pngName } : meta);
+      }
     }
     return results.sort((a, b) => b.timestamp - a.timestamp);
   } catch {
@@ -52,6 +66,15 @@ export async function readResponseFile(
   const filepath = join(config.RESPONSE_DIR, sanitizeName(serviceName), filename);
   const raw = await readFile(filepath, 'utf-8');
   return JSON.parse(raw) as ResponseRecord;
+}
+
+export async function readScreenshotFile(
+  serviceName: string,
+  filename: string,
+): Promise<Buffer> {
+  if (!/^[\w-]+\.png$/.test(filename)) throw new Error('Invalid filename');
+  const filepath = join(config.RESPONSE_DIR, sanitizeName(serviceName), filename);
+  return readFile(filepath);
 }
 
 function parseFilename(filename: string): HistoryFile | null {
@@ -93,7 +116,7 @@ export async function browseResponseFiles(): Promise<Record<string, string[]>> {
         .map(async (dir) => {
           try {
             const files = await readdir(join(config.RESPONSE_DIR, dir.name));
-            result[dir.name] = files.filter(f => f.endsWith('.json')).sort();
+            result[dir.name] = files.filter(f => f.endsWith('.json') || f.endsWith('.png')).sort();
           } catch {
             result[dir.name] = [];
           }

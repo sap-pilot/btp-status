@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getAllServices } from '../services/configService.js';
-import { listResponseFiles, readResponseFile, browseResponseFiles } from '../services/responseStore.js';
+import { listResponseFiles, readResponseFile, readScreenshotFile, browseResponseFiles } from '../services/responseStore.js';
 import { checkService } from '../services/healthCheckService.js';
 import { syncFromRemote } from '../services/syncService.js';
 import { getOverride, setOverride } from '../services/overrideService.js';
@@ -119,8 +119,13 @@ router.get('/download', async (req, res, next) => {
       return;
     }
     const [folder, filename] = parts;
-    const data = await readResponseFile(folder, filename);
-    res.json(data);
+    if (filename.endsWith('.png')) {
+      const buf = await readScreenshotFile(folder, filename);
+      res.type('image/png').send(buf);
+    } else {
+      const data = await readResponseFile(folder, filename);
+      res.json(data);
+    }
   } catch (err) {
     next(err);
   }

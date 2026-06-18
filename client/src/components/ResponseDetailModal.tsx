@@ -51,6 +51,11 @@ export default function ResponseDetailModal({ file, serviceName, onClose }: Prop
       .finally(() => setLoading(false));
   }, [file, serviceName]);
 
+  const isBrowser = record?.request.method === 'BROWSER';
+  const screenshotUrl = record?.screenshotFile
+    ? `/api/download?path=${encodeURIComponent(serviceName)}/${encodeURIComponent(record.screenshotFile)}`
+    : null;
+
   return (
     <Dialog open={!!file} onOpenChange={open => { if (!open) onClose(); }}>
       <DialogContent className="max-w-4xl h-[85vh] flex flex-col">
@@ -62,6 +67,9 @@ export default function ResponseDetailModal({ file, serviceName, onClose }: Prop
                 {record.overallStatus === 200 ? 'PASS' : 'FAIL'}
               </Badge>
             )}
+            {isBrowser && (
+              <Badge variant="outline" className="text-xs border-blue-600 text-blue-400">Browser</Badge>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -69,15 +77,28 @@ export default function ResponseDetailModal({ file, serviceName, onClose }: Prop
         {error && <div className="text-destructive text-sm p-4">{error}</div>}
 
         {record && (
-          <Tabs defaultValue="overview" className="flex-1 flex flex-col min-h-0">
+          <Tabs defaultValue={screenshotUrl ? 'screenshot' : 'overview'} className="flex-1 flex flex-col min-h-0">
             <TabsList className="flex-shrink-0">
+              {screenshotUrl && <TabsTrigger value="screenshot">Screenshot</TabsTrigger>}
               <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="request">Request</TabsTrigger>
-              <TabsTrigger value="response">Response</TabsTrigger>
+              {!isBrowser && <TabsTrigger value="request">Request</TabsTrigger>}
+              {!isBrowser && <TabsTrigger value="response">Response</TabsTrigger>}
               <TabsTrigger value="conditions">Conditions</TabsTrigger>
             </TabsList>
 
             <div className="flex-1 min-h-0 mt-2">
+              {screenshotUrl && (
+                <TabsContent value="screenshot" className="h-full">
+                  <ScrollArea className="h-full">
+                    <img
+                      src={screenshotUrl}
+                      alt="Login screenshot"
+                      className="w-full rounded border border-border"
+                    />
+                  </ScrollArea>
+                </TabsContent>
+              )}
+
               <TabsContent value="overview" className="h-full">
                 <ScrollArea className="h-full">
                   <div className="grid grid-cols-2 gap-4 p-1">
@@ -94,8 +115,12 @@ export default function ResponseDetailModal({ file, serviceName, onClose }: Prop
                       <div className="text-sm">{record.endpointName}</div>
                     </div>
                     <div>
-                      <div className="text-xs text-muted-foreground mb-1">HTTP Status</div>
-                      <div className="text-sm">{record.response.status}</div>
+                      <div className="text-xs text-muted-foreground mb-1">
+                        {isBrowser ? 'Check Type' : 'HTTP Status'}
+                      </div>
+                      <div className="text-sm">
+                        {isBrowser ? 'Browser IAS Login' : record.response.status}
+                      </div>
                     </div>
                     <div>
                       <div className="text-xs text-muted-foreground mb-1">Overall Result</div>
@@ -103,59 +128,71 @@ export default function ResponseDetailModal({ file, serviceName, onClose }: Prop
                         {record.overallStatus === 200 ? 'PASS' : 'FAIL'}
                       </Badge>
                     </div>
-                  </div>
-                </ScrollArea>
-              </TabsContent>
-
-              <TabsContent value="request" className="h-full">
-                <ScrollArea className="h-full">
-                  <div className="space-y-4 p-1">
-                    <div>
-                      <div className="text-xs text-muted-foreground mb-1">Method & URL</div>
-                      <div className="text-sm font-mono bg-muted rounded p-2 break-all">
-                        {record.request.method} {record.request.url}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground mb-1">Headers</div>
-                      <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto">
-                        {JSON.stringify(record.request.headers, null, 2)}
-                      </pre>
-                    </div>
-                    {record.request.body && (
-                      <div>
-                        <div className="text-xs text-muted-foreground mb-1">Body</div>
-                        <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto">
-                          {prettifyBody(record.request.body)}
-                        </pre>
+                    {isBrowser && record.response.body && (
+                      <div className="col-span-2">
+                        <div className="text-xs text-muted-foreground mb-1">Result Message</div>
+                        <div className="text-sm font-mono bg-muted rounded p-2 break-all">
+                          {record.response.body}
+                        </div>
                       </div>
                     )}
                   </div>
                 </ScrollArea>
               </TabsContent>
 
-              <TabsContent value="response" className="h-full">
-                <ScrollArea className="h-full">
-                  <div className="space-y-4 p-1">
-                    <div>
-                      <div className="text-xs text-muted-foreground mb-1">Status Code</div>
-                      <div className="text-sm font-mono">{record.response.status}</div>
+              {!isBrowser && (
+                <TabsContent value="request" className="h-full">
+                  <ScrollArea className="h-full">
+                    <div className="space-y-4 p-1">
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Method & URL</div>
+                        <div className="text-sm font-mono bg-muted rounded p-2 break-all">
+                          {record.request.method} {record.request.url}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Headers</div>
+                        <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto">
+                          {JSON.stringify(record.request.headers, null, 2)}
+                        </pre>
+                      </div>
+                      {record.request.body && (
+                        <div>
+                          <div className="text-xs text-muted-foreground mb-1">Body</div>
+                          <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto">
+                            {prettifyBody(record.request.body)}
+                          </pre>
+                        </div>
+                      )}
                     </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground mb-1">Headers</div>
-                      <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto max-h-48">
-                        {JSON.stringify(record.response.headers, null, 2)}
-                      </pre>
+                  </ScrollArea>
+                </TabsContent>
+              )}
+
+              {!isBrowser && (
+                <TabsContent value="response" className="h-full">
+                  <ScrollArea className="h-full">
+                    <div className="space-y-4 p-1">
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Status Code</div>
+                        <div className="text-sm font-mono">{record.response.status}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Headers</div>
+                        <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto max-h-48">
+                          {JSON.stringify(record.response.headers, null, 2)}
+                        </pre>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Body</div>
+                        <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto max-h-64 whitespace-pre-wrap break-all">
+                          {prettifyBody(record.response.body)}
+                        </pre>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground mb-1">Body</div>
-                      <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto max-h-64 whitespace-pre-wrap break-all">
-                        {prettifyBody(record.response.body)}
-                      </pre>
-                    </div>
-                  </div>
-                </ScrollArea>
-              </TabsContent>
+                  </ScrollArea>
+                </TabsContent>
+              )}
 
               <TabsContent value="conditions" className="h-full">
                 <ScrollArea className="h-full">

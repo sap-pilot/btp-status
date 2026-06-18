@@ -1,10 +1,15 @@
 export interface EndpointConfig {
   name?: string;
   url: string;
-  method: string;
-  headers: Record<string, string> | Array<{ name: string; value: string }>;
-  body: string | null;
-  conditions: string[];
+  method?: string;
+  headers?: Record<string, string> | Array<{ name: string; value: string }>;
+  body?: string | null;
+  conditions?: string[];
+  mode?: 'browser-ias-login';
+  username?: string;
+  password?: string;
+  waitForUrl?: string;
+  timeout?: number;
 }
 
 export interface ServiceConfig {
@@ -36,6 +41,7 @@ export interface ResponseRecord {
   endpointName: string;
   conditions: ConditionResult[];
   overallStatus: 200 | 500;
+  screenshotFile?: string;
 }
 
 export interface HistoryFile {
@@ -45,6 +51,7 @@ export interface HistoryFile {
   responseTime: number;
   httpStatus: number;
   overallStatus: 200 | 500;
+  screenshotFile?: string;
 }
 
 export interface ServiceWithHistory {
@@ -63,6 +70,7 @@ export interface EndpointCheckResult {
   request: { url: string; method: string; headers: Record<string, string>; body: string | null };
   response: { status: number; headers: Record<string, string>; body: string };
   responseTime: number;
+  screenshotUrl?: string;
 }
 
 export interface CheckResult {
