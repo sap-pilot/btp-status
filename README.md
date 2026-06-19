@@ -10,8 +10,8 @@ A lightweight, file-backed status page and health checker for SAP BTP services. 
 - **HTTP health checks** with Gatus-style condition evaluation (`[STATUS]`, `[BODY]`, `[HEADER.*]`, `[RESPONSE_TIME]`, `len()`, `pat()`)
 - **Browser-based IAS login check** (`mode: browser-ias-login`) — headless Chromium fills the SAP IAS login form, waits for a target URL, captures a screenshot; the screenshot is stored alongside the JSON record, shown in the history detail modal and the Test popup
 - **Azure Traffic Manager integration** — `GET /health/:name` returns `200 OK` when all conditions pass, `500` with failure details when any condition fails
-- **Gatus-style overview dashboard** at `/overview` — services grouped by group name with colored status timeline dots
-- **Per-service detail** at `/service/:name` — uptime %, avg response time, full check history table, response time line chart per endpoint
+- **Gatus-style overview dashboard** at `/overview` — services grouped by group name with colored status timeline dots; clicking any dot navigates to the service detail page and opens the response modal for that check
+- **Per-service detail** at `/service/:name` — uptime %, avg response time, full check history table, response time line chart per endpoint; clicking any timeline dot opens the response detail modal for that check directly
 - **Drill-down modal** — inspect every request/response/condition result for any past check
 - **File-based storage** — no database required; responses saved as JSON files under `./response/`
 - **Dark-themed React UI** built with shadcn/ui + Tailwind CSS
@@ -162,8 +162,8 @@ The screenshot appears in:
 - The **Screenshot** tab when clicking a history row on the Service detail page
 - The **Test** popup after "Run Test" or "Test all"
 
-> **Chromium setup**: run `npx playwright install chromium` once after `npm install`.  
-> On SAP BTP Cloud Foundry, Chromium is not bundled with the Node.js buildpack — see [BTP deployment notes](#deployment-sat-btp-mta) for options.
+> **Chromium setup (local dev)**: run `npx playwright install chromium` once after `npm install`.  
+> On SAP BTP Cloud Foundry, Google Chrome is installed automatically via the apt-buildpack — no manual step required (see [BTP deployment notes](#deployment-sap-btp-mta)).
 
 ### Automatic Checks
 
@@ -294,6 +294,15 @@ All HTTP responses — API JSON, HTML, CSS, JavaScript — are automatically gzi
 
 ## Deployment (SAP BTP MTA)
 
+### How it works
+
+The app is packaged as an MTA archive and deployed to SAP BTP Cloud Foundry using two buildpacks in sequence:
+
+1. **[apt-buildpack](https://github.com/cloudfoundry/apt-buildpack)** — reads `server/apt.yml` and installs the shared system libraries that Playwright's Chromium requires on the minimal `cflinuxfs4` stack (`libnss3`, `libatk1.0-0`, `libgbm1`, etc.).
+2. **nodejs_buildpack** — installs production dependencies (Playwright's npm install hook downloads its self-contained Chromium binary at this point), compiles and runs the app.
+
+This means no Docker image management is required. Playwright's bundled Chromium is downloaded during CF staging and is available when the app starts.
+
 ### Prerequisites
 
 ```bash
@@ -311,22 +320,22 @@ cf target -o <org> -s <space>
 
 | Script | What it does |
 |--------|-------------|
-| `npm run bd` | Build MTA archive + blue-green deploy (full pipeline, recommended for first deploy) |
-| `npm run deploy-bg` | Blue-green deploy of an already-built `.mtar` (skips `mbt build`) |
+| `npm run bd` | Build MTA archive + standard deploy (full pipeline) |
+| `npm run bd-bg` | Build MTA archive + blue-green deploy (full pipeline, zero-downtime) |
 | `npm run deploy` | Standard deploy of an already-built `.mtar` (skips `mbt build`) |
+| `npm run deploy-bg` | Blue-green deploy of an already-built `.mtar` (skips `mbt build`) |
 
 ```bash
-# Full pipeline: build MTA archive then blue-green deploy
-npm run bd
+# Full pipeline: build then deploy
+npm run bd       # standard deploy
+npm run bd-bg    # blue-green deploy (zero-downtime)
 
-# Redeploy an existing archive with blue-green strategy (no rebuild)
-npm run deploy-bg
-
-# Redeploy an existing archive with standard strategy
-npm run deploy
+# Redeploy an existing archive without rebuilding
+npm run deploy      # standard
+npm run deploy-bg   # blue-green
 ```
 
-**Blue-green strategy** (`--strategy blue-green --skip-testing-phase`) starts a parallel "green" instance, waits for it to be healthy, routes traffic to it, then removes the old "blue" instance — minimising downtime during deploys. Use `deploy-bg` when you want zero-downtime without waiting for a full MTA rebuild.
+**Blue-green strategy** (`--strategy blue-green --skip-testing-phase`) starts a parallel "green" instance, waits for it to be healthy, routes traffic to it, then removes the old "blue" instance — minimising downtime during deploys.
 
 `keep-existing: env: true` in `mta.yaml` instructs the MTA deployer to **preserve existing environment variables** (e.g. `CONFIG_JSON`, `SYNC_REMOTE`) on the app during deployment, so runtime config set via `cf set-env` is not wiped by a redeploy.
 

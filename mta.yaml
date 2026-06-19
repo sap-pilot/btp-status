@@ -1,30 +1,32 @@
 _schema-version: "3.3"
 ID: btp-status
-version: 0.3.0
+version: 0.4.0
 
 modules:
   - name: btp-status-srv
     type: nodejs
     path: server
     parameters:
-      docker:
-        image: sapux/btp-status:latest
-      memory: 1G
-      disk-quota: 4G
-      # buildpack: nodejs_buildpack
+      memory: 512M          # Chrome is memory-hungry — 256M is not enough
+      disk-quota: 4G     # Chrome + libs are large
+      # docker:
+      #   image: sapux/btp-status:latest
+      buildpacks:
+        - https://github.com/cloudfoundry/apt-buildpack
+        - nodejs_buildpack
       host: btp-status-${org}-${space}
       enable-ssh: true
       keep-existing:
         env: true
     build-parameters:
-      no-source: true
-    #   builder: custom
-    #   commands:
-    #     - npm ci --prefix ..
-    #     - npm run build --prefix ..
-    #   ignore:
-    #     - response/
-    # properties:
-    #   CONFIG_FILE: ./config.json
+      # no-source: true
+      builder: custom
+      commands:
+        - npm ci --prefix ..
+        - npm run build --prefix ..
+      ignore:
+        - response/
+    properties:
+      CONFIG_FILE: ./config.json
 
 resources: []

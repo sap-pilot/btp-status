@@ -5,13 +5,14 @@ interface StatusDotsProps {
   maxDots?: number;
   showAvg?: boolean;
   showUptime?: boolean;
+  onDotClick?: (file: HistoryFile) => void;
 }
 
 function formatTs(ms: number): string {
   return new Date(ms).toLocaleString();
 }
 
-export default function StatusDots({ history, maxDots = 48, showAvg = true, showUptime = true }: StatusDotsProps) {
+export default function StatusDots({ history, maxDots = 48, showAvg = true, showUptime = true, onDotClick }: StatusDotsProps) {
   const nonEmpty = history.length;
   const upCount = history.filter(h => h.overallStatus === 200).length;
   const uptime = nonEmpty > 0 ? Math.round((upCount / nonEmpty) * 100) : 100;
@@ -44,6 +45,17 @@ export default function StatusDots({ history, maxDots = 48, showAvg = true, show
           }
           const color = d.overallStatus === 200 ? 'bg-green-500' : 'bg-red-500';
           const title = `${formatTs(d.timestamp)} — ${d.responseTime}ms — ${d.overallStatus === 200 ? 'OK' : 'FAIL'}`;
+          if (onDotClick) {
+            return (
+              <button
+                key={i}
+                type="button"
+                className={`inline-block w-2.5 h-5 rounded-sm ${color} cursor-pointer hover:opacity-75 hover:scale-110 transition-transform focus:outline-none focus:ring-1 focus:ring-white/50`}
+                title={title}
+                onClick={() => onDotClick(d)}
+              />
+            );
+          }
           return (
             <span
               key={i}

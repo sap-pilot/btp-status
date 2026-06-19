@@ -1,0 +1,22 @@
+---
+packages:
+  # System libraries required by Playwright's bundled Chromium on cflinuxfs4.
+  # Do NOT add google-chrome-stable here — it pulls in systemd, GTK3, Mesa,
+  # tilix, and 100+ other packages (~821 MB) that break in CF containers.
+  # Playwright downloads its own self-contained Chromium via its npm install hook.
+  - libnss3
+  - libnspr4
+  - libatk1.0-0
+  - libatk-bridge2.0-0
+  - libcups2
+  - libdrm2
+  - libxkbcommon0
+  - libxcomposite1
+  - libxdamage1
+  - libxfixes3
+  - libxrandr2
+  - libgbm1
+  - libpango-1.0-0
+  - libcairo2
+  - libasound2
+  - libatspi2.0-0

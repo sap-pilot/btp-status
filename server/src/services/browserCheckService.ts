@@ -1,6 +1,9 @@
+import { existsSync } from 'node:fs';
 import { chromium, type Browser, type Page } from 'playwright';
 import { logger } from '../logger.js';
 import type { EndpointConfig } from '../types/index.js';
+
+const SYSTEM_CHROME = '/usr/bin/google-chrome-stable';
 
 export interface BrowserCheckResult {
   passed: boolean;
@@ -23,6 +26,7 @@ export async function runBrowserIasLogin(
   try {
     browser = await chromium.launch({
       headless: true,
+      executablePath: existsSync(SYSTEM_CHROME) ? SYSTEM_CHROME : undefined,
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
     page = await browser.newPage();

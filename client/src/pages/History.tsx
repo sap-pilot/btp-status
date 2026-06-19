@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import type { HistoryFile, ServiceConfig, ServiceMode } from '@shared/types';
 import StatusDots from '@/components/StatusDots';
 import ResponseTimeChart from '@/components/ResponseTimeChart';
@@ -56,6 +56,11 @@ function formatTs(ms: number): string {
 
 export default function History() {
   const { name = '' } = useParams<{ name: string }>();
+  const location = useLocation();
+  const autoOpenFilename = (location.state as { autoOpenFilename?: string } | null)?.autoOpenFilename;
+  const autoOpenHandled = useRef(false);
+  // Capture the URL hash once on mount for deep-link support
+  const initialHash = useRef(location.hash.slice(1));
   const { theme, toggleTheme } = useTheme();
   const windowWidth = useWindowWidth();
   // max-w-5xl (1024px) page with px-4 (32px) + CardContent p-6 (48px) = 80px overhead
@@ -103,6 +108,34 @@ export default function History() {
   }, [name, hours]);
 
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
+
+  // Open a history entry: update modal state + reflect in URL hash for shareability
+  function openFile(file: HistoryFile | null) {
+    setSelected(file);
+    const base = `/service/${encodeURIComponent(name)}`;
+    if (file) {
+      const hash = file.filename.replace(/\.(json|png)$/, '');
+      window.history.replaceState(null, '', `${base}#${hash}`);
+    } else {
+      window.history.replaceState(null, '', base);
+    }
+  }
+
+  // Auto-open: handles both deep-link hash (#filename) and Overview dot-click state
+  useEffect(() => {
+    if (autoOpenHandled.current || files.length === 0) return;
+    // Hash URL takes priority; fall back to router state from Overview dot click
+    const target = initialHash.current || autoOpenFilename;
+    if (!target) return;
+    const match = files.find(
+      f => f.filename === target || f.filename === `${target}.json`,
+    );
+    if (match) {
+      openFile(match);
+      autoOpenHandled.current = true;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files, autoOpenFilename]);
 
   async function applyMode(m: ServiceMode) {
     try {
@@ -238,7 +271,7 @@ export default function History() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <StatusDots history={files} maxDots={maxDots} showAvg={false} />
+            <StatusDots history={files} maxDots={maxDots} showAvg={false} onDotClick={f => openFile(f)} />
           </CardContent>
         </Card>
 
@@ -307,7 +340,7 @@ export default function History() {
                       className={`cursor-pointer ${
                         f.overallStatus === 500 ? 'bg-red-950/20 hover:bg-red-950/30' : 'hover:bg-muted/30'
                       }`}
-                      onClick={() => setSelected(f)}
+                      onClick={() => openFile(f)}
                     >
                       <TableCell className="text-xs font-mono">
                         {formatTs(f.timestamp)}
@@ -342,7 +375,7 @@ export default function History() {
       <ResponseDetailModal
         file={selected}
         serviceName={name}
-        onClose={() => setSelected(null)}
+        onClose={() => openFile(null)}
       />
 
       <TestModal

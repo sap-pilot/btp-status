@@ -1,5 +1,22 @@
 # Changelog
 
+## [v0.4.0] - 2026-06-19
+
+### Added
+- **Clickable status timeline dots**: clicking a dot on the Overview dashboard navigates to the service detail page and automatically opens the response detail modal for that specific check; clicking a dot on the Service detail page timeline opens the response detail modal inline
+- Status dots now show a hover highlight (`opacity-75` + `scale-110`) when clickable to signal interactivity
+- **Deep-link URLs for history entries**
+- Response detail modal: conditions table merged into the Overview tab (below the meta grid) so pass/fail results are immediately visible on open — the separate Conditions tab has been removed: opening a response detail modal (via timeline dot, history table row, or Overview navigation) updates the browser URL to `/service/{name}#{filename-without-extension}` using `replaceState`; visiting that URL directly reopens the same modal automatically — enabling copy-paste sharing of specific check results; closing the modal restores the base `/service/{name}` URL
+
+### Changed
+- **BTP deployment switched from Docker image to multi-buildpack**: `mta.yaml` now uses the CF apt-buildpack (reads `server/apt.yml`) to install the system libraries that Playwright's Chromium needs, followed by the nodejs_buildpack which installs Playwright (including its bundled Chromium via its npm install hook) and runs the app — no Docker image management required
+- `server/apt.yml` added: installs only the shared libraries Playwright's Chromium requires on `cflinuxfs4` (`libnss3`, `libatk1.0-0`, `libgbm1`, etc.); `google-chrome-stable` is intentionally excluded — it pulls in systemd, GTK3, Mesa, and 100+ other packages (~821 MB) whose post-install scripts fail in CF containers
+- Browser check: Playwright uses system Chrome at `/usr/bin/google-chrome-stable` when present, falling back to its own bundled Chromium (active path on BTP CF)
+- `npm start` now runs `npx playwright install chromium` before starting Express: the CF nodejs_buildpack skips npm lifecycle scripts when `node_modules` is already packaged by MBT, so the browser download runs at container start instead — it is a no-op when the binary already exists
+- Deployment script matrix regularised: `bd` = build + standard deploy; `bd-bg` (new) = build + blue-green deploy; `deploy` = standard redeploy (no build); `deploy-bg` = blue-green redeploy (no build)
+- MTA module memory reduced from `1G` to `512M`; disk-quota kept at `4G` (Playwright's Chromium download at startup requires the headroom)
+- Version bumped to `0.4.0` across all package files and `mta.yaml`
+
 ## [v0.3.0] - 2026-06-18
 
 ### Added

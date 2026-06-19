@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import type { ServiceWithHistory, HistoryFile } from '@shared/types';
 import StatusDots from '@/components/StatusDots';
 import { Badge } from '@/components/ui/badge';
@@ -47,6 +47,7 @@ function getUptimePct(history: HistoryFile[]): number {
 }
 
 export default function Overview() {
+  const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const windowWidth = useWindowWidth();
   // max-w-7xl (1280px) page with px-4 (32px) → page content width
@@ -278,7 +279,16 @@ export default function Overview() {
 
                         {/* Timeline — fills all remaining width */}
                         <td className="px-4 py-3 align-middle">
-                          <StatusDots history={combined} maxDots={maxDots} showUptime={false} showAvg={false} />
+                          <StatusDots
+                            history={combined}
+                            maxDots={maxDots}
+                            showUptime={false}
+                            showAvg={false}
+                            onDotClick={file => navigate(
+                              `/service/${encodeURIComponent(svc.name)}`,
+                              { state: { autoOpenFilename: file.filename } },
+                            )}
+                          />
                         </td>
 
                         {/* Stats — fixed width, badge + avg/latest stacked */}

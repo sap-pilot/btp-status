@@ -83,7 +83,6 @@ export default function ResponseDetailModal({ file, serviceName, onClose }: Prop
               <TabsTrigger value="overview">Overview</TabsTrigger>
               {!isBrowser && <TabsTrigger value="request">Request</TabsTrigger>}
               {!isBrowser && <TabsTrigger value="response">Response</TabsTrigger>}
-              <TabsTrigger value="conditions">Conditions</TabsTrigger>
             </TabsList>
 
             <div className="flex-1 min-h-0 mt-2">
@@ -101,41 +100,75 @@ export default function ResponseDetailModal({ file, serviceName, onClose }: Prop
 
               <TabsContent value="overview" className="h-full">
                 <ScrollArea className="h-full">
-                  <div className="grid grid-cols-2 gap-4 p-1">
-                    <div>
-                      <div className="text-xs text-muted-foreground mb-1">Timestamp</div>
-                      <div className="text-sm">{formatTs(record.timestamp)}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground mb-1">Response Time</div>
-                      <div className="text-sm">{record.responseTime}ms</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground mb-1">Endpoint</div>
-                      <div className="text-sm">{record.endpointName}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground mb-1">
-                        {isBrowser ? 'Check Type' : 'HTTP Status'}
+                  <div className="space-y-4 p-1">
+                    {/* Meta grid */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Timestamp</div>
+                        <div className="text-sm">{formatTs(record.timestamp)}</div>
                       </div>
-                      <div className="text-sm">
-                        {isBrowser ? 'Browser IAS Login' : record.response.status}
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Response Time</div>
+                        <div className="text-sm">{record.responseTime}ms</div>
                       </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground mb-1">Overall Result</div>
-                      <Badge variant={record.overallStatus === 200 ? 'default' : 'destructive'}>
-                        {record.overallStatus === 200 ? 'PASS' : 'FAIL'}
-                      </Badge>
-                    </div>
-                    {isBrowser && record.response.body && (
-                      <div className="col-span-2">
-                        <div className="text-xs text-muted-foreground mb-1">Result Message</div>
-                        <div className="text-sm font-mono bg-muted rounded p-2 break-all">
-                          {record.response.body}
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Endpoint</div>
+                        <div className="text-sm">{record.endpointName}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">
+                          {isBrowser ? 'Check Type' : 'HTTP Status'}
+                        </div>
+                        <div className="text-sm">
+                          {isBrowser ? 'Browser IAS Login' : record.response.status}
                         </div>
                       </div>
-                    )}
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Overall Result</div>
+                        <Badge variant={record.overallStatus === 200 ? 'default' : 'destructive'}>
+                          {record.overallStatus === 200 ? 'PASS' : 'FAIL'}
+                        </Badge>
+                      </div>
+                      {isBrowser && record.response.body && (
+                        <div className="col-span-2">
+                          <div className="text-xs text-muted-foreground mb-1">Result Message</div>
+                          <div className="text-sm font-mono bg-muted rounded p-2 break-all">
+                            {record.response.body}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Conditions */}
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">Conditions</div>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Condition</TableHead>
+                            <TableHead className="w-16">Result</TableHead>
+                            <TableHead>Actual</TableHead>
+                            <TableHead>Expected</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {record.conditions.map((c, i) => (
+                            <TableRow key={i} className={c.passed ? '' : 'bg-destructive/10'}>
+                              <TableCell className="font-mono text-xs">{c.condition}</TableCell>
+                              <TableCell>
+                                <span className={c.passed ? 'text-green-500' : 'text-red-500'}>
+                                  {c.passed ? '✓' : '✗'}
+                                </span>
+                              </TableCell>
+                              <TableCell className="font-mono text-xs max-w-xs truncate">
+                                {c.actual}
+                              </TableCell>
+                              <TableCell className="font-mono text-xs">{c.expected}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
                 </ScrollArea>
               </TabsContent>
@@ -194,36 +227,6 @@ export default function ResponseDetailModal({ file, serviceName, onClose }: Prop
                 </TabsContent>
               )}
 
-              <TabsContent value="conditions" className="h-full">
-                <ScrollArea className="h-full">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Condition</TableHead>
-                        <TableHead className="w-16">Result</TableHead>
-                        <TableHead>Actual</TableHead>
-                        <TableHead>Expected</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {record.conditions.map((c, i) => (
-                        <TableRow key={i} className={c.passed ? '' : 'bg-destructive/10'}>
-                          <TableCell className="font-mono text-xs">{c.condition}</TableCell>
-                          <TableCell>
-                            <span className={c.passed ? 'text-green-500' : 'text-red-500'}>
-                              {c.passed ? '✓' : '✗'}
-                            </span>
-                          </TableCell>
-                          <TableCell className="font-mono text-xs max-w-xs truncate">
-                            {c.actual}
-                          </TableCell>
-                          <TableCell className="font-mono text-xs">{c.expected}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </ScrollArea>
-              </TabsContent>
             </div>
           </Tabs>
         )}
