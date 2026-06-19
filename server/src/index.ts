@@ -4,6 +4,7 @@ import { loadConfig } from './services/configService.js';
 import { logger } from './logger.js';
 import { startScheduler, stopScheduler } from './services/schedulerService.js';
 import { syncFromRemote, startSyncScheduler, stopSyncScheduler } from './services/syncService.js';
+import { startHousekeepingScheduler, stopHousekeepingScheduler } from './services/housekeepingService.js';
 import healthRouter from './routes/health.js';
 import apiRouter from './routes/api.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -18,6 +19,8 @@ const cfg = loadConfig();
 logger.info({ configFile: config.CONFIG_FILE, services: cfg.services.length }, 'Config initialized');
 
 app.use('/health', healthRouter);
+// API responses must never be cached — prevents 304s on repeated /api/download requests
+app.use('/api', (_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
 app.use('/api', apiRouter);
 
 try {
@@ -31,6 +34,7 @@ app.use(errorHandler);
 const server = app.listen(config.PORT, () => {
   logger.info({ port: config.PORT }, 'BTP Status server started');
   startScheduler();
+  startHousekeepingScheduler();
   if (config.SYNC_REMOTE) {
     syncFromRemote(config.SYNC_REMOTE).catch(err =>
       logger.error({ err }, 'Remote sync error'),
@@ -43,6 +47,7 @@ function shutdown(signal: string) {
   logger.info({ signal }, 'Shutting down');
   stopScheduler();
   stopSyncScheduler();
+  stopHousekeepingScheduler();
   server.close(() => process.exit(0));
 }
 

@@ -3,6 +3,8 @@
 ## [v0.3.0] - 2026-06-18
 
 ### Added
+- **Response file housekeeping**: a background job runs once on startup then every 24 hours and deletes JSON and PNG response files whose filename date is older than `MAX_RESPONSE_STORAGE_DAYS` (default `3`). Set the env var to `0` to disable. File age is derived from the filename timestamp, not file mtime, so synced files are subject to the same retention policy as locally written ones.
+- `MAX_RESPONSE_STORAGE_DAYS` environment variable (default `3`): controls how many days of response history to retain on disk.
 - **Browser-based IAS login check** (`mode: "browser-ias-login"` on an endpoint): launches headless Chromium via Playwright, navigates to the configured URL, fills `#j_username` and `#j_password`, clicks the SAP IAS login form submit button, then waits until the current URL contains `waitForUrl` within `timeout` ms; a screenshot is captured after success or failure
   - Screenshot saved as `yyyyMMdd-HHmmss_{idx}_{ms}ms_{status}.png` alongside the JSON response record; same folder, same naming pattern as JSON files
   - Screenshot exposed via `/api/browse` (listed in the service folder), `/api/download?path=…` (served as `image/png`)
@@ -23,6 +25,7 @@
 - Overrides are held in-memory and reset to `enabled` on server restart (intentional — a redeploy restores normal operation)
 
 ### Fixed
+- `/api/*` responses now always carry `Cache-Control: no-store`, preventing browsers from caching API responses (including PNG screenshots) and eliminating spurious `304 Not Modified` replies on repeated `/api/download` requests
 - "Run Test" and "Test All" now correctly reflect the service mode override: a virtual `[SERVICE_MODE] == enabled` condition is appended to each endpoint's results when the mode is Unavailable or Disabled, causing the test to report failure and saving the response record with `overallStatus 500` so the timeline renders the check as red
 - Availability badge on the Overview and Service detail pages now uses three-state colour coding: green = 100% uptime, yellow = below 100% but latest check passed, red = latest check still failing
 - "Run Test" no longer causes a black screen when the backend returns a server error: the response status is now checked before parsing the body as a `CheckResult`; non-OK responses surface the server error message inside the dialog instead of crashing the render tree
