@@ -79,4 +79,4 @@ export interface CheckResult {
   details: EndpointCheckResult[];
 }
 
-export type ServiceMode = 'enabled' | 'unavailable' | 'disabled';
+export type ServiceMode = 'enabled' | 'alwaysok' | 'unavailable' | 'disabled';

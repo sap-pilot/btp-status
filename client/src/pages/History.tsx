@@ -35,12 +35,15 @@ const HOUR_OPTIONS = [
 
 const MODE_TOOLTIP =
   'Enabled: checks run normally and /health returns 200/500 based on results. ' +
+  'AlwaysOk: checks still run and are recorded, but /health always returns 200 OK ' +
+  '(signals availability to Azure Traffic Manager regardless of actual result). ' +
   'Unavailable: checks still run and are recorded, but /health always returns 500 ' +
   '(signals unavailability to Azure Traffic Manager). ' +
   'Disabled: scheduled checks stop and /health returns 500 "service is marked as disabled".';
 
 function modeTriggerClass(mode: ServiceMode): string {
   if (mode === 'enabled') return 'bg-green-950 border-green-700 text-green-400 hover:bg-green-900';
+  if (mode === 'alwaysok') return 'bg-emerald-900 border-emerald-600 text-emerald-300 hover:bg-emerald-800';
   if (mode === 'unavailable') return 'bg-red-950 border-red-700 text-red-400 hover:bg-red-900';
   return 'bg-amber-950 border-amber-700 text-amber-400 hover:bg-amber-900';
 }
@@ -158,6 +161,7 @@ export default function History() {
     }
   }
 
+
   async function confirmModeChange() {
     if (!pendingMode) return;
     const m = pendingMode;
@@ -218,6 +222,7 @@ export default function History() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="enabled" className="text-xs">Enabled</SelectItem>
+                  <SelectItem value="alwaysok" className="text-xs">AlwaysOk</SelectItem>
                   <SelectItem value="unavailable" className="text-xs">Unavailable</SelectItem>
                   <SelectItem value="disabled" className="text-xs">Disabled</SelectItem>
                 </SelectContent>
@@ -390,10 +395,16 @@ export default function History() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {pendingMode === 'unavailable' ? 'Mark service as Unavailable?' : 'Disable service?'}
+              {pendingMode === 'alwaysok'
+                ? 'Mark service as AlwaysOk?'
+                : pendingMode === 'unavailable'
+                ? 'Mark service as Unavailable?'
+                : 'Disable service?'}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {pendingMode === 'unavailable'
+              {pendingMode === 'alwaysok'
+                ? 'Scheduled health checks will continue running and results will be recorded as usual, but /health/:name will always return 200 OK — signalling availability to Azure Traffic Manager regardless of the actual check outcome. Select "Enabled" to restore normal behaviour.'
+                : pendingMode === 'unavailable'
                 ? 'Scheduled health checks will continue running and results will be recorded, but /health/:name will always return 500 — signalling unavailability to Azure Traffic Manager. Select "Enabled" to restore normal behaviour.'
                 : 'Scheduled health checks will stop running for this service and /health/:name will return 500 "service is marked as disabled". Select "Enabled" to resume checks.'}
             </AlertDialogDescription>

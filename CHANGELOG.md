@@ -3,6 +3,7 @@
 ## [v0.4.0] - 2026-06-19
 
 ### Added
+- **AlwaysOk service mode**: new option on the Service detail page mode selector (dark green); when selected, scheduled health checks continue running and results are recorded with actual pass/fail outcomes, but `/health/:name` always returns `200 OK` — signalling availability to Azure Traffic Manager regardless of the real check result; a confirmation dialog appears before applying the mode
 - **Clickable status timeline dots**: clicking a dot on the Overview dashboard navigates to the service detail page and automatically opens the response detail modal for that specific check; clicking a dot on the Service detail page timeline opens the response detail modal inline
 - Status dots now show a hover highlight (`opacity-75` + `scale-110`) when clickable to signal interactivity
 - **Deep-link URLs for history entries**

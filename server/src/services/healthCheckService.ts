@@ -32,7 +32,7 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
         expected: ep.waitForUrl ?? '(not set)',
       }];
 
-      if (overrideMode !== 'enabled') {
+      if (overrideMode === 'unavailable' || overrideMode === 'disabled') {
         conditions.push({
           condition: '[SERVICE_MODE] == enabled',
           passed: false,

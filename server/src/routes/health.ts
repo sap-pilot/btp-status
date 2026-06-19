@@ -22,6 +22,9 @@ router.get('/:name', async (req, res, next) => {
     if (mode === 'unavailable') {
       logger.warn({ service: name }, 'Health check forced fail — marked as unavailable');
       res.status(500).type('text/plain').send('service has been marked as unavailable');
+    } else if (mode === 'alwaysok') {
+      logger.info({ service: name, actualSuccess: result.success }, 'Health check forced OK — marked as alwaysok');
+      res.status(200).type('text/plain').send('OK');
     } else if (result.success) {
       logger.info({ service: name }, 'Health check passed');
       res.status(200).type('text/plain').send('OK');

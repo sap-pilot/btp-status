@@ -8,7 +8,7 @@ import { config } from '../config.js';
 import { logger } from '../logger.js';
 import type { ServiceMode, ServiceWithHistory } from '../types/index.js';
 
-const VALID_MODES = new Set<string>(['enabled', 'unavailable', 'disabled']);
+const VALID_MODES = new Set<string>(['enabled', 'alwaysok', 'unavailable', 'disabled']);
 
 const router = Router();
 
@@ -75,7 +75,7 @@ router.get('/service-mode/:name', (req, res) => {
 router.post('/service-mode/:name', (req, res) => {
   const mode = (req.body as { mode?: string })?.mode;
   if (!mode || !VALID_MODES.has(mode)) {
-    res.status(400).json({ error: 'mode must be enabled, unavailable, or disabled' });
+    res.status(400).json({ error: 'mode must be enabled, alwaysok, unavailable, or disabled' });
     return;
   }
   setOverride(req.params.name, mode as ServiceMode);
