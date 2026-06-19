@@ -33,6 +33,8 @@
 ### Changed
 - Select option label renamed from "Mark as Unavailable" to "Unavailable" for consistency with other options
 - Version bumped to `0.3.0` across all package files and `mta.yaml`
+- `npm run deploy-bg` added: blue-green CF deploy of an existing `.mtar` archive without rebuilding (`cf deploy --strategy blue-green --skip-testing-phase`)
+- `npm run deploy` added: standard CF deploy of an existing `.mtar` archive without rebuilding
 - `docker/Dockerfile` added: Node.js 22 image that clones the app from GitHub at build time, installs all Chromium system libraries via `playwright install --with-deps chromium`, builds client + server, and starts Express; includes `openssh-server` for `cf ssh` support on Cloud Foundry Docker deployments
 - `docker/README.md` added: instructions for building, tagging, publishing, running locally, and deploying the image on SAP BTP Cloud Foundry via MTA
 

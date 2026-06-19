@@ -306,21 +306,28 @@ cf install-plugin multiapps         # CF MTA plugin (once per CF CLI install)
 # Log in
 cf login -a https://api.cf.<region>.hana.ondemand.com
 cf target -o <org> -s <space>
-
-# One-shot build + blue-green deploy (recommended)
-npm run bd
 ```
 
-`npm run bd` builds the MTA archive with `mbt build` and deploys it using the **blue-green strategy** (`--strategy blue-green --skip-testing-phase`), which starts a parallel "green" instance, waits for it to be healthy, then routes traffic and removes the old "blue" instance — minimising downtime and avoiding dropped requests during deploys.
-
-`keep-existing: env: true` in `mta.yaml` instructs the MTA deployer to **preserve existing environment variables** (e.g. `CONFIG_JSON`, `SYNC_REMOTE`) on the app during deployment, so runtime config set via `cf set-env` is not wiped by a redeploy.
-
-To build and deploy manually:
+| Script | What it does |
+|--------|-------------|
+| `npm run bd` | Build MTA archive + blue-green deploy (full pipeline, recommended for first deploy) |
+| `npm run deploy-bg` | Blue-green deploy of an already-built `.mtar` (skips `mbt build`) |
+| `npm run deploy` | Standard deploy of an already-built `.mtar` (skips `mbt build`) |
 
 ```bash
-mbt build -p=cf --mtar=btp-status.mtar
-cf deploy mta_archives/btp-status.mtar -f --retries 1 --strategy blue-green --skip-testing-phase
+# Full pipeline: build MTA archive then blue-green deploy
+npm run bd
+
+# Redeploy an existing archive with blue-green strategy (no rebuild)
+npm run deploy-bg
+
+# Redeploy an existing archive with standard strategy
+npm run deploy
 ```
+
+**Blue-green strategy** (`--strategy blue-green --skip-testing-phase`) starts a parallel "green" instance, waits for it to be healthy, routes traffic to it, then removes the old "blue" instance — minimising downtime during deploys. Use `deploy-bg` when you want zero-downtime without waiting for a full MTA rebuild.
+
+`keep-existing: env: true` in `mta.yaml` instructs the MTA deployer to **preserve existing environment variables** (e.g. `CONFIG_JSON`, `SYNC_REMOTE`) on the app during deployment, so runtime config set via `cf set-env` is not wiped by a redeploy.
 
 ### Post-deploy config
 
