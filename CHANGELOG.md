@@ -21,6 +21,9 @@
 - Service detail page **history table** gains a "From Location" column showing the `{city}` stored in each response filename; timestamps shown in browser local timezone
 
 ### Changed
+- **Overview page title** renamed from "BTP Service Status" to "BTP Status"
+- **Overview page**: aggregate stats row added above the service groups — Overall Uptime, Failed Checks, Total Checks, Avg Response Time; all computed from the full history window currently selected
+- **Service detail page**: stats row (Uptime / Failed Checks / Total Checks / Avg Response Time) moved to above the status timeline; added "Failed Checks" card; "Avg Response Time" moved to last position; 4-column grid
 - **Browser check**: `page.waitForURL` replaced with `page.waitForSelector(waitForSelector)` — the endpoint config field is now `waitForSelector` (CSS selector, e.g. `"#shellAppTitle"`) instead of `waitForUrl`; the recorded condition is now `[SELECTOR] found <selector>` instead of `[URL] matches <url>`; old `waitForElement` / `waitForUrl` config fields should be renamed to `waitForSelector`
 - **Evaluation Mode selector**: "Condition Based" now shows the default (unstyled) trigger background instead of green, so coloured styling only appears for override modes (Always OK = dark green, Always Error = dark red)
 - **Response time chart**: legend now always shown (previously hidden when there was only one series)

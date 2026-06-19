@@ -189,6 +189,7 @@ export default function History() {
   }
 
   const upCount = files.filter(f => f.overallStatus === 200 || f.overallStatus === 203).length;
+  const failedCount = files.filter(f => f.overallStatus === 500 || f.overallStatus === 503).length;
   const uptime = files.length > 0 ? Math.round((upCount / files.length) * 100) : 100;
   const latestTs = files.reduce((max, f) => Math.max(max, f.timestamp), 0);
   const latestFailed = files.some(
@@ -314,6 +315,34 @@ export default function History() {
           </div>
         )}
 
+        {/* Stats */}
+        <div className="grid grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="pt-4">
+              <div className={`text-2xl font-bold ${uptimeColor}`}>{uptime}%</div>
+              <div className="text-xs text-muted-foreground mt-1">Uptime</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <div className={`text-2xl font-bold ${failedCount > 0 ? 'text-red-500' : ''}`}>{failedCount}</div>
+              <div className="text-xs text-muted-foreground mt-1">Failed Checks</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <div className="text-2xl font-bold">{files.length}</div>
+              <div className="text-xs text-muted-foreground mt-1">Total Checks</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <div className="text-2xl font-bold">{avgMs > 0 ? `${avgMs}ms` : '—'}</div>
+              <div className="text-xs text-muted-foreground mt-1">Avg Response Time</div>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Timeline card */}
         <Card>
           <CardHeader className="pb-2">
@@ -337,28 +366,6 @@ export default function History() {
             <ResponseTimeChart files={files} service={service} />
           </CardContent>
         </Card>
-
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-4">
-          <Card>
-            <CardContent className="pt-4">
-              <div className={`text-2xl font-bold ${uptimeColor}`}>{uptime}%</div>
-              <div className="text-xs text-muted-foreground mt-1">Uptime</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4">
-              <div className="text-2xl font-bold">{avgMs}ms</div>
-              <div className="text-xs text-muted-foreground mt-1">Avg Response Time</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4">
-              <div className="text-2xl font-bold">{files.length}</div>
-              <div className="text-xs text-muted-foreground mt-1">Total Checks</div>
-            </CardContent>
-          </Card>
-        </div>
 
         {/* History table */}
         <Card>

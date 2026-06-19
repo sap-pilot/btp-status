@@ -139,6 +139,16 @@ export default function Overview() {
     return h.length > 0 && getUptimePct(h) < 100;
   });
 
+  // Aggregate stats across all raw history files
+  const allFiles = data.flatMap(s => s.history);
+  const totalChecks = allFiles.length;
+  const failedChecks = allFiles.filter(f => f.overallStatus === 500 || f.overallStatus === 503).length;
+  const overallUptime = totalChecks > 0 ? Math.round(((totalChecks - failedChecks) / totalChecks) * 100) : 100;
+  const avgResponseTime = totalChecks > 0
+    ? Math.round(allFiles.reduce((s, f) => s + f.responseTime, 0) / totalChecks)
+    : 0;
+  const overallUptimeColor = anyCurrentlyFailing ? 'text-red-500' : overallUptime < 100 ? 'text-yellow-500' : 'text-green-500';
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
@@ -146,7 +156,7 @@ export default function Overview() {
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img src="/images/favicon-32x32.png" alt="" className="h-5 w-5" />
-            <h1 className="text-lg font-semibold">BTP Service Status</h1>
+            <h1 className="text-lg font-semibold">BTP Status</h1>
             <span className="text-xs text-muted-foreground font-mono">
               v{__APP_VERSION__}+{__COMMIT_HASH__}.{__BUILD_DATE__}
             </span>
@@ -215,6 +225,36 @@ export default function Overview() {
           <div className="flex items-center gap-2 text-destructive text-sm">
             <AlertCircle className="h-4 w-4" />
             {error}
+          </div>
+        )}
+
+        {/* Aggregate stats */}
+        {data.length > 0 && (
+          <div className="grid grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="pt-4">
+                <div className={`text-2xl font-bold ${overallUptimeColor}`}>{overallUptime}%</div>
+                <div className="text-xs text-muted-foreground mt-1">Overall Uptime</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className={`text-2xl font-bold ${failedChecks > 0 ? 'text-red-500' : ''}`}>{failedChecks}</div>
+                <div className="text-xs text-muted-foreground mt-1">Failed Checks</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="text-2xl font-bold">{totalChecks}</div>
+                <div className="text-xs text-muted-foreground mt-1">Total Checks</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="text-2xl font-bold">{avgResponseTime > 0 ? `${avgResponseTime}ms` : '—'}</div>
+                <div className="text-xs text-muted-foreground mt-1">Avg Response Time</div>
+              </CardContent>
+            </Card>
           </div>
         )}
 
