@@ -1,6 +1,5 @@
 import { getAllServices } from './configService.js';
 import { checkService } from './healthCheckService.js';
-import { getOverride } from './overrideService.js';
 import { logger } from '../logger.js';
 
 const timers = new Map<string, ReturnType<typeof setInterval>>();
@@ -27,10 +26,6 @@ function register(name: string, intervalSecs: number): void {
 }
 
 async function tick(name: string, intervalSecs: number): Promise<void> {
-  if (getOverride(name) === 'disabled') {
-    logger.debug({ service: name }, 'Auto-check skipped: service disabled');
-    return;
-  }
   if (running.has(name)) {
     logger.warn({ service: name }, 'Auto-check skipped: previous run still in progress');
     return;
@@ -48,6 +43,20 @@ async function tick(name: string, intervalSecs: number): Promise<void> {
     }
   } finally {
     running.delete(name);
+  }
+}
+
+export function rescheduleService(name: string, intervalSecs: number): void {
+  const existing = timers.get(name);
+  if (existing) {
+    clearInterval(existing);
+    timers.delete(name);
+  }
+  if (intervalSecs > 0) {
+    register(name, intervalSecs);
+    logger.info({ service: name, intervalSecs }, 'Service rescheduled');
+  } else {
+    logger.info({ service: name }, 'Service auto-run disabled');
   }
 }
 

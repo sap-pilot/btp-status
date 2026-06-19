@@ -42,7 +42,7 @@ export interface ResponseRecord {
   endpointIndex: number;
   endpointName: string;
   conditions: ConditionResult[];
-  overallStatus: 200 | 500;
+  overallStatus: 200 | 203 | 500 | 503;
   screenshotFile?: string;
 }
 
@@ -52,7 +52,7 @@ export interface HistoryFile {
   endpointIndex: number;
   responseTime: number;
   httpStatus: number;
-  overallStatus: 200 | 500;
+  overallStatus: 200 | 203 | 500 | 503;
   screenshotFile?: string;
 }
 
@@ -60,4 +60,5 @@ export interface ServiceWithHistory extends ServiceConfig {
   history: HistoryFile[];
 }
 
-export type ServiceMode = 'enabled' | 'alwaysok' | 'unavailable' | 'disabled';
+/** Evaluation mode — controls what /health and Run Test return regardless of actual condition results */
+export type EvaluationMode = 'condition' | 'alwaysok' | 'alwayserror';

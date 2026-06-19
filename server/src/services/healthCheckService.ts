@@ -1,7 +1,7 @@
 import { getService } from './configService.js';
 import { evaluateCondition } from './conditionEvaluator.js';
 import { saveResponse } from './responseStore.js';
-import { getOverride } from './overrideService.js';
+import { getEvaluationMode } from './overrideService.js';
 import { runBrowserIasLogin } from './browserCheckService.js';
 import { logger } from '../logger.js';
 import type { ConditionResult, ResponseRecord, CheckResult, EndpointCheckResult } from '../types/index.js';
@@ -14,7 +14,7 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
     throw Object.assign(new Error(`Service '${serviceName}' not found`), { status: 404 });
   }
 
-  const overrideMode = getOverride(serviceName);
+  const evalMode = getEvaluationMode(serviceName);
   const details: EndpointCheckResult[] = [];
 
   for (let i = 0; i < service.endpoints.length; i++) {
@@ -32,16 +32,20 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
         expected: ep.waitForUrl ?? '(not set)',
       }];
 
-      if (overrideMode === 'unavailable' || overrideMode === 'disabled') {
+      if (evalMode === 'alwayserror') {
         conditions.push({
-          condition: '[SERVICE_MODE] == enabled',
+          condition: '[EVAL_MODE] == condition',
           passed: false,
-          actual: overrideMode,
-          expected: 'enabled',
+          actual: 'alwayserror',
+          expected: 'condition',
         });
       }
 
-      const passed = conditions.every(c => c.passed);
+      const conditionsPassed = conditions.every(c => c.passed);
+      const overallStatus: 200 | 203 | 500 | 503 =
+        evalMode === 'alwaysok' ? 203 :
+        evalMode === 'alwayserror' ? 503 :
+        (conditionsPassed ? 200 : 500);
 
       for (const c of conditions) {
         if (!c.passed) {
@@ -54,13 +58,13 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
 
       const record: ResponseRecord = {
         request: { url: ep.url, method: 'BROWSER', headers: {}, body: null },
-        response: { status: passed ? 200 : 500, headers: {}, body: result.message },
+        response: { status: overallStatus, headers: {}, body: result.message },
         timestamp: new Date().toISOString(),
         responseTime: result.responseTime,
         endpointIndex: i,
         endpointName: epName,
         conditions,
-        overallStatus: passed ? 200 : 500,
+        overallStatus,
       };
 
       const jsonFile = await saveResponse(serviceName, record, result.screenshot);
@@ -71,9 +75,9 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
         index: i,
         name: epName,
         conditions,
-        passed,
+        passed: conditionsPassed,
         request: { url: ep.url, method: 'BROWSER', headers: {}, body: null },
-        response: { status: passed ? 200 : 500, headers: {}, body: result.message },
+        response: { status: overallStatus, headers: {}, body: result.message },
         responseTime: result.responseTime,
         screenshotUrl: hasScreenshot
           ? `/api/download?path=${encodeURIComponent(serviceName)}/${encodeURIComponent(screenshotFile)}`
@@ -134,17 +138,20 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
     const ctx = { status: respStatus, responseTime, body: respBody, headers: respHeaders };
     const conditions: ConditionResult[] = (ep.conditions ?? []).map(c => evaluateCondition(c, ctx));
 
-    // Inject a virtual failing condition so test results and saved records reflect the override
-    if (overrideMode !== 'enabled') {
+    if (evalMode === 'alwayserror') {
       conditions.push({
-        condition: '[SERVICE_MODE] == enabled',
+        condition: '[EVAL_MODE] == condition',
         passed: false,
-        actual: overrideMode,
-        expected: 'enabled',
+        actual: 'alwayserror',
+        expected: 'condition',
       });
     }
 
-    const passed = fetchError === null && conditions.every(c => c.passed);
+    const conditionsPassed = fetchError === null && conditions.every(c => c.passed);
+    const overallStatus: 200 | 203 | 500 | 503 =
+      evalMode === 'alwaysok' ? 203 :
+      evalMode === 'alwayserror' ? 503 :
+      (conditionsPassed ? 200 : 500);
 
     for (const c of conditions) {
       if (!c.passed) {
@@ -169,7 +176,7 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
       endpointIndex: i,
       endpointName: epName,
       conditions,
-      overallStatus: passed ? 200 : 500,
+      overallStatus,
     };
 
     await saveResponse(serviceName, record);
@@ -177,7 +184,7 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
       index: i,
       name: epName,
       conditions,
-      passed,
+      passed: conditionsPassed,
       request: { url: ep.url, method, headers: reqHeaders, body: ep.body ?? null },
       response: { status: respStatus, headers: respHeaders, body: respBody },
       responseTime,

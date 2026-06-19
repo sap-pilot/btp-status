@@ -40,7 +40,7 @@ export interface ResponseRecord {
   endpointIndex: number;
   endpointName: string;
   conditions: ConditionResult[];
-  overallStatus: 200 | 500;
+  overallStatus: 200 | 203 | 500 | 503;
   screenshotFile?: string;
 }
 
@@ -50,7 +50,7 @@ export interface HistoryFile {
   endpointIndex: number;
   responseTime: number;
   httpStatus: number;
-  overallStatus: 200 | 500;
+  overallStatus: 200 | 203 | 500 | 503;
   screenshotFile?: string;
 }
 
@@ -79,4 +79,4 @@ export interface CheckResult {
   details: EndpointCheckResult[];
 }
 
-export type ServiceMode = 'enabled' | 'alwaysok' | 'unavailable' | 'disabled';
+export type EvaluationMode = 'condition' | 'alwaysok' | 'alwayserror';

@@ -187,24 +187,36 @@ When `interval` is set to a value greater than `0`, the server automatically run
 | `GET /api/history/:name?hours=24` | History file list for a service (JSON) |
 | `GET /api/history/:name/:filename` | Full request/response detail for one check (JSON) |
 | `GET /api/info` | Server capabilities: `{ syncRemote: boolean }` — used by the UI to conditionally show the Sync button |
-| `GET /api/service-mode/:name` | Current override mode for a service: `{ mode: "enabled" \| "unavailable" \| "disabled" }` |
-| `POST /api/service-mode/:name` | Set override mode for a service (JSON body `{ "mode": "..." }`); resets to `enabled` on server restart |
+| `GET /api/eval-mode/:name` | Current evaluation mode: `{ mode: "condition" \| "alwaysok" \| "alwayserror" }` |
+| `POST /api/eval-mode/:name` | Set evaluation mode (JSON body `{ "mode": "..." }`); resets to `condition` on server restart |
+| `GET /api/schedule/:name` | Current effective interval in seconds: `{ intervalSeconds }` |
+| `POST /api/schedule/:name` | Set schedule override (JSON body `{ "intervalSeconds": N }`); `0` disables autorun; resets on server restart |
 | `POST /api/sync` | Trigger an on-demand remote sync; returns `{ ok, files, transferredMB, decompressedMB, elapsedSec }` or `{ ok: false, busy: true }` if a sync is already running |
 | `GET /api/browse` | List all response files grouped by service folder: `{ folders: { name: [filename, ...] } }` |
 | `GET /api/download?path=folder/file.json` | Download a single response file (path restricted to `response/` directory) |
 
-### Service Mode
+### Evaluation Mode & Schedule
 
-On any service's detail page (`/service/:name`), the **mode selector** in the header lets you override how BTP Status treats that service without restarting the server:
+On any service's detail page (`/service/:name`), two selectors in the header control the service without restarting the server:
 
-| Mode | `/health/:name` | Scheduler |
-|------|----------------|-----------|
-| **Enabled** (green) | Returns `200`/`500` based on real check results | Runs normally |
-| **AlwaysOk** (dark green) | Always returns `200 OK` (checks still run and are recorded with actual results) | Runs normally |
-| **Unavailable** (red) | Always returns `500` (checks still run and are recorded) | Runs normally |
-| **Disabled** (amber) | Returns `500 "service is marked as disabled"` immediately | Skips this service |
+**Evaluation Mode** — how check results are interpreted:
 
-Overrides are in-memory and reset to **Enabled** on server restart (a redeploy automatically restores normal operation).
+| Mode | `/health/:name` | Saved status | Timeline dot |
+|------|----------------|-------------|--------------|
+| **Condition Based** (green, default) | `200`/`500` based on actual conditions | `200` or `500` | Green / Red |
+| **Always OK** (dark green) | Always `200 OK` regardless of conditions | `203` | Dark green |
+| **Always Error** (dark red) | Always `500` regardless of conditions | `503` | Dark red |
+
+A confirmation dialog appears before applying Always OK or Always Error. Both modes honour the evaluation setting for all execution paths (scheduled checks, manual `/health/:name`, Run Test).
+
+**Schedule** — auto-run interval:
+
+| Option | Effect |
+|--------|--------|
+| Every 5 / 10 / 15 / 30 min / 1 hour | Reschedules the service immediately; overrides `config.json` interval |
+| Disable autorun | Stops scheduled checks; only manual `/health/:name` or Run Test will record results |
+
+All overrides are in-memory and reset to their `config.json` defaults on server restart.
 
 ### Azure Traffic Manager
 
@@ -222,8 +234,10 @@ GET https://<your-app>/health/<service-name>
 Each health check saves a file at:
 
 ```
-./response/{service-name}/yyyyMMdd-HHmmss_{endpointIdx}_{responseTimeMs}ms_{200|500}.json
+./response/{service-name}/yyyyMMdd-HHmmss_{endpointIdx}_{responseTimeMs}ms_{200|203|500|503}.json
 ```
+
+Status codes in filenames: `200` = genuine pass, `203` = pass recorded under Always OK, `500` = genuine fail, `503` = fail recorded under Always Error.
 
 File content:
 ```json

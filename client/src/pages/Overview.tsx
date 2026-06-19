@@ -30,19 +30,22 @@ function getServiceOverallHistory(service: ServiceWithHistory): HistoryFile[] {
 
   const combined: HistoryFile[] = [];
   for (const [, files] of byTs) {
-    const allPassed = files.every(f => f.overallStatus === 200);
     const first = files[0];
-    combined.push({
-      ...first,
-      overallStatus: allPassed ? 200 : 500,
-    });
+    // If any file has an override status (203/503), use the first override found
+    const override = files.find(f => f.overallStatus === 203 || f.overallStatus === 503);
+    if (override) {
+      combined.push({ ...first, overallStatus: override.overallStatus });
+    } else {
+      const allPassed = files.every(f => f.overallStatus === 200);
+      combined.push({ ...first, overallStatus: allPassed ? 200 : 500 });
+    }
   }
   return combined.sort((a, b) => b.timestamp - a.timestamp);
 }
 
 function getUptimePct(history: HistoryFile[]): number {
   if (history.length === 0) return 100;
-  const up = history.filter(h => h.overallStatus === 200).length;
+  const up = history.filter(h => h.overallStatus === 200 || h.overallStatus === 203).length;
   return Math.round((up / history.length) * 100);
 }
 
@@ -124,9 +127,13 @@ export default function Overview() {
   const totalServices = data.length;
   const healthyServices = data.filter(s => {
     const h = getServiceOverallHistory(s);
-    return h.length === 0 || h[0]?.overallStatus === 200;
+    const last = h[0]?.overallStatus;
+    return h.length === 0 || last === 200 || last === 203;
   }).length;
-  const anyCurrentlyFailing = data.some(s => getServiceOverallHistory(s)[0]?.overallStatus === 500);
+  const anyCurrentlyFailing = data.some(s => {
+    const last = getServiceOverallHistory(s)[0]?.overallStatus;
+    return last === 500 || last === 503;
+  });
   const anyImperfect = data.some(s => {
     const h = getServiceOverallHistory(s);
     return h.length > 0 && getUptimePct(h) < 100;
@@ -246,11 +253,11 @@ export default function Overview() {
                           <div className="flex items-center gap-2">
                             <span
                               className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                lastStatus === 200
-                                  ? 'bg-green-500'
-                                  : lastStatus === 500
-                                  ? 'bg-red-500'
-                                  : 'bg-gray-500'
+                                lastStatus === 200 ? 'bg-green-500' :
+                                lastStatus === 203 ? 'bg-emerald-700' :
+                                lastStatus === 503 ? 'bg-red-900' :
+                                lastStatus === 500 ? 'bg-red-500' :
+                                'bg-gray-500'
                               }`}
                             />
                             <Link
@@ -299,7 +306,7 @@ export default function Overview() {
                               className={`text-xs ${
                                 combined.length === 0
                                   ? 'text-muted-foreground'
-                                  : lastStatus === 500
+                                  : lastStatus === 500 || lastStatus === 503
                                   ? 'border-red-600 text-red-400'
                                   : uptime < 100
                                   ? 'border-yellow-600 text-yellow-400'

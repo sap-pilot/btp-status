@@ -78,8 +78,8 @@ export async function readScreenshotFile(
 }
 
 function parseFilename(filename: string): HistoryFile | null {
-  // yyyyMMdd-HHmmss_{idx}_{ms}ms_{200|500}.json
-  const m = filename.match(/^(\d{8}-\d{6})_(\d+)_(\d+)ms_(200|500)\.json$/);
+  // yyyyMMdd-HHmmss_{idx}_{ms}ms_{200|203|500|503}.json
+  const m = filename.match(/^(\d{8}-\d{6})_(\d+)_(\d+)ms_(200|203|500|503)\.json$/);
   if (!m) return null;
   const [, dateStr, idxStr, msStr, statusStr] = m;
   return {
@@ -88,7 +88,7 @@ function parseFilename(filename: string): HistoryFile | null {
     endpointIndex: parseInt(idxStr, 10),
     responseTime: parseInt(msStr, 10),
     httpStatus: 0,
-    overallStatus: parseInt(statusStr, 10) as 200 | 500,
+    overallStatus: parseInt(statusStr, 10) as 200 | 203 | 500 | 503,
   };
 }
 

@@ -14,7 +14,7 @@ function formatTs(ms: number): string {
 
 export default function StatusDots({ history, maxDots = 48, showAvg = true, showUptime = true, onDotClick }: StatusDotsProps) {
   const nonEmpty = history.length;
-  const upCount = history.filter(h => h.overallStatus === 200).length;
+  const upCount = history.filter(h => h.overallStatus === 200 || h.overallStatus === 203).length;
   const uptime = nonEmpty > 0 ? Math.round((upCount / nonEmpty) * 100) : 100;
   const avgMs =
     nonEmpty > 0 ? Math.round(history.reduce((s, h) => s + h.responseTime, 0) / nonEmpty) : 0;
@@ -43,8 +43,13 @@ export default function StatusDots({ history, maxDots = 48, showAvg = true, show
               />
             );
           }
-          const color = d.overallStatus === 200 ? 'bg-green-500' : 'bg-red-500';
-          const title = `${formatTs(d.timestamp)} — ${d.responseTime}ms — ${d.overallStatus === 200 ? 'OK' : 'FAIL'}`;
+          const color =
+            d.overallStatus === 200 ? 'bg-green-500' :
+            d.overallStatus === 203 ? 'bg-emerald-700' :
+            d.overallStatus === 503 ? 'bg-red-900' :
+            'bg-red-500';
+          const label = d.overallStatus === 200 ? 'OK' : d.overallStatus === 203 ? 'OK (always)' : d.overallStatus === 503 ? 'FAIL (always)' : 'FAIL';
+          const title = `${formatTs(d.timestamp)} — ${d.responseTime}ms — ${label}`;
           if (onDotClick) {
             return (
               <button

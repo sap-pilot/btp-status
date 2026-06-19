@@ -3,12 +3,14 @@ import { getAllServices } from '../services/configService.js';
 import { listResponseFiles, readResponseFile, readScreenshotFile, browseResponseFiles } from '../services/responseStore.js';
 import { checkService } from '../services/healthCheckService.js';
 import { syncFromRemote } from '../services/syncService.js';
-import { getOverride, setOverride } from '../services/overrideService.js';
+import { getEvaluationMode, setEvaluationMode, getIntervalOverride, setIntervalOverride } from '../services/overrideService.js';
+import { rescheduleService } from '../services/schedulerService.js';
+import { getService } from '../services/configService.js';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
-import type { ServiceMode, ServiceWithHistory } from '../types/index.js';
+import type { EvaluationMode, ServiceWithHistory } from '../types/index.js';
 
-const VALID_MODES = new Set<string>(['enabled', 'alwaysok', 'unavailable', 'disabled']);
+const VALID_EVAL_MODES = new Set<string>(['condition', 'alwaysok', 'alwayserror']);
 
 const router = Router();
 
@@ -68,19 +70,43 @@ router.get('/info', (_req, res) => {
   res.json({ syncRemote: !!config.SYNC_REMOTE });
 });
 
-router.get('/service-mode/:name', (req, res) => {
-  res.json({ mode: getOverride(req.params.name) });
+router.get('/eval-mode/:name', (req, res) => {
+  res.json({ mode: getEvaluationMode(req.params.name) });
 });
 
-router.post('/service-mode/:name', (req, res) => {
+router.post('/eval-mode/:name', (req, res) => {
   const mode = (req.body as { mode?: string })?.mode;
-  if (!mode || !VALID_MODES.has(mode)) {
-    res.status(400).json({ error: 'mode must be enabled, alwaysok, unavailable, or disabled' });
+  if (!mode || !VALID_EVAL_MODES.has(mode)) {
+    res.status(400).json({ error: 'mode must be condition, alwaysok, or alwayserror' });
     return;
   }
-  setOverride(req.params.name, mode as ServiceMode);
-  logger.info({ service: req.params.name, mode }, 'Service mode updated');
+  setEvaluationMode(req.params.name, mode as EvaluationMode);
+  logger.info({ service: req.params.name, mode }, 'Evaluation mode updated');
   res.json({ ok: true, mode });
+});
+
+router.get('/schedule/:name', (req, res) => {
+  const name = req.params.name;
+  const override = getIntervalOverride(name);
+  if (override !== null) {
+    res.json({ intervalSeconds: override });
+    return;
+  }
+  const svc = getService(name);
+  res.json({ intervalSeconds: svc?.interval ?? 0 });
+});
+
+router.post('/schedule/:name', (req, res) => {
+  const name = req.params.name;
+  const { intervalSeconds } = req.body as { intervalSeconds?: unknown };
+  if (typeof intervalSeconds !== 'number' || !Number.isInteger(intervalSeconds) || intervalSeconds < 0) {
+    res.status(400).json({ error: 'intervalSeconds must be a non-negative integer' });
+    return;
+  }
+  setIntervalOverride(name, intervalSeconds);
+  rescheduleService(name, intervalSeconds);
+  logger.info({ service: name, intervalSeconds }, 'Schedule updated');
+  res.json({ ok: true, intervalSeconds });
 });
 
 router.post('/sync', async (req, res, next) => {

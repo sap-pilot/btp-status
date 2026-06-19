@@ -63,8 +63,8 @@ export default function ResponseDetailModal({ file, serviceName, onClose }: Prop
           <DialogTitle className="flex items-center gap-2">
             Response Detail
             {record && (
-              <Badge variant={record.overallStatus === 200 ? 'default' : 'destructive'}>
-                {record.overallStatus === 200 ? 'PASS' : 'FAIL'}
+              <Badge variant={record.overallStatus === 200 || record.overallStatus === 203 ? 'default' : 'destructive'}>
+                {record.overallStatus === 200 ? 'PASS' : record.overallStatus === 203 ? 'PASS (always ok)' : record.overallStatus === 503 ? 'FAIL (always error)' : 'FAIL'}
               </Badge>
             )}
             {isBrowser && (
@@ -125,8 +125,8 @@ export default function ResponseDetailModal({ file, serviceName, onClose }: Prop
                       </div>
                       <div>
                         <div className="text-xs text-muted-foreground mb-1">Overall Result</div>
-                        <Badge variant={record.overallStatus === 200 ? 'default' : 'destructive'}>
-                          {record.overallStatus === 200 ? 'PASS' : 'FAIL'}
+                        <Badge variant={record.overallStatus === 200 || record.overallStatus === 203 ? 'default' : 'destructive'}>
+                          {record.overallStatus === 200 ? 'PASS' : record.overallStatus === 203 ? 'PASS (always ok)' : record.overallStatus === 503 ? 'FAIL (always error)' : 'FAIL'}
                         </Badge>
                       </div>
                       {isBrowser && record.response.body && (

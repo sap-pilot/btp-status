@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import type { HistoryFile, ServiceConfig, ServiceMode } from '@shared/types';
+import type { EvaluationMode, HistoryFile, ServiceConfig } from '@shared/types';
 import StatusDots from '@/components/StatusDots';
 import ResponseTimeChart from '@/components/ResponseTimeChart';
 import ResponseDetailModal from '@/components/ResponseDetailModal';
@@ -33,19 +33,19 @@ const HOUR_OPTIONS = [
   { value: '72', label: 'Last 72 hours' },
 ];
 
-const MODE_TOOLTIP =
-  'Enabled: checks run normally and /health returns 200/500 based on results. ' +
-  'AlwaysOk: checks still run and are recorded, but /health always returns 200 OK ' +
-  '(signals availability to Azure Traffic Manager regardless of actual result). ' +
-  'Unavailable: checks still run and are recorded, but /health always returns 500 ' +
-  '(signals unavailability to Azure Traffic Manager). ' +
-  'Disabled: scheduled checks stop and /health returns 500 "service is marked as disabled".';
+const SCHEDULE_OPTIONS = [
+  { value: '300', label: 'Every 5 min' },
+  { value: '600', label: 'Every 10 min' },
+  { value: '900', label: 'Every 15 min' },
+  { value: '1800', label: 'Every 30 min' },
+  { value: '3600', label: 'Every 1 hour' },
+  { value: '0', label: 'Disable autorun' },
+];
 
-function modeTriggerClass(mode: ServiceMode): string {
-  if (mode === 'enabled') return 'bg-green-950 border-green-700 text-green-400 hover:bg-green-900';
-  if (mode === 'alwaysok') return 'bg-emerald-900 border-emerald-600 text-emerald-300 hover:bg-emerald-800';
-  if (mode === 'unavailable') return 'bg-red-950 border-red-700 text-red-400 hover:bg-red-900';
-  return 'bg-amber-950 border-amber-700 text-amber-400 hover:bg-amber-900';
+function evalTriggerClass(mode: EvaluationMode): string {
+  if (mode === 'alwaysok') return 'bg-emerald-950 border-emerald-700 text-emerald-300 hover:bg-emerald-900';
+  if (mode === 'alwayserror') return 'bg-red-950 border-red-700 text-red-400 hover:bg-red-900';
+  return 'bg-green-950 border-green-700 text-green-400 hover:bg-green-900';
 }
 
 function formatTs(ms: number): string {
@@ -62,12 +62,9 @@ export default function History() {
   const location = useLocation();
   const autoOpenFilename = (location.state as { autoOpenFilename?: string } | null)?.autoOpenFilename;
   const autoOpenHandled = useRef(false);
-  // Capture the URL hash once on mount for deep-link support
   const initialHash = useRef(location.hash.slice(1));
   const { theme, toggleTheme } = useTheme();
   const windowWidth = useWindowWidth();
-  // max-w-5xl (1024px) page with px-4 (32px) + CardContent p-6 (48px) = 80px overhead
-  // each dot slot = w-2.5 (10px) + gap-0.5 (2px) = 12px
   const dotAreaWidth = Math.min(windowWidth, 1024) - 140;
   const maxDots = Math.max(8, Math.floor(dotAreaWidth / 12));
 
@@ -79,9 +76,13 @@ export default function History() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [mode, setMode] = useState<ServiceMode>('enabled');
-  const [pendingMode, setPendingMode] = useState<ServiceMode | null>(null);
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  // Evaluation mode
+  const [evalMode, setEvalMode] = useState<EvaluationMode>('condition');
+  const [pendingEvalMode, setPendingEvalMode] = useState<EvaluationMode | null>(null);
+  const [evalConfirmOpen, setEvalConfirmOpen] = useState(false);
+
+  // Schedule
+  const [scheduleInterval, setScheduleInterval] = useState<number | null>(null);
 
   useEffect(() => {
     fetch('/api/services')
@@ -91,9 +92,13 @@ export default function History() {
   }, [name]);
 
   useEffect(() => {
-    fetch(`/api/service-mode/${encodeURIComponent(name)}`)
-      .then(r => r.json() as Promise<{ mode: ServiceMode }>)
-      .then(d => setMode(d.mode))
+    fetch(`/api/eval-mode/${encodeURIComponent(name)}`)
+      .then(r => r.json() as Promise<{ mode: EvaluationMode }>)
+      .then(d => setEvalMode(d.mode))
+      .catch(() => null);
+    fetch(`/api/schedule/${encodeURIComponent(name)}`)
+      .then(r => r.json() as Promise<{ intervalSeconds: number }>)
+      .then(d => setScheduleInterval(d.intervalSeconds))
       .catch(() => null);
   }, [name]);
 
@@ -112,7 +117,6 @@ export default function History() {
 
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
 
-  // Open a history entry: update modal state + reflect in URL hash for shareability
   function openFile(file: HistoryFile | null) {
     setSelected(file);
     const base = `/service/${encodeURIComponent(name)}`;
@@ -124,10 +128,8 @@ export default function History() {
     }
   }
 
-  // Auto-open: handles both deep-link hash (#filename) and Overview dot-click state
   useEffect(() => {
     if (autoOpenHandled.current || files.length === 0) return;
-    // Hash URL takes priority; fall back to router state from Overview dot click
     const target = initialHash.current || autoOpenFilename;
     if (!target) return;
     const match = files.find(
@@ -140,46 +142,57 @@ export default function History() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files, autoOpenFilename]);
 
-  async function applyMode(m: ServiceMode) {
+  async function applyEvalMode(m: EvaluationMode) {
     try {
-      await fetch(`/api/service-mode/${encodeURIComponent(name)}`, {
+      await fetch(`/api/eval-mode/${encodeURIComponent(name)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode: m }),
       });
-      setMode(m);
-    } catch { /* ignore; mode display stays as-is */ }
+      setEvalMode(m);
+    } catch { /* ignore */ }
   }
 
-  function handleModeChange(newMode: string) {
-    if (newMode === mode) return;
-    if (newMode === 'enabled') {
-      void applyMode('enabled');
+  function handleEvalModeChange(newMode: string) {
+    const m = newMode as EvaluationMode;
+    if (m === evalMode) return;
+    if (m === 'condition') {
+      void applyEvalMode('condition');
     } else {
-      setPendingMode(newMode as ServiceMode);
-      setConfirmOpen(true);
+      setPendingEvalMode(m);
+      setEvalConfirmOpen(true);
     }
   }
 
-
-  async function confirmModeChange() {
-    if (!pendingMode) return;
-    const m = pendingMode;
-    setPendingMode(null);
-    setConfirmOpen(false);
-    await applyMode(m);
+  async function confirmEvalMode() {
+    if (!pendingEvalMode) return;
+    const m = pendingEvalMode;
+    setPendingEvalMode(null);
+    setEvalConfirmOpen(false);
+    await applyEvalMode(m);
   }
 
-  function cancelModeChange() {
-    setPendingMode(null);
-    setConfirmOpen(false);
+  function cancelEvalMode() {
+    setPendingEvalMode(null);
+    setEvalConfirmOpen(false);
   }
 
-  const upCount = files.filter(f => f.overallStatus === 200).length;
+  async function applySchedule(intervalSeconds: number) {
+    try {
+      await fetch(`/api/schedule/${encodeURIComponent(name)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ intervalSeconds }),
+      });
+      setScheduleInterval(intervalSeconds);
+    } catch { /* ignore */ }
+  }
+
+  const upCount = files.filter(f => f.overallStatus === 200 || f.overallStatus === 203).length;
   const uptime = files.length > 0 ? Math.round((upCount / files.length) * 100) : 100;
   const latestTs = files.reduce((max, f) => Math.max(max, f.timestamp), 0);
   const latestFailed = files.some(
-    f => Math.floor(f.timestamp / 1000) === Math.floor(latestTs / 1000) && f.overallStatus === 500,
+    f => Math.floor(f.timestamp / 1000) === Math.floor(latestTs / 1000) && (f.overallStatus === 500 || f.overallStatus === 503),
   );
   const uptimeColor = files.length === 0 ? 'text-muted-foreground' : latestFailed ? 'text-red-500' : uptime < 100 ? 'text-yellow-500' : 'text-green-500';
   const avgMs =
@@ -191,6 +204,17 @@ export default function History() {
     if (!service) return `Endpoint ${idx}`;
     return service.endpoints[idx]?.name ?? `Endpoint ${idx}`;
   };
+
+  // Build schedule select value — may not match a preset if config uses a custom interval
+  const scheduleValue = scheduleInterval !== null ? String(scheduleInterval) : '';
+  const scheduleOptions = [...SCHEDULE_OPTIONS];
+  if (
+    scheduleInterval !== null &&
+    !SCHEDULE_OPTIONS.find(o => o.value === String(scheduleInterval))
+  ) {
+    const mins = scheduleInterval / 60;
+    scheduleOptions.unshift({ value: String(scheduleInterval), label: `Every ${mins}min (config)` });
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -214,20 +238,36 @@ export default function History() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            {/* Service mode selector */}
-            <div title={MODE_TOOLTIP}>
-              <Select value={mode} onValueChange={handleModeChange}>
-                <SelectTrigger className={`h-8 text-xs w-32 ${modeTriggerClass(mode)}`}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="enabled" className="text-xs">Enabled</SelectItem>
-                  <SelectItem value="alwaysok" className="text-xs">AlwaysOk</SelectItem>
-                  <SelectItem value="unavailable" className="text-xs">Unavailable</SelectItem>
-                  <SelectItem value="disabled" className="text-xs">Disabled</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Evaluation Mode selector */}
+            <Select value={evalMode} onValueChange={handleEvalModeChange}>
+              <SelectTrigger className={`h-8 text-xs w-36 ${evalTriggerClass(evalMode)}`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="condition" className="text-xs">Condition Based</SelectItem>
+                <SelectItem value="alwaysok" className="text-xs text-emerald-400">Always OK</SelectItem>
+                <SelectItem value="alwayserror" className="text-xs text-red-400">Always Error</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Schedule selector */}
+            <Select
+              value={scheduleValue}
+              onValueChange={v => void applySchedule(Number(v))}
+              disabled={scheduleInterval === null}
+            >
+              <SelectTrigger className="h-8 text-xs w-36">
+                <SelectValue placeholder="Schedule…" />
+              </SelectTrigger>
+              <SelectContent>
+                {scheduleOptions.map(o => (
+                  <SelectItem key={o.value} value={o.value} className="text-xs">
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
             <Button
               size="sm"
               variant="outline"
@@ -343,7 +383,9 @@ export default function History() {
                     <TableRow
                       key={f.filename}
                       className={`cursor-pointer ${
-                        f.overallStatus === 500 ? 'bg-red-950/20 hover:bg-red-950/30' : 'hover:bg-muted/30'
+                        f.overallStatus === 500 ? 'bg-red-950/20 hover:bg-red-950/30' :
+                        f.overallStatus === 503 ? 'bg-red-950/30 hover:bg-red-950/40' :
+                        'hover:bg-muted/30'
                       }`}
                       onClick={() => openFile(f)}
                     >
@@ -354,16 +396,18 @@ export default function History() {
                         {endpointName(f.endpointIndex)}
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant={f.overallStatus === 200 ? 'outline' : 'destructive'}
-                          className={`text-xs ${
-                            f.overallStatus === 200
-                              ? 'border-green-600 text-green-400'
-                              : ''
-                          }`}
-                        >
-                          {f.overallStatus === 200 ? 'PASS' : 'FAIL'}
-                        </Badge>
+                        {f.overallStatus === 200 && (
+                          <Badge variant="outline" className="text-xs border-green-600 text-green-400">PASS</Badge>
+                        )}
+                        {f.overallStatus === 203 && (
+                          <Badge variant="outline" className="text-xs border-emerald-700 text-emerald-400">PASS (always ok)</Badge>
+                        )}
+                        {f.overallStatus === 500 && (
+                          <Badge variant="destructive" className="text-xs">FAIL</Badge>
+                        )}
+                        {f.overallStatus === 503 && (
+                          <Badge variant="destructive" className="text-xs bg-red-900 hover:bg-red-900">FAIL (always error)</Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-right text-sm">
                         {f.responseTime}ms
@@ -390,30 +434,28 @@ export default function History() {
         onComplete={fetchHistory}
       />
 
-      {/* Confirmation dialog for destructive mode changes */}
-      <AlertDialog open={confirmOpen} onOpenChange={open => { if (!open) cancelModeChange(); }}>
+      {/* Confirmation dialog for evaluation mode changes */}
+      <AlertDialog open={evalConfirmOpen} onOpenChange={open => { if (!open) cancelEvalMode(); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {pendingMode === 'alwaysok'
-                ? 'Mark service as AlwaysOk?'
-                : pendingMode === 'unavailable'
-                ? 'Mark service as Unavailable?'
-                : 'Disable service?'}
+              {pendingEvalMode === 'alwaysok'
+                ? 'Set evaluation mode to Always OK?'
+                : 'Set evaluation mode to Always Error?'}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {pendingMode === 'alwaysok'
-                ? 'Scheduled health checks will continue running and results will be recorded as usual, but /health/:name will always return 200 OK — signalling availability to Azure Traffic Manager regardless of the actual check outcome. Select "Enabled" to restore normal behaviour.'
-                : pendingMode === 'unavailable'
-                ? 'Scheduled health checks will continue running and results will be recorded, but /health/:name will always return 500 — signalling unavailability to Azure Traffic Manager. Select "Enabled" to restore normal behaviour.'
-                : 'Scheduled health checks will stop running for this service and /health/:name will return 500 "service is marked as disabled". Select "Enabled" to resume checks.'}
+              {pendingEvalMode === 'alwaysok'
+                ? `All executions for "${name}" — including scheduled checks, manual /health/${name} requests, and Run Test — will return 200 OK regardless of the actual condition check result. Results are still recorded with status 203. Select "Condition Based" to restore normal evaluation.`
+                : `All executions for "${name}" — including scheduled checks, manual /health/${name} requests, and Run Test — will return 500 error regardless of the actual condition check result (a virtual failing condition is injected). Results are recorded with status 503. Select "Condition Based" to restore normal evaluation.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => { void confirmModeChange(); }}
-              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={() => { void confirmEvalMode(); }}
+              className={pendingEvalMode === 'alwaysok'
+                ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                : 'bg-red-700 hover:bg-red-800 text-white'}
             >
               Confirm
             </AlertDialogAction>

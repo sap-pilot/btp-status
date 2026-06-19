@@ -1,9 +1,23 @@
 # Changelog
 
+## [v0.5.0] - 2026-06-19
+
+### Added
+- **Evaluation Mode selector** on the Service detail page header: controls how check results are interpreted and what `/health/:name` returns, independently of the execution schedule
+  - **Condition Based** (default, green): `/health/:name` returns `200`/`500` based on actual condition results; files saved as `…_200.json` or `…_500.json`
+  - **Always OK** (dark green): all executions — including scheduled checks, manual `/health/:name` requests, and Run Test — return `200 OK` regardless of actual results; response files are saved with status `203` to distinguish them from genuine passes; a confirmation dialog is shown before applying
+  - **Always Error** (dark red): all executions return `500` regardless of actual results (a virtual failing condition is injected); response files saved with status `503`; a confirmation dialog is shown before applying
+- **Schedule selector** on the Service detail page header: controls the auto-run interval for the service without restarting the server; options: Every 5 min / 10 min / 15 min / 30 min / 1 hour / Disable autorun; defaults to the `interval` value from `config.json`; changes take effect immediately (live reschedule); "Disable autorun" (`interval=0`) stops scheduled checks — only manual `/health/:name` or Run Test will trigger and record checks (evaluation mode is still honoured)
+- `GET /api/eval-mode/:name` — current evaluation mode for a service (`{ mode: "condition" | "alwaysok" | "alwayserror" }`)
+- `POST /api/eval-mode/:name` — set evaluation mode for a service; resets to `condition` on server restart
+- `GET /api/schedule/:name` — current effective interval for a service in seconds (`{ intervalSeconds }`)
+- `POST /api/schedule/:name` — set schedule override for a service (`{ intervalSeconds }`); `0` disables autorun; live-reschedules the service; resets on server restart
+- Status code `203` (Always OK override): response records and filenames with this code are treated as passing (`PASS (always ok)`) in the UI, rendered as dark-green timeline dots, and counted as "up" in uptime calculations
+- Status code `503` (Always Error override): records treated as failing (`FAIL (always error)`) in the UI, rendered as dark-red timeline dots
+
 ## [v0.4.0] - 2026-06-19
 
 ### Added
-- **AlwaysOk service mode**: new option on the Service detail page mode selector (dark green); when selected, scheduled health checks continue running and results are recorded with actual pass/fail outcomes, but `/health/:name` always returns `200 OK` — signalling availability to Azure Traffic Manager regardless of the real check result; a confirmation dialog appears before applying the mode
 - **Clickable status timeline dots**: clicking a dot on the Overview dashboard navigates to the service detail page and automatically opens the response detail modal for that specific check; clicking a dot on the Service detail page timeline opens the response detail modal inline
 - Status dots now show a hover highlight (`opacity-75` + `scale-110`) when clickable to signal interactivity
 - **Deep-link URLs for history entries**
