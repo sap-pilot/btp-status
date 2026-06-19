@@ -25,6 +25,9 @@
 ### Fixed
 - "Run Test" and "Test All" now correctly reflect the service mode override: a virtual `[SERVICE_MODE] == enabled` condition is appended to each endpoint's results when the mode is Unavailable or Disabled, causing the test to report failure and saving the response record with `overallStatus 500` so the timeline renders the check as red
 - Availability badge on the Overview and Service detail pages now uses three-state colour coding: green = 100% uptime, yellow = below 100% but latest check passed, red = latest check still failing
+- "Run Test" no longer causes a black screen when the backend returns a server error: the response status is now checked before parsing the body as a `CheckResult`; non-OK responses surface the server error message inside the dialog instead of crashing the render tree
+- Added a React error boundary (`ErrorBoundary`) wrapping the entire app so any future unhandled render error shows a recoverable error screen instead of a blank page
+- `docker/build.sh` added: builds and pushes the Docker image tagged with the current git commit SHA (immutable) and also as `:latest`; using SHA tags ensures Cloud Foundry pulls a fresh image on every deploy instead of reusing a cached `:latest` layer — `cf restage` does not pull a new image for the same tag, `cf push --docker-image image:<sha>` does
 
 ### Changed
 - Select option label renamed from "Mark as Unavailable" to "Unavailable" for consistency with other options

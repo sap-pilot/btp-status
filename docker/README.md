@@ -24,48 +24,45 @@ the Express server.
 
 ---
 
-## Build
+## Build & publish (recommended — SHA tags)
+
+Use the provided build script. It tags the image with the current **git commit SHA**
+(immutable, unique per build) *and* as `:latest`, then pushes both.
 
 ```bash
-# From the repo root
-docker build -f docker/Dockerfile -t btp-status:latest .
+# Default registry: docker.io/sapux
+./docker/build.sh
 
-# Or from inside the docker/ folder
-cd docker
-docker build -t btp-status:latest .
+# Custom registry
+REGISTRY=ghcr.io/myorg ./docker/build.sh
 ```
 
-The build clones the app from GitHub, so no local source copy is embedded —
-rebuild the image to pick up new commits.
+The script prints the exact SHA tag and the `cf push` command to use it.
+
+**Why SHA tags?**  Cloud Foundry may cache a Docker image layer by tag name.
+If you push a new image under the same `:latest` tag and then run `cf restage`,
+CF reuses the cached droplet — it does **not** pull the new image.
+A unique SHA tag forces CF to treat the image as new on every deploy.
+
+---
+
+## Build manually (without the script)
+
+```bash
+SHA=$(git rev-parse --short HEAD)
+docker build -f docker/Dockerfile \
+  -t sapux/btp-status:${SHA} \
+  -t sapux/btp-status:latest \
+  .
+docker push sapux/btp-status:${SHA}
+docker push sapux/btp-status:latest
+```
 
 To pin a specific release instead of latest `main`, edit the `RUN git clone …`
 line in the Dockerfile:
 
 ```dockerfile
 RUN git clone --branch v0.3.0 --depth 1 https://github.com/sap-pilot/btp-status /app
-```
-
----
-
-## Publish
-
-Tag and push to your registry of choice.
-
-**Docker Hub**
-
-```bash
-docker tag btp-status:latest <your-dockerhub-username>/btp-status:0.3.0
-docker tag btp-status:latest <your-dockerhub-username>/btp-status:latest
-docker push <your-dockerhub-username>/btp-status:0.3.0
-docker push <your-dockerhub-username>/btp-status:latest
-```
-
-**GitHub Container Registry**
-
-```bash
-echo $GITHUB_PAT | docker login ghcr.io -u <your-github-username> --password-stdin
-docker tag btp-status:latest ghcr.io/<your-github-org>/btp-status:0.3.0
-docker push ghcr.io/<your-github-org>/btp-status:0.3.0
 ```
 
 ---
@@ -97,7 +94,25 @@ Open http://localhost:3000/overview
 
 ## Deploy on SAP BTP Cloud Foundry (MTA)
 
-Replace the `docker.image` value in `mta.yaml` with your published image:
+### Quick update — new image only (no MTA rebuild needed)
+
+After `./docker/build.sh` prints the SHA tag, push the new image directly to the
+running CF app:
+
+```bash
+cf push btp-status-srv --docker-image sapux/btp-status:<sha>
+```
+
+This is the fastest way to update the app after a code change. CF pulls the image
+by its exact SHA tag so it cannot reuse a cached layer.
+
+> **Do not use `cf restage`** to pick up a new Docker image — CF restages from the
+> existing droplet and does not pull the latest image for the same tag.
+
+### Full MTA deploy (first deploy or config changes)
+
+Update the `docker.image` value in `mta.yaml` to the SHA tag produced by the build
+script, then deploy:
 
 ```yaml
 modules:
@@ -106,15 +121,15 @@ modules:
     path: server
     parameters:
       docker:
-        image: <your-dockerhub-username>/btp-status:0.3.0   # ← your image here
+        image: sapux/btp-status:<sha>   # ← SHA tag from build.sh
       memory: 1G
-      disk-quota: 2G
+      disk-quota: 4G
       enable-ssh: true
       keep-existing:
         env: true
+    build-parameters:
+      no-source: true
 ```
-
-Then build and deploy as usual:
 
 ```bash
 mbt build

@@ -117,6 +117,15 @@ export default function TestModal({ serviceName, open, onClose, onComplete }: Pr
     try {
       const resp = await fetch(`/api/check/${encodeURIComponent(serviceName)}`);
       setElapsed(Date.now() - start);
+      if (!resp.ok) {
+        let msg = `Server error ${resp.status}`;
+        try {
+          const body = await resp.json() as { error?: string };
+          if (body.error) msg = body.error;
+        } catch { /* keep HTTP status message */ }
+        setError(msg);
+        return;
+      }
       const data = await resp.json() as CheckResult;
       setResult(data);
       onComplete();
