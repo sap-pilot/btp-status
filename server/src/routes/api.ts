@@ -8,6 +8,7 @@ import { rescheduleService } from '../services/schedulerService.js';
 import { getService } from '../services/configService.js';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
+import { getCity } from '../services/geoService.js';
 import type { EvaluationMode, ServiceWithHistory } from '../types/index.js';
 
 const VALID_EVAL_MODES = new Set<string>(['condition', 'alwaysok', 'alwayserror']);
@@ -67,7 +68,7 @@ router.get('/overview', async (req, res, next) => {
 });
 
 router.get('/info', (_req, res) => {
-  res.json({ syncRemote: !!config.SYNC_REMOTE });
+  res.json({ syncRemote: !!config.SYNC_REMOTE, city: getCity() });
 });
 
 router.get('/eval-mode/:name', (req, res) => {

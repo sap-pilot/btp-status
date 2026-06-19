@@ -69,11 +69,15 @@ export default function Overview() {
   const [testingAll, setTestingAll] = useState(false);
   const [syncAvailable, setSyncAvailable] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [serverCity, setServerCity] = useState<string>('');
 
   useEffect(() => {
     fetch('/api/info')
-      .then(r => r.json() as Promise<{ syncRemote: boolean }>)
-      .then(d => setSyncAvailable(d.syncRemote))
+      .then(r => r.json() as Promise<{ syncRemote: boolean; city?: string }>)
+      .then(d => {
+        setSyncAvailable(d.syncRemote);
+        if (d.city && d.city !== 'unknown') setServerCity(d.city);
+      })
       .catch(() => null);
   }, []);
 
@@ -156,7 +160,7 @@ export default function Overview() {
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img src="/images/favicon-32x32.png" alt="" className="h-5 w-5" />
-            <h1 className="text-lg font-semibold">BTP Status</h1>
+            <h1 className="text-lg font-semibold">BTP Status{serverCity ? ` (${serverCity})` : ''}</h1>
             <span className="text-xs text-muted-foreground font-mono">
               v{__APP_VERSION__}+{__COMMIT_HASH__}.{__BUILD_DATE__}
             </span>
