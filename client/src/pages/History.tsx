@@ -140,6 +140,11 @@ export default function History() {
 
   const upCount = files.filter(f => f.overallStatus === 200).length;
   const uptime = files.length > 0 ? Math.round((upCount / files.length) * 100) : 100;
+  const latestTs = files.reduce((max, f) => Math.max(max, f.timestamp), 0);
+  const latestFailed = files.some(
+    f => Math.floor(f.timestamp / 1000) === Math.floor(latestTs / 1000) && f.overallStatus === 500,
+  );
+  const uptimeColor = files.length === 0 ? 'text-muted-foreground' : latestFailed ? 'text-red-500' : uptime < 100 ? 'text-yellow-500' : 'text-green-500';
   const avgMs =
     files.length > 0
       ? Math.round(files.reduce((s, f) => s + f.responseTime, 0) / files.length)
@@ -253,7 +258,7 @@ export default function History() {
         <div className="grid grid-cols-3 gap-4">
           <Card>
             <CardContent className="pt-4">
-              <div className="text-2xl font-bold text-green-500">{uptime}%</div>
+              <div className={`text-2xl font-bold ${uptimeColor}`}>{uptime}%</div>
               <div className="text-xs text-muted-foreground mt-1">Uptime</div>
             </CardContent>
           </Card>

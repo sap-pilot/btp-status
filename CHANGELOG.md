@@ -24,10 +24,13 @@
 
 ### Fixed
 - "Run Test" and "Test All" now correctly reflect the service mode override: a virtual `[SERVICE_MODE] == enabled` condition is appended to each endpoint's results when the mode is Unavailable or Disabled, causing the test to report failure and saving the response record with `overallStatus 500` so the timeline renders the check as red
+- Availability badge on the Overview and Service detail pages now uses three-state colour coding: green = 100% uptime, yellow = below 100% but latest check passed, red = latest check still failing
 
 ### Changed
 - Select option label renamed from "Mark as Unavailable" to "Unavailable" for consistency with other options
 - Version bumped to `0.3.0` across all package files and `mta.yaml`
+- `docker/Dockerfile` added: Node.js 22 image that clones the app from GitHub at build time, installs all Chromium system libraries via `playwright install --with-deps chromium`, builds client + server, and starts Express; includes `openssh-server` for `cf ssh` support on Cloud Foundry Docker deployments
+- `docker/README.md` added: instructions for building, tagging, publishing, running locally, and deploying the image on SAP BTP Cloud Foundry via MTA
 
 ## [v0.2.0] - 2026-06-17
 

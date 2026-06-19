@@ -125,6 +125,11 @@ export default function Overview() {
     const h = getServiceOverallHistory(s);
     return h.length === 0 || h[0]?.overallStatus === 200;
   }).length;
+  const anyCurrentlyFailing = data.some(s => getServiceOverallHistory(s)[0]?.overallStatus === 500);
+  const anyImperfect = data.some(s => {
+    const h = getServiceOverallHistory(s);
+    return h.length > 0 && getUptimePct(h) < 100;
+  });
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -143,8 +148,12 @@ export default function Overview() {
               Refreshed {lastRefresh.toLocaleTimeString()}
             </span>
             <Badge
-              variant={healthyServices === totalServices ? 'default' : 'destructive'}
-              className={healthyServices === totalServices ? 'bg-green-600 hover:bg-green-600' : ''}
+              variant={anyCurrentlyFailing ? 'destructive' : 'outline'}
+              className={
+                anyCurrentlyFailing ? '' :
+                anyImperfect ? 'border-yellow-600 text-yellow-400' :
+                'bg-green-600 hover:bg-green-600 border-green-600 text-white'
+              }
             >
               {healthyServices}/{totalServices} healthy
             </Badge>
@@ -276,13 +285,15 @@ export default function Overview() {
                         <td className="px-4 py-3 align-middle">
                           <div className="flex flex-col items-end gap-1">
                             <Badge
-                              variant={uptime >= 90 ? 'outline' : uptime >= 70 ? 'secondary' : 'destructive'}
+                              variant="outline"
                               className={`text-xs ${
-                                uptime >= 90
-                                  ? 'border-green-600 text-green-400'
-                                  : uptime >= 70
-                                  ? 'text-yellow-400'
-                                  : ''
+                                combined.length === 0
+                                  ? 'text-muted-foreground'
+                                  : lastStatus === 500
+                                  ? 'border-red-600 text-red-400'
+                                  : uptime < 100
+                                  ? 'border-yellow-600 text-yellow-400'
+                                  : 'border-green-600 text-green-400'
                               }`}
                             >
                               {combined.length > 0 ? `${uptime}% up` : 'no data'}

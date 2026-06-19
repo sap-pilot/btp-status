@@ -7,21 +7,24 @@ modules:
     type: nodejs
     path: server
     parameters:
-      memory: 256M
-      disk-quota: 2G
-      buildpack: nodejs_buildpack
+      docker:
+        image: sapux/btp-status:latest
+      memory: 1G
+      disk-quota: 4G
+      # buildpack: nodejs_buildpack
       host: btp-status-${org}-${space}
       enable-ssh: true
       keep-existing:
         env: true
     build-parameters:
-      builder: custom
-      commands:
-        - npm ci --prefix ..
-        - npm run build --prefix ..
-      ignore:
-        - response/
-    properties:
-      CONFIG_FILE: ./config.json
+      no-source: true
+    #   builder: custom
+    #   commands:
+    #     - npm ci --prefix ..
+    #     - npm run build --prefix ..
+    #   ignore:
+    #     - response/
+    # properties:
+    #   CONFIG_FILE: ./config.json
 
 resources: []
