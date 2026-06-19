@@ -28,24 +28,28 @@ then `docker/build.sh` packages the output and pushes it to a registry.
 
 ## Build & publish
 
-Use the provided build script. It:
-1. Runs `npm run build` locally (builds React client + compiles TypeScript server)
-2. Builds a Docker image from the compiled output (no git clone, no build inside Docker)
-3. Tags the image with the current **git commit SHA** (immutable) and as `:latest`
-4. Pushes both tags
+Two scripts cover the common workflows:
+
+| Script | When to use |
+|--------|-------------|
+| `docker/build.sh` | Build the app **and** publish the image in one step |
+| `docker/publish.sh` | Publish only — app already built (`npm run build` already ran) |
+
+Both tag the image with the current **git commit SHA** (immutable) and as `:latest`,
+then push both tags.
 
 ```bash
-# Default registry: docker.io/sapux
+# Full build + publish (runs npm run build first)
 ./docker/build.sh
 
-# Custom registry
-REGISTRY=ghcr.io/myorg ./docker/build.sh
+# Publish only — skips npm run build, uses existing server/dist + server/public
+./docker/publish.sh
 
-# Skip local build if you already ran npm run build
-SKIP_BUILD=1 ./docker/build.sh
+# Custom registry (works for both scripts)
+REGISTRY=ghcr.io/myorg ./docker/publish.sh
 ```
 
-The script prints the exact SHA tag and the `cf push` command at the end.
+Each script prints the exact SHA tag and the `cf push` command at the end.
 
 **Why SHA tags?**  Cloud Foundry caches Docker image layers by tag name.  
 If you push a new image under the same `:latest` tag and run `cf restage`, CF
@@ -54,7 +58,7 @@ A unique SHA tag forces CF to treat every image as new, guaranteeing a fresh pul
 
 ---
 
-## Build manually (without the script)
+## Build manually (without the scripts)
 
 ```bash
 # 1. Build the app locally
