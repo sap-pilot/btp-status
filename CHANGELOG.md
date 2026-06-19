@@ -27,7 +27,8 @@
 - Availability badge on the Overview and Service detail pages now uses three-state colour coding: green = 100% uptime, yellow = below 100% but latest check passed, red = latest check still failing
 - "Run Test" no longer causes a black screen when the backend returns a server error: the response status is now checked before parsing the body as a `CheckResult`; non-OK responses surface the server error message inside the dialog instead of crashing the render tree
 - Added a React error boundary (`ErrorBoundary`) wrapping the entire app so any future unhandled render error shows a recoverable error screen instead of a blank page
-- `docker/build.sh` added: builds and pushes the Docker image tagged with the current git commit SHA (immutable) and also as `:latest`; using SHA tags ensures Cloud Foundry pulls a fresh image on every deploy instead of reusing a cached `:latest` layer — `cf restage` does not pull a new image for the same tag, `cf push --docker-image image:<sha>` does
+- `docker/Dockerfile` reworked: image is now built from locally compiled artifacts (`server/dist/` + `server/public/`) instead of git-cloning from GitHub; only server production dependencies are installed inside the image; switched base to `node:22-slim`; removed `git` package
+- `docker/build.sh` reworked: script now runs `npm run build` locally first, then packages the compiled output into the Docker image; supports `SKIP_BUILD=1` to reuse an existing build; SHA tags remain for guaranteed CF image refresh
 
 ### Changed
 - Select option label renamed from "Mark as Unavailable" to "Unavailable" for consistency with other options
