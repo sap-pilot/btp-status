@@ -8,8 +8,20 @@ interface StatusDotsProps {
   onDotClick?: (file: HistoryFile) => void;
 }
 
-function formatTs(ms: number): string {
-  return new Date(ms).toLocaleString();
+function dotTooltip(d: HistoryFile): string {
+  const date = new Date(d.timestamp);
+  const label =
+    d.overallStatus === 200 ? 'OK' :
+    d.overallStatus === 203 ? 'OK (always ok)' :
+    d.overallStatus === 503 ? 'FAIL (always error)' : 'FAIL';
+  return [
+    d.filename,
+    `date: ${date.toLocaleDateString()}`,
+    `time: ${date.toLocaleTimeString()}`,
+    `from: ${d.city ?? 'unknown'}`,
+    `response time: ${d.responseTime} ms`,
+    `status: ${d.overallStatus} ${label}`,
+  ].join('\n');
 }
 
 export default function StatusDots({ history, maxDots = 48, showAvg = true, showUptime = true, onDotClick }: StatusDotsProps) {
@@ -48,8 +60,7 @@ export default function StatusDots({ history, maxDots = 48, showAvg = true, show
             d.overallStatus === 203 ? 'bg-emerald-700' :
             d.overallStatus === 503 ? 'bg-red-900' :
             'bg-red-500';
-          const label = d.overallStatus === 200 ? 'OK' : d.overallStatus === 203 ? 'OK (always)' : d.overallStatus === 503 ? 'FAIL (always)' : 'FAIL';
-          const title = `${formatTs(d.timestamp)} — ${d.responseTime}ms — ${label}`;
+          const title = dotTooltip(d);
           if (onDotClick) {
             return (
               <button

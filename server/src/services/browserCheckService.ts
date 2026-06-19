@@ -47,11 +47,11 @@ export async function runBrowserIasLogin(
 
     await page.click('#logOnFormSubmit');
 
-    const targetUrl = ep.waitForUrl ?? '';
-    await page.waitForURL((url: URL) => url.href.includes(targetUrl), { timeout });
+    const selector = ep.waitForSelector ?? '';
+    await page.waitForSelector(selector, { timeout });
 
     passed = true;
-    message = `Login succeeded — reached ${page.url()}`;
+    message = `Login succeeded — element "${selector}" found`;
     logger.info({ service: serviceName, endpoint: ep.name, finalUrl: page.url() }, 'Browser check passed');
   } catch (err) {
     message = err instanceof Error ? err.message : String(err);

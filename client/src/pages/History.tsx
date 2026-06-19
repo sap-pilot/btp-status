@@ -45,7 +45,7 @@ const SCHEDULE_OPTIONS = [
 function evalTriggerClass(mode: EvaluationMode): string {
   if (mode === 'alwaysok') return 'bg-emerald-950 border-emerald-700 text-emerald-300 hover:bg-emerald-900';
   if (mode === 'alwayserror') return 'bg-red-950 border-red-700 text-red-400 hover:bg-red-900';
-  return 'bg-green-950 border-green-700 text-green-400 hover:bg-green-900';
+  return ''; // condition: default shadcn trigger styling
 }
 
 function formatTs(ms: number): string {
@@ -200,9 +200,15 @@ export default function History() {
       ? Math.round(files.reduce((s, f) => s + f.responseTime, 0) / files.length)
       : 0;
 
-  const endpointName = (idx: number): string => {
-    if (!service) return `Endpoint ${idx}`;
-    return service.endpoints[idx]?.name ?? `Endpoint ${idx}`;
+  const endpointLabel = (f: HistoryFile): string => {
+    if (f.endpointSlug !== undefined) {
+      // New-format file: try to match sanitized config name, else show slug as-is
+      const match = service?.endpoints.find(
+        e => (e.name ?? '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') === f.endpointSlug,
+      );
+      return match?.name ?? f.endpointSlug;
+    }
+    return service?.endpoints[f.endpointIndex]?.name ?? `Endpoint ${f.endpointIndex}`;
   };
 
   // Build schedule select value — may not match a preset if config uses a custom interval
@@ -372,8 +378,9 @@ export default function History() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Timestamp</TableHead>
+                    <TableHead>Timestamp (local)</TableHead>
                     <TableHead>Endpoint</TableHead>
+                    <TableHead>From Location</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Response Time</TableHead>
                   </TableRow>
@@ -393,7 +400,10 @@ export default function History() {
                         {formatTs(f.timestamp)}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {endpointName(f.endpointIndex)}
+                        {endpointLabel(f)}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {f.city ?? '—'}
                       </TableCell>
                       <TableCell>
                         {f.overallStatus === 200 && (

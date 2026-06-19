@@ -10,7 +10,7 @@ export interface EndpointConfig {
   mode?: 'browser-ias-login';
   username?: string;
   password?: string;
-  waitForUrl?: string;
+  waitForSelector?: string;
   timeout?: number;
 }
 
@@ -43,13 +43,19 @@ export interface ResponseRecord {
   endpointName: string;
   conditions: ConditionResult[];
   overallStatus: 200 | 203 | 500 | 503;
+  city?: string;
   screenshotFile?: string;
 }
 
 export interface HistoryFile {
   filename: string;
   timestamp: number;
+  /** -1 for new-format files (use endpointSlug instead) */
   endpointIndex: number;
+  /** Sanitized endpoint name from filename; present in new-format files only */
+  endpointSlug?: string;
+  /** Geo-resolved city at time of check; present in new-format files only */
+  city?: string;
   responseTime: number;
   httpStatus: number;
   overallStatus: 200 | 203 | 500 | 503;

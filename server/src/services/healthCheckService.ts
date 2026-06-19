@@ -3,6 +3,7 @@ import { evaluateCondition } from './conditionEvaluator.js';
 import { saveResponse } from './responseStore.js';
 import { getEvaluationMode } from './overrideService.js';
 import { runBrowserIasLogin } from './browserCheckService.js';
+import { getCity } from './geoService.js';
 import { logger } from '../logger.js';
 import type { ConditionResult, ResponseRecord, CheckResult, EndpointCheckResult } from '../types/index.js';
 
@@ -26,10 +27,10 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
       const result = await runBrowserIasLogin(ep, serviceName);
 
       const conditions: ConditionResult[] = [{
-        condition: `[URL] matches ${ep.waitForUrl ?? '(waitForUrl not set)'}`,
+        condition: `[SELECTOR] found ${ep.waitForSelector ?? '(waitForSelector not set)'}`,
         passed: result.passed,
         actual: result.message,
-        expected: ep.waitForUrl ?? '(not set)',
+        expected: ep.waitForSelector ?? '(not set)',
       }];
 
       if (evalMode === 'alwayserror') {
@@ -65,6 +66,7 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
         endpointName: epName,
         conditions,
         overallStatus,
+        city: getCity(),
       };
 
       const jsonFile = await saveResponse(serviceName, record, result.screenshot);
@@ -177,6 +179,7 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
       endpointName: epName,
       conditions,
       overallStatus,
+      city: getCity(),
     };
 
     await saveResponse(serviceName, record);

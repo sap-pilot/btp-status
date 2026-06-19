@@ -14,6 +14,16 @@
 - `POST /api/schedule/:name` — set schedule override for a service (`{ intervalSeconds }`); `0` disables autorun; live-reschedules the service; resets on server restart
 - Status code `203` (Always OK override): response records and filenames with this code are treated as passing (`PASS (always ok)`) in the UI, rendered as dark-green timeline dots, and counted as "up" in uptime calculations
 - Status code `503` (Always Error override): records treated as failing (`FAIL (always error)`) in the UI, rendered as dark-red timeline dots
+- **Geo-location stamping**: at server startup, a one-time lookup against `ip-api.com` resolves the server's public IP to a city name; spaces in the city name are replaced with dashes (e.g. `Frankfurt-am-Main`); defaults to `unknown` if the lookup fails or times out
+- Response filename format changed to `yyyyMMdd-HHmmss_{endpointSlug}_{city}_{responseTimeMs}_{statusCode}.json/.png` (UTC timestamp, no `ms` suffix, endpoint name sanitized: non-alphanumeric runs → single dash); old-format files (`…_{index}_{ms}ms_{status}.json`) are still parsed and displayed correctly
+- Status timeline dot tooltips now show: filename, date, time, from location, response time, and status code — all in browser local timezone
+- Service detail page **response time chart** series are now labelled `{endpointName} ({city})` instead of just the endpoint name
+- Service detail page **history table** gains a "From Location" column showing the `{city}` stored in each response filename; timestamps shown in browser local timezone
+
+### Changed
+- **Browser check**: `page.waitForURL` replaced with `page.waitForSelector(waitForSelector)` — the endpoint config field is now `waitForSelector` (CSS selector, e.g. `"#shellAppTitle"`) instead of `waitForUrl`; the recorded condition is now `[SELECTOR] found <selector>` instead of `[URL] matches <url>`; old `waitForElement` / `waitForUrl` config fields should be renamed to `waitForSelector`
+- **Evaluation Mode selector**: "Condition Based" now shows the default (unstyled) trigger background instead of green, so coloured styling only appears for override modes (Always OK = dark green, Always Error = dark red)
+- **Response time chart**: legend now always shown (previously hidden when there was only one series)
 
 ## [v0.4.0] - 2026-06-19
 

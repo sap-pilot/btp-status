@@ -49,17 +49,24 @@ export default function ResponseTimeChart({ files, service }: Props) {
     return () => ro.disconnect();
   }, []);
 
-  // Group files by endpoint index, sort each series by timestamp
-  const byEndpoint = new Map<number, HistoryFile[]>();
+  // Group files by endpoint+city; new-format files use endpointSlug, old-format use endpointIndex
+  const byEndpoint = new Map<string, { name: string; pts: HistoryFile[] }>();
   for (const f of files) {
-    if (!byEndpoint.has(f.endpointIndex)) byEndpoint.set(f.endpointIndex, []);
-    byEndpoint.get(f.endpointIndex)!.push(f);
+    const key = `${f.endpointSlug ?? f.endpointIndex}__${f.city ?? 'unknown'}`;
+    if (!byEndpoint.has(key)) {
+      const epName = f.endpointSlug !== undefined
+        ? f.endpointSlug
+        : (service?.endpoints[f.endpointIndex]?.name ?? `Endpoint ${f.endpointIndex}`);
+      const city = f.city ?? 'unknown';
+      byEndpoint.set(key, { name: `${epName} (${city})`, pts: [] });
+    }
+    byEndpoint.get(key)!.pts.push(f);
   }
   const series = [...byEndpoint.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([idx, pts]) => ({
-      idx,
-      name: service?.endpoints[idx]?.name ?? `Endpoint ${idx}`,
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, { name, pts }]) => ({
+      key,
+      name,
       pts: [...pts].sort((a, b) => a.timestamp - b.timestamp),
     }));
 
@@ -142,7 +149,7 @@ export default function ResponseTimeChart({ files, service }: Props) {
             {/* Series lines */}
             {series.map((s, i) => (
               <path
-                key={s.idx}
+                key={s.key}
                 d={buildPath(s.pts)}
                 fill="none"
                 stroke={COLORS[i % COLORS.length]}
@@ -157,13 +164,13 @@ export default function ResponseTimeChart({ files, service }: Props) {
               series.map((s, i) =>
                 s.pts.map(p => (
                   <circle
-                    key={`${s.idx}-${p.timestamp}`}
+                    key={`${s.key}-${p.timestamp}`}
                     cx={sx(p.timestamp)}
                     cy={sy(p.responseTime)}
                     r={2.5}
                     fill={COLORS[i % COLORS.length]}
                   >
-                    <title>{`${s.name} · ${new Date(p.timestamp).toLocaleTimeString()} · ${p.responseTime}ms`}</title>
+                    <title>{`${s.name} · ${new Date(p.timestamp).toLocaleString()} · ${p.responseTime}ms`}</title>
                   </circle>
                 )),
               )}
@@ -171,11 +178,11 @@ export default function ResponseTimeChart({ files, service }: Props) {
         </svg>
       )}
 
-      {/* Legend — only shown when there are multiple series */}
-      {series.length > 1 && (
+      {/* Legend */}
+      {series.length > 0 && (
         <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1" style={{ paddingLeft: M.left }}>
           {series.map((s, i) => (
-            <div key={s.idx} className="flex items-center gap-1.5">
+            <div key={s.key} className="flex items-center gap-1.5">
               <span
                 className="inline-block w-4 rounded"
                 style={{ height: 2, backgroundColor: COLORS[i % COLORS.length] }}

@@ -5,6 +5,7 @@ import { logger } from './logger.js';
 import { startScheduler, stopScheduler } from './services/schedulerService.js';
 import { syncFromRemote, startSyncScheduler, stopSyncScheduler } from './services/syncService.js';
 import { startHousekeepingScheduler, stopHousekeepingScheduler } from './services/housekeepingService.js';
+import { initGeo } from './services/geoService.js';
 import healthRouter from './routes/health.js';
 import apiRouter from './routes/api.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -33,6 +34,7 @@ app.use(errorHandler);
 
 const server = app.listen(config.PORT, () => {
   logger.info({ port: config.PORT }, 'BTP Status server started');
+  void initGeo();
   startScheduler();
   startHousekeepingScheduler();
   if (config.SYNC_REMOTE) {

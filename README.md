@@ -8,7 +8,7 @@ A lightweight, file-backed status page and health checker for SAP BTP services. 
 
 - **Service mode control** — per-service mode selector (Enabled / Unavailable / Disabled) on the detail page; mode overrides affect `/health/:name` responses and the background scheduler without restarting the server
 - **HTTP health checks** with Gatus-style condition evaluation (`[STATUS]`, `[BODY]`, `[HEADER.*]`, `[RESPONSE_TIME]`, `len()`, `pat()`)
-- **Browser-based IAS login check** (`mode: browser-ias-login`) — headless Chromium fills the SAP IAS login form, waits for a target URL, captures a screenshot; the screenshot is stored alongside the JSON record, shown in the history detail modal and the Test popup
+- **Browser-based IAS login check** (`mode: browser-ias-login`) — headless Chromium fills the SAP IAS login form, waits for a CSS selector to appear (`waitForSelector`), captures a screenshot; the screenshot is stored alongside the JSON record, shown in the history detail modal and the Test popup
 - **Azure Traffic Manager integration** — `GET /health/:name` returns `200 OK` when all conditions pass, `500` with failure details when any condition fails
 - **Gatus-style overview dashboard** at `/overview` — services grouped by group name with colored status timeline dots; clicking any dot navigates to the service detail page and opens the response modal for that check
 - **Per-service detail** at `/service/:name` — uptime %, avg response time, full check history table, response time line chart per endpoint; clicking any timeline dot opens the response detail modal for that check directly
@@ -130,7 +130,7 @@ Create `server/config.json` (based on `config-sample.json`):
 | `endpoints[].mode` | string | `browser-ias-login` to use headless Chromium instead of an HTTP request |
 | `endpoints[].username` | string | IAS username (browser-ias-login only) |
 | `endpoints[].password` | string | IAS password (browser-ias-login only) |
-| `endpoints[].waitForUrl` | string | URL substring to wait for after login (browser-ias-login only) |
+| `endpoints[].waitForSelector` | string | CSS selector to wait for after login (browser-ias-login only) |
 | `endpoints[].timeout` | number | Overall browser session timeout in ms (default `30000`; browser-ias-login only) |
 
 ### Browser-based IAS Login Check
@@ -144,7 +144,7 @@ Set `mode: "browser-ias-login"` on an endpoint to use a headless Chromium sessio
   "url": "https://<tenant>.launchpad.cfapps.<region>.hana.ondemand.com/site/<site>?sap_idp=<idp>",
   "username": "monitor@example.com",
   "password": "secret",
-  "waitForUrl": "/site/<site>#Shell-home",
+  "waitForSelector": "#shellAppTitle",
   "timeout": 30000
 }
 ```
@@ -153,9 +153,9 @@ The check flow:
 1. Launch headless Chromium, navigate to `url` (which triggers the IAS redirect)
 2. Fill `#j_username`, click `#next-button`
 3. Fill `#j_password`, click `#logOnFormSubmit`
-4. Wait until the current URL contains `waitForUrl` — success if it does before `timeout`, failure otherwise
+4. Wait for the CSS selector `waitForSelector` to appear in the DOM — success if found before `timeout`, failure otherwise
 5. Capture a screenshot regardless of outcome
-6. Save screenshot as `yyyyMMdd-HHmmss_{idx}_{ms}ms_{status}.png` alongside the JSON record
+6. Save screenshot as `yyyyMMdd-HHmmss_{endpointSlug}_{city}_{ms}_{status}.png` alongside the JSON record
 
 The screenshot appears in:
 - `/api/browse` and `/api/download` (same folder as JSON records)
@@ -234,10 +234,16 @@ GET https://<your-app>/health/<service-name>
 Each health check saves a file at:
 
 ```
-./response/{service-name}/yyyyMMdd-HHmmss_{endpointIdx}_{responseTimeMs}ms_{200|203|500|503}.json
+./response/{service-name}/yyyyMMdd-HHmmss_{endpointSlug}_{city}_{responseTimeMs}_{200|203|500|503}.json
 ```
 
-Status codes in filenames: `200` = genuine pass, `203` = pass recorded under Always OK, `500` = genuine fail, `503` = fail recorded under Always Error.
+- **Timestamp**: UTC (`yyyyMMdd-HHmmss`)
+- **endpointSlug**: endpoint `name` from config with non-alphanumeric chars replaced by dashes
+- **city**: full city name from `ip-api.com` with spaces replaced by dashes (e.g. `Frankfurt-am-Main`); resolved once at startup; `unknown` if lookup fails or times out
+- **responseTimeMs**: integer milliseconds, no suffix
+- **Status codes**: `200` = genuine pass, `203` = pass under Always OK, `500` = genuine fail, `503` = fail under Always Error
+
+Old-format files (`yyyyMMdd-HHmmss_{index}_{ms}ms_{status}.json`, local-timezone timestamp) are still read and displayed correctly alongside new-format files.
 
 File content:
 ```json
