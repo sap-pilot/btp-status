@@ -24,7 +24,7 @@ export interface SyncStats {
 }
 
 interface FetchResult {
-  body: string;
+  buf: Buffer;
   transferred: number;
   decompressed: number;
 }
@@ -47,7 +47,7 @@ function fetchRaw(url: string): Promise<FetchResult> {
           const transferred = raw.length;
           const buf =
             res.headers['content-encoding'] === 'gzip' ? await gunzipAsync(raw) : raw;
-          resolve({ body: buf.toString('utf-8'), transferred, decompressed: buf.length });
+          resolve({ buf, transferred, decompressed: buf.length });
         })().catch(reject);
       });
     });
@@ -60,12 +60,13 @@ async function downloadOne(
   filePath: string,
 ): Promise<{ transferred: number; decompressed: number }> {
   const url = `${remoteBase}/api/download?path=${encodeURIComponent(filePath)}`;
-  const { body, transferred, decompressed } = await fetchRaw(url);
+  const { buf, transferred, decompressed } = await fetchRaw(url);
 
   const [folder, filename] = filePath.split('/');
   const dir = join(config.RESPONSE_DIR, folder);
   await mkdir(dir, { recursive: true });
-  await writeFile(join(dir, filename), body, 'utf-8');
+  // Write as raw Buffer — no encoding conversion so binary files (PNG) are preserved
+  await writeFile(join(dir, filename), buf);
   logger.debug({ path: filePath, decompressed }, 'Downloaded file');
 
   return { transferred, decompressed };
@@ -82,8 +83,8 @@ export async function syncFromRemote(remoteBase: string): Promise<SyncStats> {
   const start = Date.now();
 
   try {
-    const { body: browseBody } = await fetchRaw(`${remoteBase}/api/browse`);
-    const { folders } = JSON.parse(browseBody) as { folders: Record<string, string[]> };
+    const { buf: browseBuf } = await fetchRaw(`${remoteBase}/api/browse`);
+    const { folders } = JSON.parse(browseBuf.toString('utf-8')) as { folders: Record<string, string[]> };
 
     const localFolders = await browseResponseFiles();
 

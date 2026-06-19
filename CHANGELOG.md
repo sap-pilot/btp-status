@@ -26,6 +26,7 @@
 
 ### Fixed
 - `/api/*` responses now always carry `Cache-Control: no-store`, preventing browsers from caching API responses (including PNG screenshots) and eliminating spurious `304 Not Modified` replies on repeated `/api/download` requests
+- Remote sync (`SYNC_REMOTE`) now correctly preserves binary files: `fetchRaw` returns a raw `Buffer` instead of converting to a UTF-8 string, and `downloadOne` writes that buffer directly to disk with no encoding conversion — previously PNG screenshots were corrupted during sync because the binary data was round-tripped through `buf.toString('utf-8')` then written back as a UTF-8 string
 - "Run Test" and "Test All" now correctly reflect the service mode override: a virtual `[SERVICE_MODE] == enabled` condition is appended to each endpoint's results when the mode is Unavailable or Disabled, causing the test to report failure and saving the response record with `overallStatus 500` so the timeline renders the check as red
 - Availability badge on the Overview and Service detail pages now uses three-state colour coding: green = 100% uptime, yellow = below 100% but latest check passed, red = latest check still failing
 - "Run Test" no longer causes a black screen when the backend returns a server error: the response status is now checked before parsing the body as a `CheckResult`; non-OK responses surface the server error message inside the dialog instead of crashing the render tree
