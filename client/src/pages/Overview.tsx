@@ -5,7 +5,7 @@ import StatusDots from '@/components/StatusDots';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertCircle, RefreshCw, Sun, Moon, ExternalLink, Zap } from 'lucide-react';
+import { AlertCircle, Menu, RefreshCw, Sun, Moon, ExternalLink, X, Zap } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useWindowWidth } from '@/hooks/useWindowWidth';
 
@@ -59,6 +59,7 @@ export default function Overview() {
   // each dot slot = w-2.5 (10px) + gap-0.5 (2px) = 12px
   const timelineWidth = Math.min(windowWidth, 1280) - 32 - 360;
   const maxDots = Math.max(8, Math.floor(timelineWidth / 12));
+  const isMobile = windowWidth < 640;
 
   const [hours, setHours] = useState(24);
   const [data, setData] = useState<ServiceWithHistory[]>([]);
@@ -70,6 +71,7 @@ export default function Overview() {
   const [syncAvailable, setSyncAvailable] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [serverCity, setServerCity] = useState<string>('');
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     fetch('/api/info')
@@ -161,11 +163,13 @@ export default function Overview() {
           <div className="flex items-center gap-2">
             <img src="/images/favicon-32x32.png" alt="" className="h-5 w-5" />
             <h1 className="text-lg font-semibold">BTP Status{serverCity ? ` (${serverCity})` : ''}</h1>
-            <span className="text-xs text-muted-foreground font-mono">
+            <span className="sm:hidden text-xs text-muted-foreground font-mono">v{__APP_VERSION__}</span>
+            <span className="hidden sm:inline text-xs text-muted-foreground font-mono">
               v{__APP_VERSION__}+{__COMMIT_HASH__}.{__BUILD_DATE__}
             </span>
           </div>
-          <div className="flex items-center gap-3">
+          {/* Desktop controls */}
+          <div className="hidden sm:flex items-center gap-3">
             <span className="text-xs text-muted-foreground">
               Refreshed {lastRefresh.toLocaleTimeString()}
             </span>
@@ -199,13 +203,6 @@ export default function Overview() {
                 {syncing ? 'Syncing…' : 'Sync'}
               </button>
             )}
-            <button
-              onClick={toggleTheme}
-              className="text-muted-foreground hover:text-foreground"
-              title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-            >
-              {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-            </button>
             <Select value={String(hours)} onValueChange={v => setHours(Number(v))}>
               <SelectTrigger className="w-36 h-8 text-xs">
                 <SelectValue />
@@ -218,8 +215,82 @@ export default function Overview() {
                 ))}
               </SelectContent>
             </Select>
+            <button
+              onClick={toggleTheme}
+              className="text-muted-foreground hover:text-foreground"
+              title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            >
+              {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+            </button>
           </div>
+          {/* Mobile hamburger */}
+          <button
+            className="sm:hidden text-muted-foreground hover:text-foreground p-1"
+            onClick={() => setMenuOpen(o => !o)}
+            title={menuOpen ? 'Close menu' : 'Open menu'}
+          >
+            {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
         </div>
+        {/* Mobile dropdown menu */}
+        {menuOpen && (
+          <div className="sm:hidden border-t border-border bg-background">
+            <div className="max-w-7xl mx-auto px-4 py-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Refreshed {lastRefresh.toLocaleTimeString()}</span>
+                <Badge
+                  variant={anyCurrentlyFailing ? 'destructive' : 'outline'}
+                  className={
+                    anyCurrentlyFailing ? '' :
+                    anyImperfect ? 'border-yellow-600 text-yellow-400' :
+                    'bg-green-600 hover:bg-green-600 border-green-600 text-white'
+                  }
+                >
+                  {healthyServices}/{totalServices} healthy
+                </Badge>
+              </div>
+              <div className="flex items-center gap-2">
+                <Select value={String(hours)} onValueChange={v => setHours(Number(v))}>
+                  <SelectTrigger className="flex-1 h-9 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {HOUR_OPTIONS.map(o => (
+                      <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <button
+                  onClick={() => void runAllTests()}
+                  disabled={testingAll || data.length === 0}
+                  className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 text-xs"
+                  title="Run health checks for all services"
+                >
+                  <Zap className={`h-4 w-4 ${testingAll ? 'animate-pulse text-yellow-400' : ''}`} />
+                  {testingAll ? 'Running…' : 'Test all'}
+                </button>
+                {syncAvailable && (
+                  <button
+                    onClick={() => void runSync()}
+                    disabled={syncing}
+                    className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 text-xs"
+                    title="Sync response files from remote"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin text-blue-400' : ''}`} />
+                    {syncing ? 'Syncing…' : 'Sync'}
+                  </button>
+                )}
+                <button
+                  onClick={toggleTheme}
+                  className="text-muted-foreground hover:text-foreground"
+                  title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+                >
+                  {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
@@ -234,28 +305,28 @@ export default function Overview() {
 
         {/* Aggregate stats */}
         {data.length > 0 && (
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-4 gap-3 sm:gap-4">
             <Card>
               <CardContent className="pt-4">
-                <div className={`text-2xl font-bold ${overallUptimeColor}`}>{overallUptime}%</div>
+                <div className={`text-base sm:text-2xl font-bold ${overallUptimeColor}`}>{overallUptime}%</div>
                 <div className="text-xs text-muted-foreground mt-1">Overall Uptime</div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-4">
-                <div className={`text-2xl font-bold ${failedChecks > 0 ? 'text-red-500' : ''}`}>{failedChecks}</div>
+                <div className={`text-base sm:text-2xl font-bold ${failedChecks > 0 ? 'text-red-500' : ''}`}>{failedChecks}</div>
                 <div className="text-xs text-muted-foreground mt-1">Failed Checks</div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-4">
-                <div className="text-2xl font-bold">{totalChecks}</div>
+                <div className="text-base sm:text-2xl font-bold">{totalChecks}</div>
                 <div className="text-xs text-muted-foreground mt-1">Total Checks</div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-4">
-                <div className="text-2xl font-bold">{avgResponseTime > 0 ? `${avgResponseTime}ms` : '—'}</div>
+                <div className="text-base sm:text-2xl font-bold">{avgResponseTime > 0 ? `${avgResponseTime}ms` : '—'}</div>
                 <div className="text-xs text-muted-foreground mt-1">Avg Response Time</div>
               </CardContent>
             </Card>
@@ -271,12 +342,14 @@ export default function Overview() {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <table className="w-full table-fixed">
-                <colgroup>
-                  <col className="w-56" />  {/* service name — fixed */}
-                  <col />                   {/* timeline — takes remaining space */}
-                  <col className="w-40" />  {/* stats — fixed */}
-                </colgroup>
+              <table className={`w-full ${isMobile ? '' : 'table-fixed'}`}>
+                {!isMobile && (
+                  <colgroup>
+                    <col className="w-56" />
+                    <col />
+                    <col className="w-40" />
+                  </colgroup>
+                )}
                 <tbody>
                   {services.map(svc => {
                     const combined = getServiceOverallHistory(svc);
@@ -328,19 +401,21 @@ export default function Overview() {
                           </div>
                         </td>
 
-                        {/* Timeline — fills all remaining width */}
-                        <td className="px-4 py-3 align-middle">
-                          <StatusDots
-                            history={combined}
-                            maxDots={maxDots}
-                            showUptime={false}
-                            showAvg={false}
-                            onDotClick={file => navigate(
-                              `/service/${encodeURIComponent(svc.name)}`,
-                              { state: { autoOpenFilename: file.filename } },
-                            )}
-                          />
-                        </td>
+                        {/* Timeline — hidden on mobile */}
+                        {!isMobile && (
+                          <td className="px-4 py-3 align-middle">
+                            <StatusDots
+                              history={combined}
+                              maxDots={maxDots}
+                              showUptime={false}
+                              showAvg={false}
+                              onDotClick={file => navigate(
+                                `/service/${encodeURIComponent(svc.name)}`,
+                                { state: { autoOpenFilename: file.filename } },
+                              )}
+                            />
+                          </td>
+                        )}
 
                         {/* Stats — fixed width, badge + avg/latest stacked */}
                         <td className="px-4 py-3 align-middle">

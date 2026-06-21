@@ -20,6 +20,13 @@
 - Service detail page **response time chart** series are now labelled `{endpointName} ({city})` instead of just the endpoint name
 - Service detail page **history table** gains a "From Location" column showing the `{city}` stored in each response filename; timestamps shown in browser local timezone
 
+- **Mobile / small-screen layout** (screens narrower than 640 px — iPhones, small tablets):
+  - Top bar controls (status badge, time-range selector, selectors, buttons, theme toggle) collapse into a hamburger menu in the top-right corner; tapping the icon opens a compact panel below the nav bar
+  - App title shows a short `vX.Y.Z` version string inline on mobile; full `v+hash.date` build string remains on desktop
+  - Status timeline dots column hidden on the Overview page to fit the name + stats columns on narrow screens
+  - Aggregate stat card numbers use a smaller font size on mobile to prevent overflow in the 4-column grid
+  - Service detail history table: "Endpoint" and "From Location" columns merged into a single "Endpoint (Location)" column on mobile, with the city rendered as a second line below the endpoint name; both columns remain separate on desktop
+
 ### Changed
 - **Overview page title** changed to "BTP Status ({city})" where `{city}` is the geo-resolved city shown in parentheses once the server startup lookup completes (omitted if city is `unknown`)
 - **Overview page**: aggregate stats row added above the service groups — Overall Uptime, Failed Checks, Total Checks, Avg Response Time; all computed from the full history window currently selected

@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, AlertCircle, PlayCircle, Sun, Moon } from 'lucide-react';
+import { ArrowLeft, AlertCircle, Menu, PlayCircle, Sun, Moon, X } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useWindowWidth } from '@/hooks/useWindowWidth';
 
@@ -67,6 +67,7 @@ export default function History() {
   const windowWidth = useWindowWidth();
   const dotAreaWidth = Math.min(windowWidth, 1024) - 140;
   const maxDots = Math.max(8, Math.floor(dotAreaWidth / 12));
+  const isMobile = windowWidth < 640;
 
   const [hours, setHours] = useState(24);
   const [files, setFiles] = useState<HistoryFile[]>([]);
@@ -83,6 +84,7 @@ export default function History() {
 
   // Schedule
   const [scheduleInterval, setScheduleInterval] = useState<number | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     fetch('/api/services')
@@ -244,7 +246,8 @@ export default function History() {
               </Badge>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          {/* Desktop controls */}
+          <div className="hidden sm:flex items-center gap-2">
             {/* Evaluation Mode selector */}
             <Select value={evalMode} onValueChange={handleEvalModeChange}>
               <SelectTrigger className={`h-8 text-xs w-36 ${evalTriggerClass(evalMode)}`}>
@@ -304,7 +307,76 @@ export default function History() {
               {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
             </button>
           </div>
+          {/* Mobile hamburger */}
+          <button
+            className="sm:hidden text-muted-foreground hover:text-foreground p-1"
+            onClick={() => setMenuOpen(o => !o)}
+            title={menuOpen ? 'Close menu' : 'Open menu'}
+          >
+            {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
         </div>
+        {/* Mobile dropdown menu */}
+        {menuOpen && (
+          <div className="sm:hidden border-t border-border bg-background">
+            <div className="max-w-5xl mx-auto px-4 py-3 space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <Select value={evalMode} onValueChange={handleEvalModeChange}>
+                  <SelectTrigger className={`h-9 text-xs ${evalTriggerClass(evalMode)}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="condition" className="text-xs">Condition Based</SelectItem>
+                    <SelectItem value="alwaysok" className="text-xs text-emerald-400">Always OK</SelectItem>
+                    <SelectItem value="alwayserror" className="text-xs text-red-400">Always Error</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={scheduleValue}
+                  onValueChange={v => void applySchedule(Number(v))}
+                  disabled={scheduleInterval === null}
+                >
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue placeholder="Schedule…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {scheduleOptions.map(o => (
+                      <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2">
+                <Select value={String(hours)} onValueChange={v => setHours(Number(v))}>
+                  <SelectTrigger className="flex-1 h-9 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {HOUR_OPTIONS.map(o => (
+                      <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 gap-1.5 text-xs"
+                  onClick={() => { setTestOpen(true); setMenuOpen(false); }}
+                >
+                  <PlayCircle className="h-3.5 w-3.5" />
+                  Run Test
+                </Button>
+                <button
+                  onClick={toggleTheme}
+                  className="text-muted-foreground hover:text-foreground"
+                  title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+                >
+                  {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
@@ -316,28 +388,28 @@ export default function History() {
         )}
 
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-4 gap-3 sm:gap-4">
           <Card>
             <CardContent className="pt-4">
-              <div className={`text-2xl font-bold ${uptimeColor}`}>{uptime}%</div>
+              <div className={`text-base sm:text-2xl font-bold ${uptimeColor}`}>{uptime}%</div>
               <div className="text-xs text-muted-foreground mt-1">Uptime</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <div className={`text-2xl font-bold ${failedCount > 0 ? 'text-red-500' : ''}`}>{failedCount}</div>
+              <div className={`text-base sm:text-2xl font-bold ${failedCount > 0 ? 'text-red-500' : ''}`}>{failedCount}</div>
               <div className="text-xs text-muted-foreground mt-1">Failed Checks</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <div className="text-2xl font-bold">{files.length}</div>
+              <div className="text-base sm:text-2xl font-bold">{files.length}</div>
               <div className="text-xs text-muted-foreground mt-1">Total Checks</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <div className="text-2xl font-bold">{avgMs > 0 ? `${avgMs}ms` : '—'}</div>
+              <div className="text-base sm:text-2xl font-bold">{avgMs > 0 ? `${avgMs}ms` : '—'}</div>
               <div className="text-xs text-muted-foreground mt-1">Avg Response Time</div>
             </CardContent>
           </Card>
@@ -386,10 +458,10 @@ export default function History() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Timestamp (local)</TableHead>
-                    <TableHead>Endpoint</TableHead>
-                    <TableHead>From Location</TableHead>
+                    <TableHead>{isMobile ? 'Endpoint (Location)' : 'Endpoint'}</TableHead>
+                    <TableHead className="hidden sm:table-cell">From Location</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Response Time</TableHead>
+                    <TableHead className="hidden sm:table-cell text-right">Response Time</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -408,8 +480,11 @@ export default function History() {
                       </TableCell>
                       <TableCell className="text-sm">
                         {endpointLabel(f)}
+                        {isMobile && (
+                          <div className="text-xs text-muted-foreground mt-0.5">{f.city ?? '—'}</div>
+                        )}
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
+                      <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">
                         {f.city ?? '—'}
                       </TableCell>
                       <TableCell>
@@ -425,8 +500,11 @@ export default function History() {
                         {f.overallStatus === 503 && (
                           <Badge variant="destructive" className="text-xs bg-red-900 hover:bg-red-900">FAIL (always error)</Badge>
                         )}
+                        {isMobile && (
+                          <div className="text-xs text-muted-foreground mt-0.5">{f.responseTime}ms</div>
+                        )}
                       </TableCell>
-                      <TableCell className="text-right text-sm">
+                      <TableCell className="hidden sm:table-cell text-right text-sm">
                         {f.responseTime}ms
                       </TableCell>
                     </TableRow>
