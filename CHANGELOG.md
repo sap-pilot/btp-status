@@ -8,6 +8,7 @@
 
 ### Changed
 - App title renamed from **BTP Service Status** to **BTP Status** in `client/index.html`
+- **Overview timeline column widths adjusted** — service name column fixed at 170 px (down from 224 px), availability badge column fixed at 110 px (down from 160 px); timeline cell horizontal padding removed (`px-0`) so the dots bar uses the full column width
 - **Status timeline dots fill the full available width and auto-shrink** — the dots bar now stretches to fill the entire column width using `flex-1` per dot; when the number of checks is below `maxDots` the remaining slots are padded with empty (gray) dots so the bar is always full; when checks exceed `maxDots` all dots are shown at a proportionally reduced width (gap collapses to 1 px) rather than truncating older entries; no fixed pixel calculations — CSS distributes the width evenly
 - **Remote sync now uses batch ZIP download** — the sync job issues a `POST /api/batch-download` with up to `SYNC_REMOTE_BATCH_SIZE` (default 50) file paths per request; the server zips the requested files (STORE method, native implementation — no extra dependencies) and returns a single archive; the client extracts and writes each file to `RESPONSE_DIR` restoring the `service/filename` folder structure; if the remote does not expose the batch endpoint (e.g. an older instance), the sync job automatically falls back to the previous individual `GET /api/download` strategy (concurrency 10)
 

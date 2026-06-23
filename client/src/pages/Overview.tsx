@@ -65,7 +65,7 @@ export default function Overview() {
   // table-fixed: service col w-56 (224px) + stats col w-40 (160px) + 3×px-4 cells (96px)
   // timeline td inner width = content - 224 - 160 - 96 = content - 480
   // each dot slot = w-2.5 (10px) + gap-0.5 (2px) = 12px
-  const timelineWidth = Math.min(windowWidth, 1280) - 32 - 360;
+  const timelineWidth = Math.min(windowWidth, 1280) - 32 - 224; // 170 (name col) + 110 (badge col) - ~24 card/border, timeline td px-0
   const maxDots = Math.max(8, Math.floor(timelineWidth / 12));
   const isMobile = windowWidth < 640;
 
@@ -500,9 +500,9 @@ export default function Overview() {
               <table className={`w-full ${isMobile ? '' : 'table-fixed'}`}>
                 {!isMobile && (
                   <colgroup>
-                    <col className="w-56" />
+                    <col className="w-[170px]" />
                     <col />
-                    <col className="w-40" />
+                    <col className="w-[110px]" />
                   </colgroup>
                 )}
                 <tbody>
@@ -558,7 +558,7 @@ export default function Overview() {
 
                         {/* Timeline — hidden on mobile */}
                         {!isMobile && (
-                          <td className="px-4 py-3 align-middle">
+                          <td className="px-0 py-3 align-middle">
                             <StatusDots
                               history={combined}
                               maxDots={maxDots}
@@ -573,7 +573,7 @@ export default function Overview() {
                         )}
 
                         {/* Stats — fixed width, badge + avg/latest stacked */}
-                        <td className="px-4 py-3 align-middle">
+                        <td className="px-2 py-3 align-middle">
                           <div className="flex flex-col items-end gap-1">
                             <Badge
                               variant="outline"
