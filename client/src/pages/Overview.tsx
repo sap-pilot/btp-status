@@ -45,10 +45,14 @@ function getServiceOverallHistory(service: ServiceWithHistory): HistoryFile[] {
   return combined.sort((a, b) => b.timestamp - a.timestamp);
 }
 
+function fmtUptime(n: number): string {
+  return parseFloat(n.toFixed(2)) === 100 ? '100%' : `${n.toFixed(2)}%`;
+}
+
 function getUptimePct(history: HistoryFile[]): number {
   if (history.length === 0) return 100;
   const up = history.filter(h => h.overallStatus === 200 || h.overallStatus === 203).length;
-  return Math.round((up / history.length) * 100);
+  return (up / history.length) * 100;
 }
 
 export default function Overview() {
@@ -162,14 +166,18 @@ export default function Overview() {
     return h.length > 0 && getUptimePct(h) < 100;
   });
 
-  // Aggregate stats across all raw history files
+  // Aggregate stats — raw endpoint files for check/response counts; combined runs for uptime
   const allFiles = data.flatMap(s => s.history);
   const totalChecks = allFiles.length;
   const failedChecks = allFiles.filter(f => f.overallStatus === 500 || f.overallStatus === 503).length;
-  const overallUptime = totalChecks > 0 ? Math.round(((totalChecks - failedChecks) / totalChecks) * 100) : 100;
   const avgResponseTime = totalChecks > 0
     ? Math.round(allFiles.reduce((s, f) => s + f.responseTime, 0) / totalChecks)
     : 0;
+  // Use combined per-run history so multi-endpoint services don't dilute the uptime %
+  const allCombinedRuns = data.flatMap(s => getServiceOverallHistory(s));
+  const overallUptime = allCombinedRuns.length > 0
+    ? allCombinedRuns.filter(h => h.overallStatus === 200 || h.overallStatus === 203).length / allCombinedRuns.length * 100
+    : 100;
   const overallUptimeColor = anyCurrentlyFailing ? 'text-red-500' : overallUptime < 100 ? 'text-yellow-500' : 'text-green-500';
 
   // Per-service status for diagram coloring (3 states)
@@ -195,13 +203,14 @@ export default function Overview() {
     const statuses = svcs.map(s => getServiceOverallHistory(s)[0]?.overallStatus);
     const anyFail = statuses.some(st => st === 500 || st === 503);
     const allOk = statuses.every(st => st === 200 || st === 203 || st === undefined);
-    const allFiles = svcs.flatMap(s => s.history);
-    const uptime = allFiles.length > 0
-      ? Math.round(allFiles.filter(f => f.overallStatus === 200 || f.overallStatus === 203).length / allFiles.length * 100)
+    const combinedRuns = svcs.flatMap(s => getServiceOverallHistory(s));
+    const uptime = combinedRuns.length > 0
+      ? combinedRuns.filter(h => h.overallStatus === 200 || h.overallStatus === 203).length / combinedRuns.length * 100
       : 100;
-    if (anyFail) return { label: `${uptime}%`, cls: 'border-red-600 text-red-400' };
-    if (!allOk) return { label: `${uptime}%`, cls: 'border-yellow-600 text-yellow-400' };
-    return { label: `${uptime}%`, cls: 'border-green-600 text-green-400' };
+    const label = fmtUptime(uptime);
+    if (anyFail) return { label, cls: 'border-red-600 text-red-400' };
+    if (!allOk) return { label, cls: 'border-yellow-600 text-yellow-400' };
+    return { label, cls: 'border-green-600 text-green-400' };
   }
 
   function handleLandscapeChange(name: string) {
@@ -367,7 +376,7 @@ export default function Overview() {
           <div className="grid grid-cols-4 gap-3 sm:gap-4">
             <Card>
               <CardContent className="pt-4">
-                <div className={`text-base sm:text-2xl font-bold ${overallUptimeColor}`}>{overallUptime}%</div>
+                <div className={`text-base sm:text-2xl font-bold ${overallUptimeColor}`}>{fmtUptime(overallUptime)}</div>
                 <div className="text-xs text-muted-foreground mt-1">Overall Uptime</div>
               </CardContent>
             </Card>
@@ -538,7 +547,7 @@ export default function Overview() {
                                   : 'border-green-600 text-green-400'
                               }`}
                             >
-                              {combined.length > 0 ? `${uptime}% up` : 'no data'}
+                              {combined.length > 0 ? `${fmtUptime(uptime)} up` : 'no data'}
                             </Badge>
                             {avgMs != null && lastMs != null && (
                               <span className="text-xs text-muted-foreground whitespace-nowrap" title="average / latest response time (ms)">

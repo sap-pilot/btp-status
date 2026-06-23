@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+
+function fmtUptime(n: number): string {
+  return parseFloat(n.toFixed(2)) === 100 ? '100%' : `${n.toFixed(2)}%`;
+}
 import { Link, useLocation, useParams } from 'react-router-dom';
 import type { EvaluationMode, HistoryFile, ServiceConfig } from '@shared/types';
 import StatusDots from '@/components/StatusDots';
@@ -193,7 +197,7 @@ export default function History() {
 
   const upCount = files.filter(f => f.overallStatus === 200 || f.overallStatus === 203).length;
   const failedCount = files.filter(f => f.overallStatus === 500 || f.overallStatus === 503).length;
-  const uptime = files.length > 0 ? Math.round((upCount / files.length) * 100) : 100;
+  const uptime = files.length > 0 ? (upCount / files.length) * 100 : 100;
   const latestTs = files.reduce((max, f) => Math.max(max, f.timestamp), 0);
   const latestFailed = files.some(
     f => Math.floor(f.timestamp / 1000) === Math.floor(latestTs / 1000) && (f.overallStatus === 500 || f.overallStatus === 503),
@@ -392,7 +396,7 @@ export default function History() {
         <div className="grid grid-cols-4 gap-3 sm:gap-4">
           <Card>
             <CardContent className="pt-4">
-              <div className={`text-base sm:text-2xl font-bold ${uptimeColor}`}>{uptime}%</div>
+              <div className={`text-base sm:text-2xl font-bold ${uptimeColor}`}>{fmtUptime(uptime)}</div>
               <div className="text-xs text-muted-foreground mt-1">Uptime</div>
             </CardContent>
           </Card>

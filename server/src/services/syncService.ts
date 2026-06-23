@@ -67,7 +67,7 @@ async function downloadOne(
   await mkdir(dir, { recursive: true });
   // Write as raw Buffer — no encoding conversion so binary files (PNG) are preserved
   await writeFile(join(dir, filename), buf);
-  logger.debug({ path: filePath, decompressed }, 'Downloaded file');
+  logger.debug({ path: filePath }, 'Downloaded file');
 
   return { transferred, decompressed };
 }

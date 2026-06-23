@@ -2,6 +2,12 @@
 
 ## [v0.7.0] - 2026-06-23
 
+### Fixed
+- **Uptime percentages** now display with two decimal places (e.g. `99.95%` instead of `100%`) across the Overall Uptime stat card, landscape tab badges, per-service uptime badges on the Overview page, and the Uptime stat card on the Service detail page — integer rounding was masking meaningful precision differences
+- **Overall Uptime stat card** was computed from raw per-endpoint history files, so services with multiple endpoints diluted failures heavily (e.g. 1 failed endpoint out of 5 for a check run counted as only 20% of that run's files failing, making a 99% service look like 100% in aggregate); now computed from the same grouped per-run history that the per-service uptime badges use, so the aggregate matches what is shown per service
+- **Landscape tab badge uptime** had the same dilution bug; fixed with the same approach — grouped per-run history aggregated across all services in the landscape
+- **Sync per-file log**: removed per-file `decompressed` bytes from the `Downloaded file` debug log entry; total transferred/decompressed MB is still logged once at the end of each sync run
+
 ### Changed
 - **Landscape diagram node colours** refined for better contrast: degraded (warn) nodes now use `#B8860B` (dark goldenrod) instead of the previous brownish amber, giving a clearer yellow signal; failing (error) nodes now use `#990000` (deep red) instead of the previous dark maroon, making failures more visually distinct from warnings
 - Analytics tracking script added to the app (`analytics.sapux.org`)
