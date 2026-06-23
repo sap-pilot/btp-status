@@ -1,6 +1,6 @@
 _schema-version: "3.3"
 ID: btp-status
-version: 0.6.0
+version: 0.7.0
 
 modules:
   - name: btp-status-srv
