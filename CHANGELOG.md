@@ -2,6 +2,9 @@
 
 ## [v0.7.0] - 2026-06-23
 
+### Added
+- **History table filters** on the Service detail page — three compact dropdowns above the Check History table let users narrow down the visible rows by **Endpoint**, **From Location** (city), and **Status** (PASS / PASS (always ok) / FAIL / FAIL (always error)); endpoint and location options are derived from the current data set; a "Clear filters" link and an `X of Y` row count appear when any filter is active; stats (Uptime, Failed Checks, Total Checks, Avg Response Time) are always computed from all data in the selected time range, unaffected by the filters
+
 ### Fixed
 - **Uptime percentages** now display with two decimal places (e.g. `99.95%` instead of `100%`) across the Overall Uptime stat card, landscape tab badges, per-service uptime badges on the Overview page, and the Uptime stat card on the Service detail page — integer rounding was masking meaningful precision differences
 - **Overall Uptime stat card** was computed from raw per-endpoint history files, so services with multiple endpoints diluted failures heavily (e.g. 1 failed endpoint out of 5 for a check run counted as only 20% of that run's files failing, making a 99% service look like 100% in aggregate); now computed from the same grouped per-run history that the per-service uptime badges use, so the aggregate matches what is shown per service

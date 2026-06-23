@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 function fmtUptime(n: number): string {
   return parseFloat(n.toFixed(2)) === 100 ? '100%' : `${n.toFixed(2)}%`;
@@ -90,6 +90,11 @@ export default function History() {
   // Schedule
   const [scheduleInterval, setScheduleInterval] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Table filters
+  const [filterEndpoint, setFilterEndpoint] = useState('all');
+  const [filterLocation, setFilterLocation] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
 
   useEffect(() => {
     fetch('/api/services')
@@ -218,6 +223,43 @@ export default function History() {
     }
     return service?.endpoints[f.endpointIndex]?.name ?? `Endpoint ${f.endpointIndex}`;
   };
+
+  const endpointOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const opts: string[] = [];
+    for (const f of files) {
+      const label = endpointLabel(f);
+      if (!seen.has(label)) { seen.add(label); opts.push(label); }
+    }
+    return opts.sort();
+  // endpointLabel depends on service
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files, service]);
+
+  const locationOptions = useMemo(() => {
+    const seen = new Set<string>();
+    for (const f of files) if (f.city) seen.add(f.city);
+    return [...seen].sort();
+  }, [files]);
+
+  const hasFilter = filterEndpoint !== 'all' || filterLocation !== 'all' || filterStatus !== 'all';
+
+  const filteredFiles = useMemo(() => {
+    if (!hasFilter) return files;
+    return files.filter(f => {
+      if (filterEndpoint !== 'all' && endpointLabel(f) !== filterEndpoint) return false;
+      if (filterLocation !== 'all' && (f.city ?? '—') !== filterLocation) return false;
+      if (filterStatus !== 'all' && String(f.overallStatus) !== filterStatus) return false;
+      return true;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files, service, filterEndpoint, filterLocation, filterStatus, hasFilter]);
+
+  function clearFilters() {
+    setFilterEndpoint('all');
+    setFilterLocation('all');
+    setFilterStatus('all');
+  }
 
   // Build schedule select value — may not match a preset if config uses a custom interval
   const scheduleValue = scheduleInterval !== null ? String(scheduleInterval) : '';
@@ -446,10 +488,63 @@ export default function History() {
 
         {/* History table */}
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Check History
-            </CardTitle>
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground shrink-0">
+                History
+              </CardTitle>
+              {hasFilter && (
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {filteredFiles.length} of {files.length}
+                </span>
+              )}
+              {files.length > 0 && (
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                  {hasFilter && (
+                    <button
+                      onClick={clearFilters}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Clear filters
+                    </button>
+                  )}
+                  <Select value={filterEndpoint} onValueChange={setFilterEndpoint}>
+                    <SelectTrigger className="h-7 text-xs w-auto min-w-[9rem] max-w-[14rem]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-xs">All endpoints</SelectItem>
+                      {endpointOptions.map(ep => (
+                        <SelectItem key={ep} value={ep} className="text-xs">{ep}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={filterLocation} onValueChange={setFilterLocation}>
+                    <SelectTrigger className="h-7 text-xs w-auto min-w-[9rem] max-w-[14rem]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-xs">All locations</SelectItem>
+                      {locationOptions.map(loc => (
+                        <SelectItem key={loc} value={loc} className="text-xs">{loc}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                    <SelectTrigger className="h-7 text-xs w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-xs">All statuses</SelectItem>
+                      <SelectItem value="200" className="text-xs">PASS</SelectItem>
+                      <SelectItem value="203" className="text-xs">PASS (always ok)</SelectItem>
+                      <SelectItem value="500" className="text-xs">FAIL</SelectItem>
+                      <SelectItem value="503" className="text-xs">FAIL (always error)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             {loading ? (
@@ -457,6 +552,13 @@ export default function History() {
             ) : files.length === 0 ? (
               <div className="text-muted-foreground text-sm p-4">
                 No history in the selected time range.
+              </div>
+            ) : filteredFiles.length === 0 ? (
+              <div className="text-muted-foreground text-sm p-4">
+                No checks match the current filters.{' '}
+                <button onClick={clearFilters} className="underline hover:text-foreground">
+                  Clear filters
+                </button>
               </div>
             ) : (
               <Table>
@@ -470,7 +572,7 @@ export default function History() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {files.map(f => (
+                  {filteredFiles.map(f => (
                     <TableRow
                       key={f.filename}
                       className={`cursor-pointer ${

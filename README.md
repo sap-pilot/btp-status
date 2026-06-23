@@ -13,7 +13,7 @@ A lightweight, file-backed status page and health checker for SAP BTP services. 
 - **Browser-based IAS login check** (`mode: browser-ias-login`) — headless Chromium fills the SAP IAS login form, waits for a CSS selector to appear (`waitForSelector`), captures a screenshot; the screenshot is stored alongside the JSON record, shown in the history detail modal and the Test popup
 - **Azure Traffic Manager integration** — `GET /health/:name` returns `200 OK` when all conditions pass, `500` with failure details when any condition fails
 - **Gatus-style overview dashboard** at `/overview` — services grouped by group name with colored status timeline dots; clicking any dot navigates to the service detail page and opens the response modal for that check
-- **Per-service detail** at `/service/:name` — uptime %, avg response time, full check history table, response time line chart per endpoint; clicking any timeline dot opens the response detail modal for that check directly
+- **Per-service detail** at `/service/:name` — uptime %, avg response time, full check history table with inline filters (endpoint, from location, status), response time line chart per endpoint; clicking any timeline dot opens the response detail modal for that check directly
 - **Drill-down modal** — inspect every request/response/condition result for any past check
 - **Evaluation mode selector** — per-service override to force Always OK (`203`) or Always Error (`503`) regardless of actual check results; useful during maintenance
 - **Schedule selector** — change the auto-run interval per service live without restarting the server
