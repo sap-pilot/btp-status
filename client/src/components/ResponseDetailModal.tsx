@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { HistoryFile, ResponseRecord } from '@shared/types';
+import { ExternalLink } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -113,7 +114,20 @@ export default function ResponseDetailModal({ file, serviceName, onClose }: Prop
                       </div>
                       <div>
                         <div className="text-xs text-muted-foreground mb-1">Endpoint</div>
-                        <div className="text-sm">{record.endpointName}</div>
+                        <div className="text-sm flex items-center gap-1.5">
+                          {record.endpointName}
+                          {record.request.url.startsWith('http') && (
+                            <a
+                              href={record.request.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={`Open ${record.endpointName}`}
+                              className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          )}
+                        </div>
                       </div>
                       <div>
                         <div className="text-xs text-muted-foreground mb-1">

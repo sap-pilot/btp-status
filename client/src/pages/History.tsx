@@ -24,7 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, AlertCircle, Menu, PlayCircle, Sun, Moon, X } from 'lucide-react';
+import { ArrowLeft, AlertCircle, ExternalLink, Menu, PlayCircle, Sun, Moon, X } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useWindowWidth } from '@/hooks/useWindowWidth';
 
@@ -224,6 +224,7 @@ export default function History() {
     return service?.endpoints[f.endpointIndex]?.name ?? `Endpoint ${f.endpointIndex}`;
   };
 
+
   const endpointOptions = useMemo(() => {
     const seen = new Set<string>();
     const opts: string[] = [];
@@ -287,6 +288,17 @@ export default function History() {
             </Link>
             <span className="text-muted-foreground">/</span>
             <h1 className="text-base font-semibold">{name}</h1>
+            {service?.homepage && (
+              <a
+                href={service.homepage}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`Open ${name} homepage`}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            )}
             {service && (
               <Badge variant="outline" className="text-xs">
                 {service.group}

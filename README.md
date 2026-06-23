@@ -14,7 +14,7 @@ A lightweight, file-backed status page and health checker for SAP BTP services. 
 - **Azure Traffic Manager integration** — `GET /health/:name` returns `200 OK` when all conditions pass, `500` with failure details when any condition fails
 - **Gatus-style overview dashboard** at `/overview` — services grouped by group name with colored status timeline dots; clicking any dot navigates to the service detail page and opens the response modal for that check
 - **Per-service detail** at `/service/:name` — uptime %, avg response time, full check history table with inline filters (endpoint, from location, status), response time line chart per endpoint; clicking any timeline dot opens the response detail modal for that check directly
-- **Drill-down modal** — inspect every request/response/condition result for any past check
+- **Drill-down modal** — inspect every request/response/condition result for any past check; the Overview tab shows a ↗ icon button next to the endpoint name to open the endpoint URL directly in a new tab
 - **Evaluation mode selector** — per-service override to force Always OK (`203`) or Always Error (`503`) regardless of actual check results; useful during maintenance
 - **Schedule selector** — change the auto-run interval per service live without restarting the server
 - **File-based storage** — no database required; responses saved as JSON files under `./response/`

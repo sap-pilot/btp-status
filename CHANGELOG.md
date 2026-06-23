@@ -3,6 +3,8 @@
 ## [v0.7.0] - 2026-06-23
 
 ### Added
+- **Homepage link button** on the Service detail page header — when `homepage` is configured for a service, an ↗ icon button appears next to the service name in the top bar; clicking opens the homepage in a new tab (mirrors the same button on the Overview dashboard)
+- **Open endpoint button in the response detail modal** — the Overview tab now shows a small ↗ icon button next to the endpoint name when the endpoint URL is an absolute `http(s)://` URL; clicking opens the endpoint in a new tab; `/dummy` and relative URLs show no button
 - **History table filters** on the Service detail page — three compact dropdowns above the Check History table let users narrow down the visible rows by **Endpoint**, **From Location** (city), and **Status** (PASS / PASS (always ok) / FAIL / FAIL (always error)); endpoint and location options are derived from the current data set; a "Clear filters" link and an `X of Y` row count appear when any filter is active; stats (Uptime, Failed Checks, Total Checks, Avg Response Time) are always computed from all data in the selected time range, unaffected by the filters
 
 ### Fixed
