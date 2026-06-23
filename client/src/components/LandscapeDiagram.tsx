@@ -5,8 +5,8 @@ export type NodeStatus = 'ok' | 'warn' | 'error';
 
 const STATUS_FILL: Record<NodeStatus, string> = {
   ok:    '#2e6f40',
-  warn:  '#92400e',
-  error: '#7f1d1d',
+  warn:  '#B8860B',
+  error: '#990000',
 };
 const STATUS_STROKE: Record<NodeStatus, string> = {
   ok:    '#4a9a5a',

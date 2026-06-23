@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.7.0] - 2026-06-23
+
+### Changed
+- **Landscape diagram node colours** refined for better contrast: degraded (warn) nodes now use `#B8860B` (dark goldenrod) instead of the previous brownish amber, giving a clearer yellow signal; failing (error) nodes now use `#990000` (deep red) instead of the previous dark maroon, making failures more visually distinct from warnings
+- Analytics tracking script added to the app (`analytics.sapux.org`)
+
 ## [v0.6.0] - 2026-06-22
 
 ### Added
