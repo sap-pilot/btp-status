@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { ServiceWithHistory, HistoryFile, LandscapeConfig } from '@shared/types';
 import StatusDots from '@/components/StatusDots';
-import LandscapeDiagram from '@/components/LandscapeDiagram';
+import LandscapeDiagram, { type NodeStatus } from '@/components/LandscapeDiagram';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -172,16 +172,23 @@ export default function Overview() {
     : 0;
   const overallUptimeColor = anyCurrentlyFailing ? 'text-red-500' : overallUptime < 100 ? 'text-yellow-500' : 'text-green-500';
 
-  // Per-service latest status for diagram coloring
-  const serviceStatusMap = useMemo<Record<string, 'ok' | 'error'>>(() => {
-    const map: Record<string, 'ok' | 'error'> = {};
+  // Per-service status for diagram coloring (3 states)
+  const serviceStatusMap = useMemo<Record<string, NodeStatus>>(() => {
+    const map: Record<string, NodeStatus> = {};
     for (const svc of data) {
-      const last = getServiceOverallHistory(svc)[0]?.overallStatus;
-      if (last === 200 || last === 203) map[svc.name] = 'ok';
-      else if (last === 500 || last === 503) map[svc.name] = 'error';
+      const combined = getServiceOverallHistory(svc);
+      const last = combined[0]?.overallStatus;
+      if (last === 500 || last === 503) {
+        map[svc.name] = 'error';
+      } else if (last === 200 || last === 203) {
+        const allOk = combined.every(h => h.overallStatus === 200 || h.overallStatus === 203);
+        map[svc.name] = allOk ? 'ok' : 'warn';
+      }
     }
     return map;
   }, [data]);
+
+  const serviceNameSet = useMemo(() => new Set(data.map(s => s.name)), [data]);
 
   // Per-landscape availability badge
   function landscapeBadgeProps(landscapeName: string) {
@@ -407,6 +414,7 @@ export default function Overview() {
                     <LandscapeDiagram
                       diagramText={ls.diagram}
                       serviceStatuses={serviceStatusMap}
+                      serviceNames={serviceNameSet}
                       isDark={theme === 'dark'}
                       onNodeClick={name => navigate(`/service/${encodeURIComponent(name)}`)}
                     />
