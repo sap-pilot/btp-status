@@ -10,6 +10,9 @@
 - App title renamed from **BTP Service Status** to **BTP Status** in `client/index.html`
 - **Remote sync now uses batch ZIP download** — the sync job issues a `POST /api/batch-download` with up to `SYNC_REMOTE_BATCH_SIZE` (default 50) file paths per request; the server zips the requested files (STORE method, native implementation — no extra dependencies) and returns a single archive; the client extracts and writes each file to `RESPONSE_DIR` restoring the `service/filename` folder structure; if the remote does not expose the batch endpoint (e.g. an older instance), the sync job automatically falls back to the previous individual `GET /api/download` strategy (concurrency 10)
 
+### Performance
+- **Initial JS bundle reduced by ~63%** (481 kB → 165 kB minified; 147 kB → 55 kB gzip) — both pages are now lazy-loaded at the router level (`React.lazy`), and `LandscapeDiagram` (and therefore all of Mermaid, including its heaviest dependencies: mermaid core 593 kB, cytoscape 435 kB, katex 258 kB) is deferred until the user opens a landscape tab for the first time; diagram chunks remain code-split and are fetched on demand as before
+
 ### Added (server API)
 - `POST /api/batch-download` — accepts `{ paths: string[] }` (max 500 entries, each `folder/filename`); reads each file from `RESPONSE_DIR`, packages them into an in-memory ZIP archive (STORE method), and returns `application/zip`; missing or pruned files are silently skipped; path traversal is rejected with `400`
 - `SYNC_REMOTE_BATCH_SIZE` env var — controls how many files are requested per batch-download call (default `50`, minimum `1`)

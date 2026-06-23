@@ -1,7 +1,8 @@
-import { Component, type ReactNode, type ErrorInfo } from 'react';
+import { Component, lazy, Suspense, type ReactNode, type ErrorInfo } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import Overview from '@/pages/Overview';
-import History from '@/pages/History';
+
+const Overview = lazy(() => import('@/pages/Overview'));
+const History = lazy(() => import('@/pages/History'));
 
 interface EBState { error: Error | null }
 class ErrorBoundary extends Component<{ children: ReactNode }, EBState> {
@@ -40,13 +41,15 @@ export default function App() {
   return (
     <ErrorBoundary>
       <BrowserRouter>
-        <Routes>
-          <Route path="/overview" element={<Overview />} />
-          <Route path="/service/:name" element={<History />} />
-          <Route path="/history/:name" element={<Navigate to="/overview" replace />} />
-          <Route path="/" element={<Navigate to="/overview" replace />} />
-          <Route path="*" element={<Navigate to="/overview" replace />} />
-        </Routes>
+        <Suspense fallback={null}>
+          <Routes>
+            <Route path="/overview" element={<Overview />} />
+            <Route path="/service/:name" element={<History />} />
+            <Route path="/history/:name" element={<Navigate to="/overview" replace />} />
+            <Route path="/" element={<Navigate to="/overview" replace />} />
+            <Route path="*" element={<Navigate to="/overview" replace />} />
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </ErrorBoundary>
   );

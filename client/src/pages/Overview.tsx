@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { ServiceWithHistory, HistoryFile, LandscapeConfig, SiteConfig } from '@shared/types';
 import StatusDots from '@/components/StatusDots';
-import LandscapeDiagram, { type NodeStatus } from '@/components/LandscapeDiagram';
+import type { NodeStatus } from '@/components/LandscapeDiagram';
+const LandscapeDiagram = lazy(() => import('@/components/LandscapeDiagram'));
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -470,13 +471,15 @@ export default function Overview() {
                   }
                   return (
                     <TabsContent key={ls.name} value={ls.name}>
-                      <LandscapeDiagram
-                        diagramText={ls.diagram}
-                        serviceStatuses={lsStatuses}
-                        serviceNames={lsNames}
-                        isDark={theme === 'dark'}
-                        returnUrl={`/overview#landscape-${encodeURIComponent(ls.name)}`}
-                      />
+                      <Suspense fallback={<div className="text-xs text-muted-foreground p-6 text-center">Loading diagram…</div>}>
+                        <LandscapeDiagram
+                          diagramText={ls.diagram}
+                          serviceStatuses={lsStatuses}
+                          serviceNames={lsNames}
+                          isDark={theme === 'dark'}
+                          returnUrl={`/overview#landscape-${encodeURIComponent(ls.name)}`}
+                        />
+                      </Suspense>
                     </TabsContent>
                   );
                 })}
