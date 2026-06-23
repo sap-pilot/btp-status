@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getAllServices, getLandscapes, getSites } from '../services/configService.js';
-import { listResponseFiles, readResponseFile, readScreenshotFile, browseResponseFiles } from '../services/responseStore.js';
+import { listResponseFiles, readResponseFile, readRawResponseFile, readScreenshotFile, browseResponseFiles } from '../services/responseStore.js';
+import { buildZip } from '../services/zipBuilder.js';
 import { checkService } from '../services/healthCheckService.js';
 import { syncFromRemote } from '../services/syncService.js';
 import { getEvaluationMode, setEvaluationMode, getIntervalOverride, setIntervalOverride } from '../services/overrideService.js';
@@ -123,6 +124,49 @@ router.post('/sync', async (req, res, next) => {
     logger.info({ from: req.ip }, 'On-demand sync triggered');
     const stats = await syncFromRemote(config.SYNC_REMOTE);
     res.json({ ok: !stats.error, ...stats });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/batch-download', async (req, res, next) => {
+  try {
+    const { paths } = req.body as { paths?: unknown };
+    if (!Array.isArray(paths) || paths.length === 0) {
+      res.status(400).json({ error: 'paths must be a non-empty array' });
+      return;
+    }
+    if (paths.length > 500) {
+      res.status(400).json({ error: 'paths exceeds maximum of 500' });
+      return;
+    }
+    for (const p of paths) {
+      if (typeof p !== 'string' || p.includes('..') || p.startsWith('/') || p.startsWith('\\')) {
+        res.status(400).json({ error: `invalid path: ${String(p)}` });
+        return;
+      }
+      const parts = p.split('/');
+      if (parts.length !== 2 || !parts[0] || !parts[1]) {
+        res.status(400).json({ error: `path must be folder/filename: ${p}` });
+        return;
+      }
+    }
+
+    const entries: { name: string; data: Buffer }[] = [];
+    for (const p of paths as string[]) {
+      const [folder, filename] = p.split('/') as [string, string];
+      try {
+        const data = await readRawResponseFile(folder, filename);
+        entries.push({ name: p, data });
+      } catch {
+        // skip files that have been pruned since browse was called
+      }
+    }
+
+    const zip = buildZip(entries);
+    res.set('Content-Type', 'application/zip');
+    res.set('Content-Disposition', 'attachment; filename="batch.zip"');
+    res.send(zip);
   } catch (err) {
     next(err);
   }

@@ -166,6 +166,11 @@ export async function browseResponseFiles(): Promise<Record<string, string[]>> {
   return result;
 }
 
+export async function readRawResponseFile(folder: string, filename: string): Promise<Buffer> {
+  const filepath = join(config.RESPONSE_DIR, sanitizeName(folder), filename);
+  return readFile(filepath);
+}
+
 export async function responseFileSize(folder: string, filename: string): Promise<number> {
   try {
     const info = await stat(join(config.RESPONSE_DIR, sanitizeName(folder), filename));

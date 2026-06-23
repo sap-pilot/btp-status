@@ -1,5 +1,5 @@
-import { get as httpGet } from 'node:http';
-import { get as httpsGet } from 'node:https';
+import { get as httpGet, request as httpRequest } from 'node:http';
+import { get as httpsGet, request as httpsRequest } from 'node:https';
 import { gunzip } from 'node:zlib';
 import { promisify } from 'node:util';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -7,9 +7,10 @@ import { join } from 'node:path';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { browseResponseFiles, parseFilename } from './responseStore.js';
+import { extractZip } from './zipBuilder.js';
 
 const gunzipAsync = promisify(gunzip);
-const BATCH_SIZE = 10;
+const INDIVIDUAL_CONCURRENCY = 10;
 
 let syncTimer: ReturnType<typeof setInterval> | null = null;
 let syncInProgress = false;
@@ -55,6 +56,47 @@ function fetchRaw(url: string): Promise<FetchResult> {
   });
 }
 
+function fetchPost(url: string, body: string): Promise<FetchResult> {
+  const isHttps = url.startsWith('https://');
+  const request = isHttps ? httpsRequest : httpRequest;
+  return new Promise((resolve, reject) => {
+    const bodyBytes = Buffer.from(body, 'utf-8');
+    const req = request(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': bodyBytes.length,
+          'Accept-Encoding': 'gzip',
+        },
+      },
+      (res) => {
+        if (res.statusCode && res.statusCode >= 400) {
+          res.resume();
+          reject(new Error(`HTTP ${res.statusCode} for ${url}`));
+          return;
+        }
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('error', reject);
+        res.on('end', () => {
+          (async () => {
+            const raw = Buffer.concat(chunks);
+            const transferred = raw.length;
+            const buf =
+              res.headers['content-encoding'] === 'gzip' ? await gunzipAsync(raw) : raw;
+            resolve({ buf, transferred, decompressed: buf.length });
+          })().catch(reject);
+        });
+      },
+    );
+    req.on('error', reject);
+    req.write(bodyBytes);
+    req.end();
+  });
+}
+
 async function downloadOne(
   remoteBase: string,
   filePath: string,
@@ -63,12 +105,34 @@ async function downloadOne(
   const { buf, transferred, decompressed } = await fetchRaw(url);
 
   const [folder, filename] = filePath.split('/');
-  const dir = join(config.RESPONSE_DIR, folder);
+  const dir = join(config.RESPONSE_DIR, folder!);
   await mkdir(dir, { recursive: true });
-  // Write as raw Buffer — no encoding conversion so binary files (PNG) are preserved
-  await writeFile(join(dir, filename), buf);
+  await writeFile(join(dir, filename!), buf);
   logger.debug({ path: filePath }, 'Downloaded file');
 
+  return { transferred, decompressed };
+}
+
+async function downloadBatch(
+  remoteBase: string,
+  filePaths: string[],
+): Promise<{ transferred: number; decompressed: number }> {
+  const url = `${remoteBase}/api/batch-download`;
+  const { buf: zip, transferred } = await fetchPost(url, JSON.stringify({ paths: filePaths }));
+  const entries = extractZip(zip);
+
+  await Promise.all(
+    entries.map(async ({ name, data }) => {
+      const parts = name.split('/');
+      if (parts.length !== 2 || !parts[0] || !parts[1]) return;
+      const dir = join(config.RESPONSE_DIR, parts[0]);
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, parts[1]), data);
+    }),
+  );
+
+  const decompressed = entries.reduce((sum, e) => sum + e.data.length, 0);
+  logger.debug({ files: entries.length }, 'Batch download chunk complete');
   return { transferred, decompressed };
 }
 
@@ -96,7 +160,6 @@ export async function syncFromRemote(remoteBase: string): Promise<SyncStats> {
       const localSet = new Set(localFolders[folder] ?? []);
       for (const f of files) {
         if (localSet.has(f)) continue;
-        // Skip files older than MAX_RESPONSE_STORAGE_DAYS to avoid re-filling pruned history
         if (cutoff > 0) {
           const jsonName = f.endsWith('.png') ? f.replace(/\.png$/, '.json') : f;
           const meta = parseFilename(jsonName);
@@ -118,14 +181,42 @@ export async function syncFromRemote(remoteBase: string): Promise<SyncStats> {
     let totalTransferred = 0;
     let totalDecompressed = 0;
 
-    for (let i = 0; i < missing.length; i += BATCH_SIZE) {
-      const batch = missing.slice(i, i + BATCH_SIZE);
-      const results = await Promise.all(batch.map(f => downloadOne(remoteBase, f)));
-      for (const r of results) {
-        totalTransferred += r.transferred;
-        totalDecompressed += r.decompressed;
+    const batchSize = config.SYNC_REMOTE_BATCH_SIZE;
+    // null = untested, true = available, false = unavailable (fall back to individual)
+    let batchAvailable: boolean | null = null;
+
+    for (let i = 0; i < missing.length; i += batchSize) {
+      const chunk = missing.slice(i, i + batchSize);
+
+      if (batchAvailable !== false) {
+        try {
+          const result = await downloadBatch(remoteBase, chunk);
+          totalTransferred += result.transferred;
+          totalDecompressed += result.decompressed;
+          batchAvailable = true;
+          logger.debug({ done: Math.min(i + batchSize, missing.length), total: missing.length }, 'Sync batch complete');
+          continue;
+        } catch (err) {
+          if (batchAvailable === null) {
+            logger.info({ err }, 'Batch download not available, falling back to individual downloads');
+            batchAvailable = false;
+            // fall through to individual downloads for this chunk
+          } else {
+            throw err;
+          }
+        }
       }
-      logger.debug({ done: Math.min(i + BATCH_SIZE, missing.length), total: missing.length }, 'Sync batch complete');
+
+      // Individual download mode
+      for (let j = 0; j < chunk.length; j += INDIVIDUAL_CONCURRENCY) {
+        const concurrentSlice = chunk.slice(j, j + INDIVIDUAL_CONCURRENCY);
+        const results = await Promise.all(concurrentSlice.map(f => downloadOne(remoteBase, f)));
+        for (const r of results) {
+          totalTransferred += r.transferred;
+          totalDecompressed += r.decompressed;
+        }
+      }
+      logger.debug({ done: Math.min(i + batchSize, missing.length), total: missing.length }, 'Sync batch complete');
     }
 
     const stats: SyncStats = {
