@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import type { ServiceWithHistory, HistoryFile } from '@shared/types';
+import type { ServiceWithHistory, HistoryFile, LandscapeConfig } from '@shared/types';
 import StatusDots from '@/components/StatusDots';
+import LandscapeDiagram from '@/components/LandscapeDiagram';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { AlertCircle, Menu, RefreshCw, Sun, Moon, ExternalLink, X, Zap } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useWindowWidth } from '@/hooks/useWindowWidth';
@@ -72,6 +74,11 @@ export default function Overview() {
   const [syncing, setSyncing] = useState(false);
   const [serverCity, setServerCity] = useState<string>('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [landscapes, setLandscapes] = useState<LandscapeConfig[]>([]);
+  const [activeLandscape, setActiveLandscape] = useState<string>(() => {
+    const h = window.location.hash;
+    return h.startsWith('#landscape-') ? decodeURIComponent(h.slice('#landscape-'.length)) : '';
+  });
 
   useEffect(() => {
     fetch('/api/info')
@@ -79,6 +86,16 @@ export default function Overview() {
       .then(d => {
         setSyncAvailable(d.syncRemote);
         if (d.city && d.city !== 'unknown') setServerCity(d.city);
+      })
+      .catch(() => null);
+    fetch('/api/landscapes')
+      .then(r => r.json() as Promise<LandscapeConfig[]>)
+      .then(ls => {
+        setLandscapes(ls);
+        setActiveLandscape(prev => {
+          if (prev && ls.some(l => l.name === prev)) return prev;
+          return ls[0]?.name ?? '';
+        });
       })
       .catch(() => null);
   }, []);
@@ -154,6 +171,38 @@ export default function Overview() {
     ? Math.round(allFiles.reduce((s, f) => s + f.responseTime, 0) / totalChecks)
     : 0;
   const overallUptimeColor = anyCurrentlyFailing ? 'text-red-500' : overallUptime < 100 ? 'text-yellow-500' : 'text-green-500';
+
+  // Per-service latest status for diagram coloring
+  const serviceStatusMap = useMemo<Record<string, 'ok' | 'error'>>(() => {
+    const map: Record<string, 'ok' | 'error'> = {};
+    for (const svc of data) {
+      const last = getServiceOverallHistory(svc)[0]?.overallStatus;
+      if (last === 200 || last === 203) map[svc.name] = 'ok';
+      else if (last === 500 || last === 503) map[svc.name] = 'error';
+    }
+    return map;
+  }, [data]);
+
+  // Per-landscape availability badge
+  function landscapeBadgeProps(landscapeName: string) {
+    const svcs = data.filter(s => s.landscapes?.includes(landscapeName));
+    if (svcs.length === 0) return { label: '—', cls: '' };
+    const statuses = svcs.map(s => getServiceOverallHistory(s)[0]?.overallStatus);
+    const anyFail = statuses.some(st => st === 500 || st === 503);
+    const allOk = statuses.every(st => st === 200 || st === 203 || st === undefined);
+    const allFiles = svcs.flatMap(s => s.history);
+    const uptime = allFiles.length > 0
+      ? Math.round(allFiles.filter(f => f.overallStatus === 200 || f.overallStatus === 203).length / allFiles.length * 100)
+      : 100;
+    if (anyFail) return { label: `${uptime}%`, cls: 'border-red-600 text-red-400' };
+    if (!allOk) return { label: `${uptime}%`, cls: 'border-yellow-600 text-yellow-400' };
+    return { label: `${uptime}%`, cls: 'border-green-600 text-green-400' };
+  }
+
+  function handleLandscapeChange(name: string) {
+    setActiveLandscape(name);
+    window.location.hash = `#landscape-${encodeURIComponent(name)}`;
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -331,6 +380,41 @@ export default function Overview() {
               </CardContent>
             </Card>
           </div>
+        )}
+
+        {/* Landscape tabs */}
+        {landscapes.length > 0 && (
+          <Card>
+            <CardContent className="pt-4 pb-4">
+              <Tabs value={activeLandscape} onValueChange={handleLandscapeChange}>
+                <TabsList className="flex-wrap h-auto gap-1 mb-4">
+                  {landscapes.map(ls => {
+                    const badge = landscapeBadgeProps(ls.name);
+                    return (
+                      <TabsTrigger key={ls.name} value={ls.name} className="gap-2">
+                        {ls.name}
+                        {badge.label !== '—' && (
+                          <Badge variant="outline" className={`text-xs ${badge.cls}`}>
+                            {badge.label}
+                          </Badge>
+                        )}
+                      </TabsTrigger>
+                    );
+                  })}
+                </TabsList>
+                {landscapes.map(ls => (
+                  <TabsContent key={ls.name} value={ls.name}>
+                    <LandscapeDiagram
+                      diagramText={ls.diagram}
+                      serviceStatuses={serviceStatusMap}
+                      isDark={theme === 'dark'}
+                      onNodeClick={name => navigate(`/service/${encodeURIComponent(name)}`)}
+                    />
+                  </TabsContent>
+                ))}
+              </Tabs>
+            </CardContent>
+          </Card>
         )}
 
         {/* Groups */}

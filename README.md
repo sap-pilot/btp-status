@@ -6,15 +6,19 @@ A lightweight, file-backed status page and health checker for SAP BTP services. 
 
 ## Features
 
-- **Service mode control** — per-service mode selector (Enabled / Unavailable / Disabled) on the detail page; mode overrides affect `/health/:name` responses and the background scheduler without restarting the server
+- **Landscape tabs** on the Overview page — tabbed Mermaid diagrams showing the architecture of each landscape; diagram nodes whose ID matches a service name are coloured by live health status and are clickable; active tab persisted in the URL hash
+- **Variable substitution** in `config.json` — define a top-level `variables` map; `{{key}}` placeholders in endpoint `url`, `username`, `password`, `headers`, and `body` fields are substituted at server startup
+- **`/dummy` URL** — set any endpoint `url` to `/dummy` to skip the actual check and record a synthetic `200 OK`; useful for endpoints not yet configured
 - **HTTP health checks** with Gatus-style condition evaluation (`[STATUS]`, `[BODY]`, `[HEADER.*]`, `[RESPONSE_TIME]`, `len()`, `pat()`)
 - **Browser-based IAS login check** (`mode: browser-ias-login`) — headless Chromium fills the SAP IAS login form, waits for a CSS selector to appear (`waitForSelector`), captures a screenshot; the screenshot is stored alongside the JSON record, shown in the history detail modal and the Test popup
 - **Azure Traffic Manager integration** — `GET /health/:name` returns `200 OK` when all conditions pass, `500` with failure details when any condition fails
 - **Gatus-style overview dashboard** at `/overview` — services grouped by group name with colored status timeline dots; clicking any dot navigates to the service detail page and opens the response modal for that check
 - **Per-service detail** at `/service/:name` — uptime %, avg response time, full check history table, response time line chart per endpoint; clicking any timeline dot opens the response detail modal for that check directly
 - **Drill-down modal** — inspect every request/response/condition result for any past check
+- **Evaluation mode selector** — per-service override to force Always OK (`203`) or Always Error (`503`) regardless of actual check results; useful during maintenance
+- **Schedule selector** — change the auto-run interval per service live without restarting the server
 - **File-based storage** — no database required; responses saved as JSON files under `./response/`
-- **Dark-themed React UI** built with shadcn/ui + Tailwind CSS
+- **Dark-themed React UI** built with shadcn/ui + Tailwind CSS; mobile-responsive with hamburger menu on narrow screens
 - **SAP BTP Cloud Foundry deployment** via MTA (`mta.yaml`)
 
 ## Condition Syntax
@@ -86,25 +90,41 @@ Create `server/config.json` (based on `config-sample.json`):
 
 ```json
 {
+  "variables": {
+    "svc.username": "monitor@example.com",
+    "svc.password": "secret"
+  },
+  "landscapes": [
+    {
+      "name": "production",
+      "diagram": "flowchart LR\n    User --> my-service"
+    }
+  ],
   "services": [
     {
       "group": "WorkZone",
       "name": "my-service",
       "enabled": true,
+      "landscapes": ["production"],
+      "interval": 900,
       "endpoints": [
         {
           "name": "Health Check",
           "url": "https://my-service.example.com/health",
           "method": "GET",
-          "headers": {
-            "Accept": "application/json"
-          },
-          "body": null,
           "conditions": [
             "[STATUS] == 200",
-            "[RESPONSE_TIME] < 3000",
-            "[BODY].status == \"healthy\""
+            "[RESPONSE_TIME] < 3000"
           ]
+        },
+        {
+          "mode": "browser-ias-login",
+          "name": "Login Check",
+          "url": "https://my-service.example.com/login",
+          "username": "{{svc.username}}",
+          "password": "{{svc.password}}",
+          "waitForSelector": "#app-title",
+          "timeout": 30000
         }
       ]
     }
@@ -114,22 +134,35 @@ Create `server/config.json` (based on `config-sample.json`):
 
 ### Config Fields
 
+**Top-level**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `variables` | object | Key→value map; `{{key}}` placeholders in endpoint fields are substituted at startup |
+| `landscapes` | array | List of landscape definitions for the Overview diagram tabs |
+| `landscapes[].name` | string | Landscape identifier (shown as tab label) |
+| `landscapes[].diagram` | string | Mermaid diagram source; nodes whose ID matches a service `name` are coloured by status |
+| `services` | array | List of service configs |
+
+**Per service**
+
 | Field | Type | Description |
 |-------|------|-------------|
 | `group` | string | Group name for dashboard grouping |
-| `name` | string | Unique service identifier (used in URLs) |
+| `name` | string | Unique service identifier (used in URLs and diagram node matching) |
 | `enabled` | boolean | Set `false` to exclude from checks |
 | `interval` | number | Auto-check interval in seconds; `0` or omitted disables automatic checks |
-| `homepage` | string | Optional homepage URL; when set, an ↗ button appears next to the service name on the dashboard and opens the URL in a new tab |
+| `homepage` | string | Optional homepage URL shown as ↗ link on the dashboard |
+| `landscapes` | string[] | Landscape names this service belongs to (for tab filtering and availability badge) |
 | `endpoints[].name` | string | Display name for this endpoint |
-| `endpoints[].url` | string | URL to probe |
+| `endpoints[].url` | string | URL to probe; set to `/dummy` to skip the check and always record `200 OK` |
 | `endpoints[].method` | string | HTTP method (`GET`, `POST`, etc.) |
-| `endpoints[].headers` | object | Request headers (key-value pairs) |
-| `endpoints[].body` | string\|null | Request body (JSON string or null) |
+| `endpoints[].headers` | object | Request headers; `{{variable}}` placeholders are substituted |
+| `endpoints[].body` | string\|null | Request body; `{{variable}}` placeholders are substituted |
 | `endpoints[].conditions` | string[] | Conditions to validate (Gatus syntax) |
 | `endpoints[].mode` | string | `browser-ias-login` to use headless Chromium instead of an HTTP request |
-| `endpoints[].username` | string | IAS username (browser-ias-login only) |
-| `endpoints[].password` | string | IAS password (browser-ias-login only) |
+| `endpoints[].username` | string | IAS username; `{{variable}}` substitution supported |
+| `endpoints[].password` | string | IAS password; `{{variable}}` substitution supported |
 | `endpoints[].waitForSelector` | string | CSS selector to wait for after login (browser-ias-login only) |
 | `endpoints[].timeout` | number | Overall browser session timeout in ms (default `30000`; browser-ias-login only) |
 

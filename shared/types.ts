@@ -20,11 +20,19 @@ export interface ServiceConfig {
   enabled: boolean;
   interval?: number;
   homepage?: string;
+  landscapes?: string[];
   endpoints: EndpointConfig[];
+}
+
+export interface LandscapeConfig {
+  name: string;
+  diagram: string;
 }
 
 export interface AppConfig {
   services: ServiceConfig[];
+  landscapes?: LandscapeConfig[];
+  variables?: Record<string, string>;
 }
 
 export interface ConditionResult {

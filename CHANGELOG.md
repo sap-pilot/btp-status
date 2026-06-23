@@ -1,5 +1,18 @@
 # Changelog
 
+## [v0.6.0] - 2026-06-22
+
+### Added
+- **Landscape tabs** on the Overview page — a tabbed block between the aggregate stats row and the service groups; each tab represents a landscape defined in `config.json` under the `landscapes` array; tabs persist via URL hash (`#landscape-{name}`) so the same view is restored on reload or share
+  - Each tab header shows the landscape name and an availability badge (uptime % coloured green / yellow / red) aggregated from all services whose `landscapes` field includes that landscape name
+  - The tab pane renders a Mermaid flowchart diagram from `landscape.diagram`; diagram nodes whose ID matches a service name are styled with a coloured fill (green `#2e6f40` = OK, red `#f33` = error) and are clickable — clicking navigates to `/service/{name}`
+- **Variable substitution** in `config.json` — define a top-level `variables` object (`"key": "value"`); any `{{key}}` placeholder in service endpoint fields (`url`, `username`, `password`, `headers`, `body`) is replaced with the variable value at server startup; useful for sharing credentials across multiple services without repetition
+- **`/dummy` URL** on any endpoint — if `url` is set to `/dummy`, the actual HTTP fetch or browser login is skipped and a synthetic `200 OK` result is recorded immediately; evaluation mode (`alwaysok` / `alwayserror`) is still honoured; useful for endpoints not yet configured or deliberately disabled without removing them from the config
+- `GET /api/landscapes` — returns the `landscapes` array from `config.json` (`[{ name, diagram }]`); used by the Overview page to render the tabs
+
+### Changed
+- `ServiceConfig` now supports an optional `landscapes` field (`string[]`) mapping a service to one or more landscapes for tab filtering and diagram coloring
+
 ## [v0.5.0] - 2026-06-19
 
 ### Added

@@ -22,6 +22,39 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
     const ep = service.endpoints[i];
     const epName = ep.name ?? `Endpoint ${i}`;
 
+    // ── Dummy endpoint — skip actual check ─────────────────────────────────
+    if (ep.url === '/dummy') {
+      const conditions: ConditionResult[] = [
+        { condition: '[DUMMY] endpoint skipped', passed: true, actual: 'dummy', expected: 'dummy' },
+      ];
+      if (evalMode === 'alwayserror') {
+        conditions.push({ condition: '[EVAL_MODE] == condition', passed: false, actual: 'alwayserror', expected: 'condition' });
+      }
+      const overallStatus: 200 | 203 | 500 | 503 =
+        evalMode === 'alwaysok' ? 203 : evalMode === 'alwayserror' ? 503 : 200;
+      const method = ep.mode === 'browser-ias-login' ? 'BROWSER' : (ep.method ?? 'GET');
+      const record: ResponseRecord = {
+        request: { url: '/dummy', method, headers: {}, body: null },
+        response: { status: 200, headers: {}, body: 'Dummy endpoint — check skipped' },
+        timestamp: new Date().toISOString(),
+        responseTime: 0,
+        endpointIndex: i,
+        endpointName: epName,
+        conditions,
+        overallStatus,
+        city: getCity(),
+      };
+      await saveResponse(serviceName, record);
+      details.push({
+        index: i, name: epName, conditions,
+        passed: evalMode !== 'alwayserror',
+        request: record.request,
+        response: record.response,
+        responseTime: 0,
+      });
+      continue;
+    }
+
     // ── Browser-based IAS login check ──────────────────────────────────────
     if (ep.mode === 'browser-ias-login') {
       const result = await runBrowserIasLogin(ep, serviceName);

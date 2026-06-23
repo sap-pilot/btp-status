@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getAllServices } from '../services/configService.js';
+import { getAllServices, getLandscapes } from '../services/configService.js';
 import { listResponseFiles, readResponseFile, readScreenshotFile, browseResponseFiles } from '../services/responseStore.js';
 import { checkService } from '../services/healthCheckService.js';
 import { syncFromRemote } from '../services/syncService.js';
@@ -65,6 +65,10 @@ router.get('/overview', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+router.get('/landscapes', (_req, res) => {
+  res.json(getLandscapes());
 });
 
 router.get('/info', (_req, res) => {
