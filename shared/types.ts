@@ -29,10 +29,16 @@ export interface LandscapeConfig {
   diagram: string;
 }
 
+export interface SiteConfig {
+  name: string;
+  url: string;
+}
+
 export interface AppConfig {
   services: ServiceConfig[];
   landscapes?: LandscapeConfig[];
   variables?: Record<string, string>;
+  sites?: SiteConfig[];
 }
 
 export interface ConditionResult {

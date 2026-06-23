@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.8.0] - 2026-06-23
+
+### Added
+- **Site switcher** — when `config.json` includes a top-level `sites` array (each entry has `name` and `url`), a compact dropdown appears in the Overview header next to the app title; the current site is auto-detected by comparing `window.location.origin` against each configured URL's origin; selecting a different site navigates via `window.location.replace()` so no extra browser history entry is added; the dropdown is hidden when fewer than 2 sites are configured
+- **Page title sync** — `document.title` is kept in sync with the app title (e.g. `BTP Status (Ashburn)`); the city suffix is derived from the server's geo-resolved location and is reflected in both the `<h1>` and the browser tab title
+
+### Changed
+- App title renamed from **BTP Service Status** to **BTP Status** in `client/index.html`
+
 ## [v0.7.0] - 2026-06-23
 
 ### Added

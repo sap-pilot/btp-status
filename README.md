@@ -6,6 +6,7 @@ A lightweight, file-backed status page and health checker for SAP BTP services. 
 
 ## Features
 
+- **Site switcher** on the Overview page — when `sites` is configured, a compact dropdown next to the app title lets users switch between deployed instances (e.g. different BTP subaccounts or regions); the current site is auto-detected by matching the browser origin against the configured URLs; switching replaces the current URL without adding a browser history entry; page title (`<title>`) is synced to the app title (e.g. `BTP Status (Ashburn)`)
 - **Landscape tabs** on the Overview page — tabbed Mermaid diagrams showing the architecture of each landscape; diagram nodes whose ID matches a service name are coloured by live health status and are clickable; active tab persisted in the URL hash
 - **Variable substitution** in `config.json` — define a top-level `variables` map; `{{key}}` placeholders in endpoint `url`, `username`, `password`, `headers`, and `body` fields are substituted at server startup
 - **`/dummy` URL** — set any endpoint `url` to `/dummy` to skip the actual check and record a synthetic `200 OK`; useful for endpoints not yet configured
@@ -142,6 +143,9 @@ Create `server/config.json` (based on `config-sample.json`):
 | `landscapes` | array | List of landscape definitions for the Overview diagram tabs |
 | `landscapes[].name` | string | Landscape identifier (shown as tab label) |
 | `landscapes[].diagram` | string | Mermaid diagram source; nodes whose ID matches a service `name` are coloured by status |
+| `sites` | array | List of deployed instances for the site-switcher dropdown (optional; dropdown hidden when fewer than 2 entries) |
+| `sites[].name` | string | Display name for the site (e.g. `"Ashburn"`, `"Frankfurt"`) |
+| `sites[].url` | string | Base URL of that deployed instance (e.g. `"https://btp-status-ashburn.cfapps.us10.hana.ondemand.com"`); the current site is matched by comparing the browser's `window.location.origin` against the configured URL's origin |
 | `services` | array | List of service configs |
 
 **Per service**

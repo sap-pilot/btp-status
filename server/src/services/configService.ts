@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import type { AppConfig, ServiceConfig, LandscapeConfig, EndpointConfig } from '../types/index.js';
+import type { AppConfig, ServiceConfig, LandscapeConfig, SiteConfig, EndpointConfig } from '../types/index.js';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
 
@@ -78,4 +78,8 @@ export function getAllServices(): ServiceConfig[] {
 
 export function getLandscapes(): LandscapeConfig[] {
   return getConfig().landscapes ?? [];
+}
+
+export function getSites(): SiteConfig[] {
+  return getConfig().sites ?? [];
 }

@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import type { ServiceWithHistory, HistoryFile, LandscapeConfig } from '@shared/types';
+import type { ServiceWithHistory, HistoryFile, LandscapeConfig, SiteConfig } from '@shared/types';
 import StatusDots from '@/components/StatusDots';
 import LandscapeDiagram, { type NodeStatus } from '@/components/LandscapeDiagram';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { AlertCircle, Menu, RefreshCw, Sun, Moon, ExternalLink, X, Zap } from 'lucide-react';
+import { AlertCircle, ChevronDown, Menu, RefreshCw, Sun, Moon, ExternalLink, X, Zap } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useWindowWidth } from '@/hooks/useWindowWidth';
 
@@ -79,6 +80,7 @@ export default function Overview() {
   const [serverCity, setServerCity] = useState<string>('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [landscapes, setLandscapes] = useState<LandscapeConfig[]>([]);
+  const [sites, setSites] = useState<SiteConfig[]>([]);
   const [activeLandscape, setActiveLandscape] = useState<string>(() => {
     const h = window.location.hash;
     return h.startsWith('#landscape-') ? decodeURIComponent(h.slice('#landscape-'.length)) : '';
@@ -86,10 +88,11 @@ export default function Overview() {
 
   useEffect(() => {
     fetch('/api/info')
-      .then(r => r.json() as Promise<{ syncRemote: boolean; city?: string }>)
+      .then(r => r.json() as Promise<{ syncRemote: boolean; city?: string; sites?: SiteConfig[] }>)
       .then(d => {
         setSyncAvailable(d.syncRemote);
         if (d.city && d.city !== 'unknown') setServerCity(d.city);
+        if (d.sites) setSites(d.sites);
       })
       .catch(() => null);
     fetch('/api/landscapes')
@@ -218,6 +221,20 @@ export default function Overview() {
     window.location.hash = `#landscape-${encodeURIComponent(name)}`;
   }
 
+  const appTitle = `BTP Status${serverCity ? ` (${serverCity})` : ''}`;
+
+  useEffect(() => {
+    document.title = appTitle;
+  }, [appTitle]);
+
+  const currentSiteUrl = sites.find(s => {
+    try { return new URL(s.url).origin === window.location.origin; } catch { return false; }
+  })?.url ?? '';
+
+  function handleSiteSwitch(url: string) {
+    if (url && url !== currentSiteUrl) window.location.replace(url);
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
@@ -225,7 +242,27 @@ export default function Overview() {
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img src="/images/favicon-32x32.png" alt="" className="h-5 w-5" />
-            <h1 className="text-lg font-semibold">BTP Status{serverCity ? ` (${serverCity})` : ''}</h1>
+            <h1 className="text-base sm:text-lg font-semibold">{appTitle}</h1>
+            {sites.length >= 2 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="text-muted-foreground hover:text-foreground transition-colors" title="Switch site">
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {sites.map(s => (
+                    <DropdownMenuItem
+                      key={s.url}
+                      className={`text-xs cursor-pointer${s.url === currentSiteUrl ? ' font-semibold' : ''}`}
+                      onSelect={() => handleSiteSwitch(s.url)}
+                    >
+                      {s.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             <a
               href="https://github.com/sap-pilot/btp-status/releases"
               target="_blank"

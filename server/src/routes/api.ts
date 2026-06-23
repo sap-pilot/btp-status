@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getAllServices, getLandscapes } from '../services/configService.js';
+import { getAllServices, getLandscapes, getSites } from '../services/configService.js';
 import { listResponseFiles, readResponseFile, readScreenshotFile, browseResponseFiles } from '../services/responseStore.js';
 import { checkService } from '../services/healthCheckService.js';
 import { syncFromRemote } from '../services/syncService.js';
@@ -72,7 +72,7 @@ router.get('/landscapes', (_req, res) => {
 });
 
 router.get('/info', (_req, res) => {
-  res.json({ syncRemote: !!config.SYNC_REMOTE, city: getCity() });
+  res.json({ syncRemote: !!config.SYNC_REMOTE, city: getCity(), sites: getSites() });
 });
 
 router.get('/eval-mode/:name', (req, res) => {
