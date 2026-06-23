@@ -10,6 +10,10 @@
 - **`/dummy` URL** on any endpoint — if `url` is set to `/dummy`, the actual HTTP fetch or browser login is skipped and a synthetic `200 OK` result is recorded immediately; evaluation mode (`alwaysok` / `alwayserror`) is still honoured; useful for endpoints not yet configured or deliberately disabled without removing them from the config
 - `GET /api/landscapes` — returns the `landscapes` array from `config.json` (`[{ name, diagram }]`); used by the Overview page to render the tabs
 
+### Fixed
+- **Housekeeping UTC timestamp bug**: the background job that prunes response files older than `MAX_RESPONSE_STORAGE_DAYS` was using a local-timezone parser for all filenames; new-format filenames (v0.5.0+) use UTC timestamps, so the old parser would miscompute file age by the server's UTC offset, causing files to be retained or deleted at the wrong time — fixed by replacing the local parser with the shared `parseFilename` from `responseStore` which handles both UTC (new format) and local-time (old format) filenames correctly
+- **Sync age filter**: `syncFromRemote` now skips remote files whose filename timestamp is older than `MAX_RESPONSE_STORAGE_DAYS`, preventing a sync job from re-downloading files that housekeeping has already pruned
+
 ### Changed
 - `ServiceConfig` now supports an optional `landscapes` field (`string[]`) mapping a service to one or more landscapes for tab filtering and diagram coloring
 

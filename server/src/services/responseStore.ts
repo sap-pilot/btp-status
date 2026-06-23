@@ -86,7 +86,7 @@ export async function readScreenshotFile(
   return readFile(filepath);
 }
 
-function parseFilename(filename: string): HistoryFile | null {
+export function parseFilename(filename: string): HistoryFile | null {
   // New format (v0.5.0+): yyyyMMdd-HHmmss_{slug}_{city}_{ms}_{status}.json  (UTC timestamp)
   const newM = filename.match(
     /^(\d{8}-\d{6})_([a-zA-Z0-9-]+)_([a-zA-Z0-9-]+)_(\d+)_(200|203|500|503)\.json$/,

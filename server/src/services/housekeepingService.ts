@@ -2,13 +2,15 @@ import { readdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
+import { parseFilename } from './responseStore.js';
 
 let timer: ReturnType<typeof setInterval> | null = null;
 
 export async function runHousekeeping(): Promise<void> {
   const maxDays = config.MAX_RESPONSE_STORAGE_DAYS;
-  const cutoffMs = maxDays * 24 * 60 * 60 * 1000;
-  const now = Date.now();
+  if (maxDays <= 0) return;
+
+  const cutoff = Date.now() - maxDays * 24 * 60 * 60 * 1000;
   let deleted = 0;
   let errors = 0;
 
@@ -28,8 +30,9 @@ export async function runHousekeeping(): Promise<void> {
 
       for (const file of files) {
         if (!file.endsWith('.json') && !file.endsWith('.png')) continue;
-        const ts = parseDateFromFilename(file);
-        if (ts === null || now - ts <= cutoffMs) continue;
+        // Use the shared parser which correctly handles UTC (new format) and local (old format)
+        const meta = parseFilename(file.endsWith('.png') ? file.replace(/\.png$/, '.json') : file);
+        if (meta === null || meta.timestamp >= cutoff) continue;
         try {
           await unlink(join(serviceDir, file));
           deleted++;
@@ -45,14 +48,6 @@ export async function runHousekeeping(): Promise<void> {
   }
 }
 
-// Parse the leading yyyyMMdd-HHmmss from response filenames
-function parseDateFromFilename(filename: string): number | null {
-  const m = filename.match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})_/);
-  if (!m) return null;
-  const [, yr, mo, dy, hr, mn, sc] = m;
-  return new Date(+yr, +mo - 1, +dy, +hr, +mn, +sc).getTime();
-}
-
 export function startHousekeepingScheduler(): void {
   if (config.MAX_RESPONSE_STORAGE_DAYS <= 0) {
     logger.info('Housekeeping disabled (MAX_RESPONSE_STORAGE_DAYS=0)');
@@ -60,6 +55,7 @@ export function startHousekeepingScheduler(): void {
   }
   logger.info({ maxDays: config.MAX_RESPONSE_STORAGE_DAYS }, 'Housekeeping scheduler started');
   void runHousekeeping();
+  // Run once a day
   timer = setInterval(() => void runHousekeeping(), 24 * 60 * 60 * 1000);
   timer.unref();
 }

@@ -13,6 +13,7 @@
     "build": "npm run build:client && npm run build:server",
     "build:client": "npm run build --workspace=client",
     "build:server": "npm run build --workspace=server",
+    "build-mta": "mbt build -p=cf --mtar=btp-status.mtar",
     "bd": "mbt build -p=cf --mtar=btp-status.mtar && cf deploy mta_archives/btp-status.mtar -f --retries 1",
     "bd-bg": "mbt build -p=cf --mtar=btp-status.mtar && cf deploy mta_archives/btp-status.mtar -f --retries 1 --strategy blue-green --skip-testing-phase",
     "deploy": "cf deploy mta_archives/btp-status.mtar -f --retries 1",

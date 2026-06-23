@@ -6,7 +6,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
-import { browseResponseFiles } from './responseStore.js';
+import { browseResponseFiles, parseFilename } from './responseStore.js';
 
 const gunzipAsync = promisify(gunzip);
 const BATCH_SIZE = 10;
@@ -88,11 +88,21 @@ export async function syncFromRemote(remoteBase: string): Promise<SyncStats> {
 
     const localFolders = await browseResponseFiles();
 
+    const maxDays = config.MAX_RESPONSE_STORAGE_DAYS;
+    const cutoff = maxDays > 0 ? Date.now() - maxDays * 24 * 60 * 60 * 1000 : 0;
+
     const missing: string[] = [];
     for (const [folder, files] of Object.entries(folders)) {
       const localSet = new Set(localFolders[folder] ?? []);
       for (const f of files) {
-        if (!localSet.has(f)) missing.push(`${folder}/${f}`);
+        if (localSet.has(f)) continue;
+        // Skip files older than MAX_RESPONSE_STORAGE_DAYS to avoid re-filling pruned history
+        if (cutoff > 0) {
+          const jsonName = f.endsWith('.png') ? f.replace(/\.png$/, '.json') : f;
+          const meta = parseFilename(jsonName);
+          if (meta && meta.timestamp < cutoff) continue;
+        }
+        missing.push(`${folder}/${f}`);
       }
     }
 
