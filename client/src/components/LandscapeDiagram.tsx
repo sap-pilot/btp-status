@@ -14,9 +14,6 @@ const STATUS_STROKE: Record<NodeStatus, string> = {
   error: '#ef4444',
 };
 
-// Global callback registered before each render so mermaid click directives can fire it
-const NAV_CB = '__mmdServiceNav__';
-
 interface LandscapeDiagramProps {
   /** Raw mermaid diagram source from config */
   diagramText: string;
@@ -24,7 +21,6 @@ interface LandscapeDiagramProps {
   serviceStatuses: Record<string, NodeStatus>;
   /** all service names in this landscape (even without history) for click nav */
   serviceNames: ReadonlySet<string>;
-  onNodeClick: (serviceId: string) => void;
   isDark: boolean;
 }
 
@@ -34,22 +30,16 @@ export default function LandscapeDiagram({
   diagramText,
   serviceStatuses,
   serviceNames,
-  onNodeClick,
   isDark,
 }: LandscapeDiagramProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
-  const onClickRef = useRef(onNodeClick);
-  onClickRef.current = onNodeClick;
 
   useEffect(() => {
     const el = containerRef.current;
     if (!diagramText || !el) return;
     let cancelled = false;
     setError(null);
-
-    // Register global nav callback before mermaid processes click directives
-    (window as unknown as Record<string, unknown>)[NAV_CB] = (nodeId: string) => onClickRef.current(nodeId);
 
     void (async () => {
       try {
@@ -59,8 +49,7 @@ export default function LandscapeDiagram({
           lines.push(`style ${name} fill:${STATUS_FILL[status]},stroke:${STATUS_STROKE[status]},color:#fff`);
         }
         for (const name of serviceNames) {
-          // mermaid calls NAV_CB(nodeId) when the node is clicked (empty args → node id is passed)
-          lines.push(`click ${name} call ${NAV_CB}()`);
+          lines.push(`click ${name} "/service/${name}" "Drill down into service ${name} status"`);
         }
         const augmented = lines.join('\n');
 
@@ -91,10 +80,7 @@ export default function LandscapeDiagram({
       }
     })();
 
-    return () => {
-      cancelled = true;
-      delete (window as unknown as Record<string, unknown>)[NAV_CB];
-    };
+    return () => { cancelled = true; };
   // Stringify deps so the effect only re-runs when content actually changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diagramText, isDark, JSON.stringify(serviceStatuses), [...serviceNames].sort().join('\0')]);

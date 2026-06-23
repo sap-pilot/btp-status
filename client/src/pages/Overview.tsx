@@ -424,7 +424,6 @@ export default function Overview() {
                         serviceStatuses={lsStatuses}
                         serviceNames={lsNames}
                         isDark={theme === 'dark'}
-                        onNodeClick={name => navigate(`/service/${encodeURIComponent(name)}`)}
                       />
                     </TabsContent>
                   );
