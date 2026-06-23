@@ -10,6 +10,9 @@
 - **`/dummy` URL** on any endpoint — if `url` is set to `/dummy`, the actual HTTP fetch or browser login is skipped and a synthetic `200 OK` result is recorded immediately; evaluation mode (`alwaysok` / `alwayserror`) is still honoured; useful for endpoints not yet configured or deliberately disabled without removing them from the config
 - `GET /api/landscapes` — returns the `landscapes` array from `config.json` (`[{ name, diagram }]`); used by the Overview page to render the tabs
 
+### Changed
+- **Version tag in the Overview header** now shows `v{version}+{commit}` (e.g. `v0.6.0+ebe1174`) on all screen sizes instead of the full `v{version}+{commit}.{date}` string; hovering shows a tooltip with the full build info (`v{version}+{commit} built at: {date}`); clicking the tag opens the GitHub Releases page (`https://github.com/sap-pilot/btp-status/releases`) in a new browser tab so users can browse all release notes
+
 ### Fixed
 - **Housekeeping UTC timestamp bug**: the background job that prunes response files older than `MAX_RESPONSE_STORAGE_DAYS` was using a local-timezone parser for all filenames; new-format filenames (v0.5.0+) use UTC timestamps, so the old parser would miscompute file age by the server's UTC offset, causing files to be retained or deleted at the wrong time — fixed by replacing the local parser with the shared `parseFilename` from `responseStore` which handles both UTC (new format) and local-time (old format) filenames correctly
 - **Sync age filter**: `syncFromRemote` now skips remote files whose filename timestamp is older than `MAX_RESPONSE_STORAGE_DAYS`, preventing a sync job from re-downloading files that housekeeping has already pruned

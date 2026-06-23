@@ -217,10 +217,15 @@ export default function Overview() {
           <div className="flex items-center gap-2">
             <img src="/images/favicon-32x32.png" alt="" className="h-5 w-5" />
             <h1 className="text-lg font-semibold">BTP Status{serverCity ? ` (${serverCity})` : ''}</h1>
-            <span className="sm:hidden text-xs text-muted-foreground font-mono">v{__APP_VERSION__}</span>
-            <span className="hidden sm:inline text-xs text-muted-foreground font-mono">
-              v{__APP_VERSION__}+{__COMMIT_HASH__}.{__BUILD_DATE__}
-            </span>
+            <a
+              href="https://github.com/sap-pilot/btp-status/releases"
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`v${__APP_VERSION__}+${__COMMIT_HASH__} built at: ${__BUILD_DATE__}`}
+              className="text-xs text-muted-foreground font-mono hover:text-foreground transition-colors"
+            >
+              v{__APP_VERSION__}+{__COMMIT_HASH__}
+            </a>
           </div>
           {/* Desktop controls */}
           <div className="hidden sm:flex items-center gap-3">
