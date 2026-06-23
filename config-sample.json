@@ -1,88 +1,60 @@
 {
+  "variables": {
+    "svc.username": "monitor@example.com",
+    "svc.password": "s3cr3t"
+  },
+  "landscapes": [
+    {
+      "name": "production",
+      "diagram": "flowchart LR\n    User[End User] --> my-service\n    my-service --> my-service-db[(Database)]"
+    },
+    {
+      "name": "staging",
+      "diagram": "flowchart LR\n    User[End User] --> my-service-staging"
+    }
+  ],
   "services": [
     {
-      "group": "WorkZone",
-      "name": "dcore-sandbox",
+      "group": "MyApp",
+      "name": "my-service",
       "enabled": true,
-      "interval": 300,
-      "homepage": "https://{subdomain}.launchpad.cfapps.us10.ondemand.com/site/{site}",
+      "landscapes": ["production"],
+      "interval": 900,
+      "homepage": "https://my-service.example.com",
       "endpoints": [
         {
-          "name": "Workzone Redirect",
-          "url": "https://{subdomain}.launchpad.cfapps.us10.ondemand.com/site/{site}",
+          "name": "Health Check",
+          "url": "https://my-service.example.com/health",
           "method": "GET",
-          "headers": {},
-          "body": null,
           "conditions": [
             "[STATUS] == 200",
-            "[RESPONSE_TIME] < 30000"
+            "[RESPONSE_TIME] < 3000"
           ]
         },
         {
           "mode": "browser-ias-login",
-          "name": "Workzone Login",
-          "url": "https://{subdomain}.launchpad.cfapps.us10.ondemand.com/site/{site}?sap_idp={idp}",
-          "username": "nonprod.monitor@sap-test.de",
-          "password": "my-password",
-          "waitForUrl": "https://{subdomain}.launchpad.cfapps.us10.hana.ondemand.com/site/{site}sap_idp={idp}#Shell-home",
+          "name": "Login Check",
+          "url": "https://my-service.example.com/login",
+          "username": "{{svc.username}}",
+          "password": "{{svc.password}}",
+          "waitForSelector": "#app-shell-title",
           "timeout": 30000
         }
       ]
     },
     {
-      "group": "WorkZone",
-      "name": "hrp-prod",
+      "group": "MyApp",
+      "name": "my-service-staging",
       "enabled": true,
-      "interval": 60,
-      "homepage": "https://example.hana.ondemand.com",
+      "landscapes": ["staging"],
+      "interval": 1800,
       "endpoints": [
         {
-          "name": "API Health",
-          "url": "https://example.hana.ondemand.com/api/health",
+          "name": "Health Check",
+          "url": "/dummy",
           "method": "GET",
-          "headers": {
-            "Accept": "application/json"
-          },
-          "body": null,
           "conditions": [
-            "[STATUS] == 200",
-            "[RESPONSE_TIME] < 2000",
-            "[BODY].status == \"healthy\""
-          ]
-        },
-        {
-          "name": "Login Page",
-          "url": "https://example.hana.ondemand.com/login",
-          "method": "GET",
-          "headers": {},
-          "body": null,
-          "conditions": [
-            "[STATUS] == 200",
-            "[BODY] == pat(*login*)"
-          ]
-        }
-      ]
-    },
-    {
-      "group": "Integration",
-      "name": "erp-webhook",
-      "enabled": true,
-      "interval": 0,
-      "endpoints": [
-        {
-          "name": "Webhook Ping",
-          "url": "https://example.com/webhook/ping",
-          "method": "POST",
-          "headers": {
-            "Content-Type": "application/json",
-            "X-API-Key": "your-api-key"
-          },
-          "body": "{\"ping\":true}",
-          "conditions": [
-            "[STATUS] == 200",
-            "[RESPONSE_TIME] < 5000",
-            "[HEADER.content-type] == pat(*application/json*)",
-            "len([BODY].services) > 0"
+            "[STATUS] == 200"
           ]
         }
       ]

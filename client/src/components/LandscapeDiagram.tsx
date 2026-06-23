@@ -22,6 +22,8 @@ interface LandscapeDiagramProps {
   /** all service names in this landscape (even without history) for click nav */
   serviceNames: ReadonlySet<string>;
   isDark: boolean;
+  /** URL to encode as ?from= in node click hrefs so the service page can navigate back here */
+  returnUrl?: string;
 }
 
 let mermaidIdCounter = 0;
@@ -31,6 +33,7 @@ export default function LandscapeDiagram({
   serviceStatuses,
   serviceNames,
   isDark,
+  returnUrl,
 }: LandscapeDiagramProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +52,8 @@ export default function LandscapeDiagram({
           lines.push(`style ${name} fill:${STATUS_FILL[status]},stroke:${STATUS_STROKE[status]},color:#fff`);
         }
         for (const name of serviceNames) {
-          lines.push(`click ${name} "/service/${name}" "Drill down into service ${name} status"`);
+          const from = returnUrl ? `?from=${encodeURIComponent(returnUrl)}` : '';
+          lines.push(`click ${name} "/service/${name}${from}" "Drill down into service ${name} status"`);
         }
         const augmented = lines.join('\n');
 

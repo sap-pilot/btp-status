@@ -60,6 +60,7 @@ function formatTs(ms: number): string {
 export default function History() {
   const { name = '' } = useParams<{ name: string }>();
   const location = useLocation();
+  const backTo = new URLSearchParams(location.search).get('from') ?? '/overview';
   const autoOpenFilename = (location.state as { autoOpenFilename?: string } | null)?.autoOpenFilename;
   const autoOpenHandled = useRef(false);
   const initialHash = useRef(location.hash.slice(1));
@@ -232,7 +233,7 @@ export default function History() {
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link
-              to="/overview"
+              to={backTo}
               className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors text-sm"
             >
               <ArrowLeft className="h-4 w-4" />

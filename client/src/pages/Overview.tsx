@@ -424,6 +424,7 @@ export default function Overview() {
                         serviceStatuses={lsStatuses}
                         serviceNames={lsNames}
                         isDark={theme === 'dark'}
+                        returnUrl={`/overview#landscape-${encodeURIComponent(ls.name)}`}
                       />
                     </TabsContent>
                   );
