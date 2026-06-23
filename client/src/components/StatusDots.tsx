@@ -34,31 +34,24 @@ export default function StatusDots({ history, maxDots = 48, showAvg = true, show
   const sorted = [...history].sort((a, b) => a.timestamp - b.timestamp);
   const hasOverflow = sorted.length > maxDots;
 
-  // When overflowing: shrink dots to fit all in the same ~maxDots*12px budget.
-  // Gap collapses to 1px; dotPx is the computed per-dot width (min 1px).
-  const dotPx = hasOverflow
-    ? Math.max(1, Math.floor((maxDots * 12 - (sorted.length - 1)) / sorted.length))
-    : null;
-
-  // Normal mode: pad left with empty slots. Overflow mode: show all dots.
+  // Normal: pad left with empty slots up to maxDots so the bar always looks full.
+  // Overflow: show all dots — they shrink evenly via flex-1 to fill the available width.
   const displayDots: (HistoryFile | null)[] = hasOverflow
     ? sorted
     : [...Array(maxDots - sorted.length).fill(null), ...sorted];
 
-  const dotStyle = dotPx !== null ? { width: `${dotPx}px` } : undefined;
-  const widthClass = dotPx !== null ? '' : 'w-2.5';
+  // Collapse gap when dots are plentiful to give each dot more room.
   const gapClass = hasOverflow ? 'gap-px' : 'gap-0.5';
 
   return (
-    <div className="flex items-center gap-3 min-w-0">
-      <div className={`flex ${gapClass} flex-shrink-0`}>
+    <div className="flex items-center gap-3 min-w-0 w-full">
+      <div className={`flex ${gapClass} flex-1 min-w-0`}>
         {displayDots.map((d, i) => {
           if (!d) {
             return (
               <span
                 key={i}
-                className={`inline-block ${widthClass} h-5 rounded-sm bg-gray-700 opacity-40`}
-                style={dotStyle}
+                className="flex-1 min-w-0 h-5 rounded-sm bg-gray-700 opacity-40"
               />
             );
           }
@@ -73,8 +66,7 @@ export default function StatusDots({ history, maxDots = 48, showAvg = true, show
               <button
                 key={i}
                 type="button"
-                className={`inline-block ${widthClass} h-5 rounded-sm ${color} cursor-pointer hover:opacity-75 hover:scale-110 transition-transform focus:outline-none focus:ring-1 focus:ring-white/50`}
-                style={dotStyle}
+                className={`flex-1 min-w-0 h-5 rounded-sm ${color} cursor-pointer hover:opacity-75 hover:scale-110 transition-transform focus:outline-none focus:ring-1 focus:ring-white/50`}
                 title={title}
                 onClick={() => onDotClick(d)}
               />
@@ -83,8 +75,7 @@ export default function StatusDots({ history, maxDots = 48, showAvg = true, show
           return (
             <span
               key={i}
-              className={`inline-block ${widthClass} h-5 rounded-sm ${color} cursor-default`}
-              style={dotStyle}
+              className={`flex-1 min-w-0 h-5 rounded-sm ${color} cursor-default`}
               title={title}
             />
           );
