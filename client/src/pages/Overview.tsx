@@ -188,8 +188,6 @@ export default function Overview() {
     return map;
   }, [data]);
 
-  const serviceNameSet = useMemo(() => new Set(data.map(s => s.name)), [data]);
-
   // Per-landscape availability badge
   function landscapeBadgeProps(landscapeName: string) {
     const svcs = data.filter(s => s.landscapes?.includes(landscapeName));
@@ -409,17 +407,28 @@ export default function Overview() {
                     );
                   })}
                 </TabsList>
-                {landscapes.map(ls => (
-                  <TabsContent key={ls.name} value={ls.name}>
-                    <LandscapeDiagram
-                      diagramText={ls.diagram}
-                      serviceStatuses={serviceStatusMap}
-                      serviceNames={serviceNameSet}
-                      isDark={theme === 'dark'}
-                      onNodeClick={name => navigate(`/service/${encodeURIComponent(name)}`)}
-                    />
-                  </TabsContent>
-                ))}
+                {landscapes.map(ls => {
+                  // Filter to only services belonging to this landscape
+                  const lsStatuses: Record<string, NodeStatus> = {};
+                  const lsNames = new Set<string>();
+                  for (const svc of data) {
+                    if (!svc.landscapes?.includes(ls.name)) continue;
+                    lsNames.add(svc.name);
+                    const st = serviceStatusMap[svc.name];
+                    if (st) lsStatuses[svc.name] = st;
+                  }
+                  return (
+                    <TabsContent key={ls.name} value={ls.name}>
+                      <LandscapeDiagram
+                        diagramText={ls.diagram}
+                        serviceStatuses={lsStatuses}
+                        serviceNames={lsNames}
+                        isDark={theme === 'dark'}
+                        onNodeClick={name => navigate(`/service/${encodeURIComponent(name)}`)}
+                      />
+                    </TabsContent>
+                  );
+                })}
               </Tabs>
             </CardContent>
           </Card>
