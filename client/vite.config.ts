@@ -20,7 +20,7 @@ function getCommitHash(): string {
 }
 
 function getBuildDate(): string {
-  return new Date().toISOString().slice(0, 10); // UTC date
+  return new Date().toISOString(); // full UTC timestamp; formatted to local tz at display time
 }
 
 export default defineConfig({

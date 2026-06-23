@@ -230,7 +230,7 @@ export default function Overview() {
               href="https://github.com/sap-pilot/btp-status/releases"
               target="_blank"
               rel="noopener noreferrer"
-              title={`v${__APP_VERSION__}+${__COMMIT_HASH__} built at: ${__BUILD_DATE__}`}
+              title={`v${__APP_VERSION__}+${__COMMIT_HASH__} built at: ${new Date(__BUILD_DATE__).toLocaleString(undefined, { timeZoneName: 'short' })}`}
               className="text-xs text-muted-foreground font-mono hover:text-foreground transition-colors"
             >
               v{__APP_VERSION__}+{__COMMIT_HASH__}
