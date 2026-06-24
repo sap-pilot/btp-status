@@ -17,6 +17,26 @@ import type { EvaluationMode, ServiceWithHistory } from '../types/index.js';
 
 const VALID_EVAL_MODES = new Set<string>(['condition', 'alwaysok', 'alwayserror']);
 
+/** Parse ?hours=N or ?from=YYYY-MM-DD&until=YYYY-MM-DD into a listResponseFiles range. */
+function parseTimeRangeQuery(
+  query: Record<string, unknown>,
+): { hours: number } | { fromMs: number; untilMs: number } {
+  const from = query['from'];
+  const until = query['until'];
+  if (typeof from === 'string' && typeof until === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(from) && /^\d{4}-\d{2}-\d{2}$/.test(until)) {
+    const [fy, fm, fd] = from.split('-').map(Number);
+    const [uy, um, ud] = until.split('-').map(Number);
+    const fromMs = Date.UTC(fy, fm - 1, fd, 0, 0, 0, 0);
+    const untilMs = Date.UTC(uy, um - 1, ud, 23, 59, 59, 999);
+    if (!isNaN(fromMs) && !isNaN(untilMs) && fromMs <= untilMs) {
+      return { fromMs, untilMs };
+    }
+  }
+  const raw = query['hours'];
+  const hours = Math.min(168, Math.max(1, parseInt(typeof raw === 'string' ? raw : '24', 10)));
+  return { hours };
+}
+
 const router = Router();
 
 router.get('/services', (_req, res) => {
@@ -37,9 +57,8 @@ router.get('/check/:name', requireAuth, async (req, res, next) => {
 
 router.get('/history/:name', async (req, res, next) => {
   try {
-    const raw = req.query['hours'];
-    const hours = Math.min(72, Math.max(1, parseInt(typeof raw === 'string' ? raw : '24', 10)));
-    const files = await listResponseFiles(req.params.name, hours);
+    const range = parseTimeRangeQuery(req.query);
+    const files = await listResponseFiles(req.params.name, range);
     res.json(files);
   } catch (err) {
     next(err);
@@ -57,13 +76,12 @@ router.get('/history/:name/:filename', async (req, res, next) => {
 
 router.get('/overview', async (req, res, next) => {
   try {
-    const raw = req.query['hours'];
-    const hours = Math.min(72, Math.max(1, parseInt(typeof raw === 'string' ? raw : '24', 10)));
+    const range = parseTimeRangeQuery(req.query);
     const services = getAllServices();
     const result: ServiceWithHistory[] = await Promise.all(
       services.map(async s => ({
         ...s,
-        history: await listResponseFiles(s.name, hours),
+        history: await listResponseFiles(s.name, range),
       })),
     );
     res.json(result);
@@ -77,7 +95,7 @@ router.get('/landscapes', (_req, res) => {
 });
 
 router.get('/info', (_req, res) => {
-  res.json({ syncRemote: !!config.SYNC_REMOTE, city: getCity(), sites: getSites() });
+  res.json({ syncRemote: !!config.SYNC_REMOTE, city: getCity(), sites: getSites(), maxStorageDays: config.MAX_RESPONSE_STORAGE_DAYS });
 });
 
 router.get('/me', (req, res) => {

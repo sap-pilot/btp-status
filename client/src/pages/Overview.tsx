@@ -13,7 +13,9 @@ import { AlertCircle, ChevronDown, Menu, RefreshCw, Sun, Moon, ExternalLink, X, 
 import { useTheme } from '@/hooks/useTheme';
 import { useWindowWidth } from '@/hooks/useWindowWidth';
 import { useAuth } from '@/hooks/useAuth';
+import { useTimeRange, fmtDateRange } from '@/hooks/useTimeRange';
 import AuthButton from '@/components/AuthButton';
+import DateRangePicker from '@/components/DateRangePicker';
 
 const HOUR_OPTIONS = [
   { value: '1', label: 'Last 1 hour' },
@@ -22,6 +24,7 @@ const HOUR_OPTIONS = [
   { value: '24', label: 'Last 24 hours' },
   { value: '48', label: 'Last 48 hours' },
   { value: '72', label: 'Last 72 hours' },
+  { value: 'range', label: 'Date Range…' },
 ];
 
 function getServiceOverallHistory(service: ServiceWithHistory): HistoryFile[] {
@@ -72,7 +75,9 @@ export default function Overview() {
   const maxDots = Math.max(8, Math.floor(timelineWidth / 12));
   const isMobile = windowWidth < 640;
 
-  const [hours, setHours] = useState(24);
+  const { range, setRange, queryString } = useTimeRange();
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [maxStorageDays, setMaxStorageDays] = useState(7);
   const [data, setData] = useState<ServiceWithHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,11 +97,12 @@ export default function Overview() {
 
   useEffect(() => {
     fetch('/api/info')
-      .then(r => r.json() as Promise<{ syncRemote: boolean; city?: string; sites?: SiteConfig[] }>)
+      .then(r => r.json() as Promise<{ syncRemote: boolean; city?: string; sites?: SiteConfig[]; maxStorageDays?: number }>)
       .then(d => {
         setSyncAvailable(d.syncRemote);
         if (d.city && d.city !== 'unknown') setServerCity(d.city);
         if (d.sites) setSites(d.sites);
+        if (d.maxStorageDays !== undefined) setMaxStorageDays(d.maxStorageDays);
       })
       .catch(() => null);
     fetch('/api/landscapes')
@@ -114,7 +120,7 @@ export default function Overview() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch(`/api/overview?hours=${hours}`)
+    fetch(`/api/overview?${queryString}`)
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json() as Promise<ServiceWithHistory[]>;
@@ -125,7 +131,7 @@ export default function Overview() {
       })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false));
-  }, [hours, refreshTick]);
+  }, [queryString, refreshTick]);
 
   async function runSync() {
     setSyncing(true);
@@ -315,9 +321,18 @@ export default function Overview() {
                 {syncing ? 'Syncing…' : 'Sync'}
               </button>
             )}
-            <Select value={String(hours)} onValueChange={v => setHours(Number(v))}>
+            <Select
+              value={range.mode === 'dateRange' ? 'range' : String(range.hours)}
+              onValueChange={v => {
+                if (v === 'range') { setDatePickerOpen(true); }
+                else setRange({ mode: 'hours', hours: Number(v) });
+              }}
+            >
               <SelectTrigger className="w-36 h-8 text-xs">
-                <SelectValue />
+                {range.mode === 'dateRange'
+                  ? <span className="truncate">{fmtDateRange(range.fromDate, range.untilDate)}</span>
+                  : <SelectValue />
+                }
               </SelectTrigger>
               <SelectContent>
                 {HOUR_OPTIONS.map(o => (
@@ -363,9 +378,18 @@ export default function Overview() {
                 </Badge>
               </div>
               <div className="flex items-center gap-2">
-                <Select value={String(hours)} onValueChange={v => setHours(Number(v))}>
+                <Select
+                  value={range.mode === 'dateRange' ? 'range' : String(range.hours)}
+                  onValueChange={v => {
+                    if (v === 'range') { setDatePickerOpen(true); setMenuOpen(false); }
+                    else setRange({ mode: 'hours', hours: Number(v) });
+                  }}
+                >
                   <SelectTrigger className="flex-1 h-9 text-xs">
-                    <SelectValue />
+                    {range.mode === 'dateRange'
+                      ? <span className="truncate">{fmtDateRange(range.fromDate, range.untilDate)}</span>
+                      : <SelectValue />
+                    }
                   </SelectTrigger>
                   <SelectContent>
                     {HOUR_OPTIONS.map(o => (
@@ -408,6 +432,15 @@ export default function Overview() {
           </div>
         )}
       </header>
+
+      <DateRangePicker
+        open={datePickerOpen}
+        onClose={() => setDatePickerOpen(false)}
+        onApply={(from, until) => setRange({ mode: 'dateRange', fromDate: from, untilDate: until })}
+        fromDate={range.mode === 'dateRange' ? range.fromDate : new Date(Date.now() - 86400000).toISOString().slice(0, 10)}
+        untilDate={range.mode === 'dateRange' ? range.untilDate : new Date().toISOString().slice(0, 10)}
+        maxStorageDays={maxStorageDays}
+      />
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {loading && <span className="text-xs text-muted-foreground">Loading…</span>}

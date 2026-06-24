@@ -220,10 +220,10 @@ When `interval` is set to a value greater than `0`, the server automatically run
 | `GET /service/:name` | Service detail UI — history timeline, drill-down, "Run Test" button |
 | `GET /api/services` | List all services (JSON) |
 | `GET /api/check/:name` | Run health check, return structured JSON with per-endpoint request/response/conditions (used by Test popup) |
-| `GET /api/overview?hours=24` | Overview data for all services (JSON) |
-| `GET /api/history/:name?hours=24` | History file list for a service (JSON) |
+| `GET /api/overview?hours=24` | Overview data for all services (JSON); also accepts `?from=YYYY-MM-DD&until=YYYY-MM-DD` for date range queries |
+| `GET /api/history/:name?hours=24` | History file list for a service (JSON); also accepts `?from=YYYY-MM-DD&until=YYYY-MM-DD` for date range queries |
 | `GET /api/history/:name/:filename` | Full request/response detail for one check (JSON) |
-| `GET /api/info` | Server capabilities: `{ syncRemote: boolean }` — used by the UI to conditionally show the Sync button |
+| `GET /api/info` | Server capabilities: `{ syncRemote, city, sites, maxStorageDays }` |
 | `GET /api/eval-mode/:name` | Current evaluation mode: `{ mode: "condition" \| "alwaysok" \| "alwayserror" }` |
 | `POST /api/eval-mode/:name` | Set evaluation mode (JSON body `{ "mode": "..." }`); resets to `condition` on server restart |
 | `GET /api/schedule/:name` | Current effective interval in seconds: `{ intervalSeconds }` |
@@ -405,7 +405,7 @@ The server uses [pino](https://getpino.io) with colorized pretty-print output.
 | `SYNC_REMOTE` | — | Base URL of another BTP Status instance (e.g. `https://btp-status-prod.cfapps.eu10.hana.ondemand.com`). On startup, missing response files are downloaded from the remote and saved to the local `RESPONSE_DIR`. Periodic sync runs every `SYNC_INTERVAL` seconds. |
 | `SYNC_INTERVAL` | `900` | Seconds between periodic remote sync runs (minimum 60). Only effective when `SYNC_REMOTE` is set. |
 | `SYNC_REMOTE_BATCH_SIZE` | `100` | Number of files requested per `POST /api/batch-download` call during sync. The sync job tries the batch endpoint first; if the remote does not support it, it falls back to individual `GET /api/download` requests with concurrency 10. |
-| `MAX_RESPONSE_STORAGE_DAYS` | `3` | Response files (JSON + PNG) older than this many days are automatically deleted. Housekeeping runs once on startup then every 24 hours. Set to `0` to disable. |
+| `MAX_RESPONSE_STORAGE_DAYS` | `7` | Response files (JSON + PNG) older than this many days are automatically deleted. Housekeeping runs once on startup then every 24 hours. Set to `0` to disable. Also controls the furthest date selectable in the UI's Date Range picker. |
 | `REQUEST_TIMEOUT_MS` | `30000` | Default HTTP request timeout in milliseconds for standard endpoint checks. A check that exceeds this limit is recorded with status `504` and the response filename ends in `_504.json`. Per-endpoint `timeout` in `config.json` overrides this value for that endpoint only. |
 | `LOG_LEVEL` | `debug` | Pino log level: `trace`, `debug`, `info`, `warn`, `error` |
 

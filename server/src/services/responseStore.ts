@@ -45,18 +45,19 @@ export async function saveResponse(
 
 export async function listResponseFiles(
   serviceName: string,
-  hours: number,
+  range: { hours: number } | { fromMs: number; untilMs: number },
 ): Promise<HistoryFile[]> {
   const dir = join(config.RESPONSE_DIR, sanitizeName(serviceName));
   try {
     const files = await readdir(dir);
     const fileSet = new Set(files);
-    const cutoff = Date.now() - hours * 3_600_000;
+    const fromMs = 'hours' in range ? Date.now() - range.hours * 3_600_000 : range.fromMs;
+    const untilMs = 'hours' in range ? Infinity : range.untilMs;
     const results: HistoryFile[] = [];
     for (const f of files) {
       if (!f.endsWith('.json')) continue;
       const meta = parseFilename(f);
-      if (meta && meta.timestamp >= cutoff) {
+      if (meta && meta.timestamp >= fromMs && meta.timestamp <= untilMs) {
         const pngName = f.replace(/\.json$/, '.png');
         results.push(fileSet.has(pngName) ? { ...meta, screenshotFile: pngName } : meta);
       }

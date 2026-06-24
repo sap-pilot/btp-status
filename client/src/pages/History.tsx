@@ -9,6 +9,8 @@ import StatusDots from '@/components/StatusDots';
 import ResponseTimeChart from '@/components/ResponseTimeChart';
 import ResponseDetailModal from '@/components/ResponseDetailModal';
 import TestModal from '@/components/TestModal';
+import { useTimeRange, fmtDateRange } from '@/hooks/useTimeRange';
+import DateRangePicker from '@/components/DateRangePicker';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +39,7 @@ const HOUR_OPTIONS = [
   { value: '24', label: 'Last 24 hours' },
   { value: '48', label: 'Last 48 hours' },
   { value: '72', label: 'Last 72 hours' },
+  { value: 'range', label: 'Date Range…' },
 ];
 
 const SCHEDULE_OPTIONS = [
@@ -80,7 +83,9 @@ export default function History() {
   const maxDots = Math.max(8, Math.floor(dotAreaWidth / 12));
   const isMobile = windowWidth < 640;
 
-  const [hours, setHours] = useState(24);
+  const { range, setRange, queryString } = useTimeRange();
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [maxStorageDays, setMaxStorageDays] = useState(7);
   const [files, setFiles] = useState<HistoryFile[]>([]);
   const [service, setService] = useState<ServiceConfig | null>(null);
   const [selected, setSelected] = useState<HistoryFile | null>(null);
@@ -107,6 +112,10 @@ export default function History() {
       .then(r => r.json() as Promise<ServiceConfig[]>)
       .then(svcs => setService(svcs.find(s => s.name === name) ?? null))
       .catch(() => null);
+    fetch('/api/info')
+      .then(r => r.json() as Promise<{ maxStorageDays?: number }>)
+      .then(d => { if (d.maxStorageDays !== undefined) setMaxStorageDays(d.maxStorageDays); })
+      .catch(() => null);
   }, [name]);
 
   useEffect(() => {
@@ -123,7 +132,7 @@ export default function History() {
   const fetchHistory = useCallback(() => {
     setLoading(true);
     setError(null);
-    fetch(`/api/history/${encodeURIComponent(name)}?hours=${hours}`)
+    fetch(`/api/history/${encodeURIComponent(name)}?${queryString}`)
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json() as Promise<HistoryFile[]>;
@@ -131,7 +140,7 @@ export default function History() {
       .then(d => setFiles(d))
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false));
-  }, [name, hours]);
+  }, [name, queryString]);
 
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
 
@@ -367,9 +376,18 @@ export default function History() {
                 Run Test
               </Button>
             )}
-            <Select value={String(hours)} onValueChange={v => setHours(Number(v))}>
+            <Select
+              value={range.mode === 'dateRange' ? 'range' : String(range.hours)}
+              onValueChange={v => {
+                if (v === 'range') { setDatePickerOpen(true); }
+                else setRange({ mode: 'hours', hours: Number(v) });
+              }}
+            >
               <SelectTrigger className="w-36 h-8 text-xs">
-                <SelectValue />
+                {range.mode === 'dateRange'
+                  ? <span className="truncate">{fmtDateRange(range.fromDate, range.untilDate)}</span>
+                  : <SelectValue />
+                }
               </SelectTrigger>
               <SelectContent>
                 {HOUR_OPTIONS.map(o => (
@@ -438,9 +456,18 @@ export default function History() {
                 </div>
               )}
               <div className="flex items-center gap-2">
-                <Select value={String(hours)} onValueChange={v => setHours(Number(v))}>
+                <Select
+                  value={range.mode === 'dateRange' ? 'range' : String(range.hours)}
+                  onValueChange={v => {
+                    if (v === 'range') { setDatePickerOpen(true); setMenuOpen(false); }
+                    else setRange({ mode: 'hours', hours: Number(v) });
+                  }}
+                >
                   <SelectTrigger className="flex-1 h-9 text-xs">
-                    <SelectValue />
+                    {range.mode === 'dateRange'
+                      ? <span className="truncate">{fmtDateRange(range.fromDate, range.untilDate)}</span>
+                      : <SelectValue />
+                    }
                   </SelectTrigger>
                   <SelectContent>
                     {HOUR_OPTIONS.map(o => (
@@ -472,6 +499,15 @@ export default function History() {
           </div>
         )}
       </header>
+
+      <DateRangePicker
+        open={datePickerOpen}
+        onClose={() => setDatePickerOpen(false)}
+        onApply={(from, until) => setRange({ mode: 'dateRange', fromDate: from, untilDate: until })}
+        fromDate={range.mode === 'dateRange' ? range.fromDate : new Date(Date.now() - 86400000).toISOString().slice(0, 10)}
+        untilDate={range.mode === 'dateRange' ? range.untilDate : new Date().toISOString().slice(0, 10)}
+        maxStorageDays={maxStorageDays}
+      />
 
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
         {error && (
