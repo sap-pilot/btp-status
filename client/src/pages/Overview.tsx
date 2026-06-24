@@ -322,7 +322,7 @@ export default function Overview() {
               </button>
             )}
             <Select
-              value={range.mode === 'dateRange' ? 'range' : String(range.hours)}
+              value={range.mode === 'dateRange' ? '' : String(range.hours)}
               onValueChange={v => {
                 if (v === 'range') { setDatePickerOpen(true); }
                 else setRange({ mode: 'hours', hours: Number(v) });
@@ -379,7 +379,7 @@ export default function Overview() {
               </div>
               <div className="flex items-center gap-2">
                 <Select
-                  value={range.mode === 'dateRange' ? 'range' : String(range.hours)}
+                  value={range.mode === 'dateRange' ? '' : String(range.hours)}
                   onValueChange={v => {
                     if (v === 'range') { setDatePickerOpen(true); setMenuOpen(false); }
                     else setRange({ mode: 'hours', hours: Number(v) });

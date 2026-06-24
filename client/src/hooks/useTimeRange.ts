@@ -27,10 +27,16 @@ export function useTimeRange() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* ignore */ }
   }
 
-  const queryString =
-    range.mode === 'hours'
-      ? `hours=${range.hours}`
-      : `from=${range.fromDate}&until=${range.untilDate}`;
+  // Compute query string. For date range, use local midnight/end-of-day so the
+  // server query aligns with the timestamps the user sees in the history table.
+  const queryString = (() => {
+    if (range.mode === 'hours') return `hours=${range.hours}`;
+    const [fy, fm, fd] = range.fromDate.split('-').map(Number);
+    const [uy, um, ud] = range.untilDate.split('-').map(Number);
+    const fromMs = new Date(fy, fm - 1, fd, 0, 0, 0, 0).getTime();
+    const untilMs = new Date(uy, um - 1, ud, 23, 59, 59, 999).getTime();
+    return `fromMs=${fromMs}&untilMs=${untilMs}`;
+  })();
 
   return { range, setRange, queryString };
 }

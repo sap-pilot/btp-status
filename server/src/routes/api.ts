@@ -17,17 +17,15 @@ import type { EvaluationMode, ServiceWithHistory } from '../types/index.js';
 
 const VALID_EVAL_MODES = new Set<string>(['condition', 'alwaysok', 'alwayserror']);
 
-/** Parse ?hours=N or ?from=YYYY-MM-DD&until=YYYY-MM-DD into a listResponseFiles range. */
+/** Parse ?hours=N or ?fromMs=N&untilMs=N into a listResponseFiles range. */
 function parseTimeRangeQuery(
   query: Record<string, unknown>,
 ): { hours: number } | { fromMs: number; untilMs: number } {
-  const from = query['from'];
-  const until = query['until'];
-  if (typeof from === 'string' && typeof until === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(from) && /^\d{4}-\d{2}-\d{2}$/.test(until)) {
-    const [fy, fm, fd] = from.split('-').map(Number);
-    const [uy, um, ud] = until.split('-').map(Number);
-    const fromMs = Date.UTC(fy, fm - 1, fd, 0, 0, 0, 0);
-    const untilMs = Date.UTC(uy, um - 1, ud, 23, 59, 59, 999);
+  const rawFrom = query['fromMs'];
+  const rawUntil = query['untilMs'];
+  if (typeof rawFrom === 'string' && typeof rawUntil === 'string') {
+    const fromMs = parseInt(rawFrom, 10);
+    const untilMs = parseInt(rawUntil, 10);
     if (!isNaN(fromMs) && !isNaN(untilMs) && fromMs <= untilMs) {
       return { fromMs, untilMs };
     }
