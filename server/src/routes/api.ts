@@ -10,7 +10,7 @@ import { getService } from '../services/configService.js';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { getCity } from '../services/geoService.js';
-import { getXsuaaConfig, readSessionFromRequest } from '../services/authService.js';
+import { getXsuaaConfig, readSessionFromRequest, userLabel } from '../services/authService.js';
 import { requireAuth, requireAdmin } from '../middleware/requireAuth.js';
 import type { AuthRequest } from '../middleware/requireAuth.js';
 import type { EvaluationMode, ServiceWithHistory } from '../types/index.js';
@@ -25,7 +25,7 @@ router.get('/services', (_req, res) => {
 
 router.get('/check/:name', requireAuth, async (req, res, next) => {
   const name = req.params['name'] as string;
-  const user = (req as AuthRequest).authSession?.sub ?? 'anon';
+  const user = (req as AuthRequest).authSession ? userLabel((req as AuthRequest).authSession!) : 'anon';
   logger.info({ service: name, from: req.ip, user }, 'Manual test triggered');
   try {
     const result = await checkService(name);
@@ -85,7 +85,7 @@ router.get('/me', (req, res) => {
   if (!x) { res.json({ enabled: false }); return; }
   const session = readSessionFromRequest(req.headers.cookie ?? '', x.clientsecret);
   if (!session) { res.json({ enabled: true, loggedIn: false }); return; }
-  res.json({ enabled: true, loggedIn: true, firstName: session.firstName, isAdmin: session.isAdmin });
+  res.json({ enabled: true, loggedIn: true, firstName: session.firstName, initials: session.initials, isAdmin: session.isAdmin });
 });
 
 router.get('/eval-mode/:name', (req, res) => {
@@ -94,7 +94,7 @@ router.get('/eval-mode/:name', (req, res) => {
 
 router.post('/eval-mode/:name', requireAdmin, (req, res) => {
   const svcName = req.params['name'] as string;
-  const user = (req as AuthRequest).authSession?.sub ?? 'anon';
+  const user = (req as AuthRequest).authSession ? userLabel((req as AuthRequest).authSession!) : 'anon';
   const mode = (req.body as { mode?: string })?.mode;
   if (!mode || !VALID_EVAL_MODES.has(mode)) {
     res.status(400).json({ error: 'mode must be condition, alwaysok, or alwayserror' });
@@ -118,7 +118,7 @@ router.get('/schedule/:name', (req, res) => {
 
 router.post('/schedule/:name', requireAdmin, (req, res) => {
   const name = req.params['name'] as string;
-  const user = (req as AuthRequest).authSession?.sub ?? 'anon';
+  const user = (req as AuthRequest).authSession ? userLabel((req as AuthRequest).authSession!) : 'anon';
   const { intervalSeconds } = req.body as { intervalSeconds?: unknown };
   if (typeof intervalSeconds !== 'number' || !Number.isInteger(intervalSeconds) || intervalSeconds < 0) {
     res.status(400).json({ error: 'intervalSeconds must be a non-negative integer' });
@@ -136,7 +136,7 @@ router.post('/sync', requireAuth, async (req, res, next) => {
     return;
   }
   try {
-    const user = (req as AuthRequest).authSession?.sub ?? 'anon';
+    const user = (req as AuthRequest).authSession ? userLabel((req as AuthRequest).authSession!) : 'anon';
     logger.info({ from: req.ip, user }, 'On-demand sync triggered');
     const stats = await syncFromRemote(config.SYNC_REMOTE);
     res.json({ ok: !stats.error, ...stats });

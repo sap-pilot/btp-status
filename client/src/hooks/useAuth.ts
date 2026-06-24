@@ -4,6 +4,7 @@ export interface AuthState {
   enabled: boolean;
   loggedIn: boolean;
   firstName: string;
+  initials: string;
   isAdmin: boolean;
 }
 
@@ -11,15 +12,16 @@ interface MeResponse {
   enabled?: boolean;
   loggedIn?: boolean;
   firstName?: string;
+  initials?: string;
   isAdmin?: boolean;
 }
 
 interface AuthMessage {
   type: 'login' | 'logout' | 'login-error';
-  user?: { firstName: string; isAdmin: boolean };
+  user?: { firstName: string; initials: string; isAdmin: boolean };
 }
 
-const INITIAL: AuthState = { enabled: false, loggedIn: false, firstName: '', isAdmin: false };
+const INITIAL: AuthState = { enabled: false, loggedIn: false, firstName: '', initials: '', isAdmin: false };
 
 function fetchMe(): Promise<MeResponse> {
   return fetch('/api/me').then(r => r.json() as Promise<MeResponse>);
@@ -36,14 +38,14 @@ export function useAuth() {
 
   useEffect(() => {
     fetchMe()
-      .then(d => setAuth({ enabled: d.enabled ?? false, loggedIn: d.loggedIn ?? false, firstName: d.firstName ?? '', isAdmin: d.isAdmin ?? false }))
+      .then(d => setAuth({ enabled: d.enabled ?? false, loggedIn: d.loggedIn ?? false, firstName: d.firstName ?? '', initials: d.initials ?? '', isAdmin: d.isAdmin ?? false }))
       .catch(() => null);
 
     function onMessage(e: MessageEvent) {
       if (e.origin !== window.location.origin) return;
       const msg = e.data as AuthMessage;
       if (msg.type === 'login' && msg.user) {
-        setAuth(a => ({ ...a, loggedIn: true, firstName: msg.user!.firstName, isAdmin: msg.user!.isAdmin }));
+        setAuth(a => ({ ...a, loggedIn: true, firstName: msg.user!.firstName, initials: msg.user!.initials, isAdmin: msg.user!.isAdmin }));
         popupRef.current = null;
       } else if (msg.type === 'logout') {
         setAuth(a => ({ ...a, loggedIn: false, firstName: '', isAdmin: false }));
@@ -66,7 +68,7 @@ export function useAuth() {
       watchPopup(w, () => {
         if (popupRef.current === w) popupRef.current = null;
         fetchMe()
-          .then(d => setAuth({ enabled: d.enabled ?? false, loggedIn: d.loggedIn ?? false, firstName: d.firstName ?? '', isAdmin: d.isAdmin ?? false }))
+          .then(d => setAuth({ enabled: d.enabled ?? false, loggedIn: d.loggedIn ?? false, firstName: d.firstName ?? '', initials: d.initials ?? '', isAdmin: d.isAdmin ?? false }))
           .catch(() => null);
       });
     }

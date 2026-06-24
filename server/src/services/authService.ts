@@ -1,6 +1,7 @@
 import { createHmac, createVerify, timingSafeEqual } from 'node:crypto';
 import { request as httpsRequest } from 'node:https';
 import { request as httpRequest } from 'node:http';
+import { logger } from '../logger.js';
 
 export interface XsuaaConfig {
   url: string;
@@ -12,9 +13,21 @@ export interface XsuaaConfig {
 
 export interface SessionPayload {
   firstName: string;
+  userName: string;
+  email: string;
+  initials: string;
+  origin: string;
   isAdmin: boolean;
   sub: string;
   exp: number;
+}
+
+/** Returns "userName <email> (origin)" with parts omitted when absent or redundant. */
+export function userLabel(s: SessionPayload): string {
+  const parts: string[] = [s.userName];
+  if (s.email && s.email !== s.userName) parts.push(`<${s.email}>`);
+  if (s.origin) parts.push(`(${s.origin})`);
+  return parts.join(' ');
 }
 
 // Cache after first parse so we don't re-parse VCAP on every request
@@ -99,16 +112,35 @@ export async function exchangeCode(code: string, callbackBase: string): Promise<
   const claims = verifyJwt(accessToken, x.verificationkey);
 
   const givenName = claims.given_name as string | undefined;
+  const familyName = claims.family_name as string | undefined;
   const email = claims.email as string | undefined;
-  const userName = claims.user_name as string | undefined;
-  const firstName = givenName ?? email?.split('@')[0] ?? userName ?? 'User';
+  const userNameClaim = claims.user_name as string | undefined;
+  const firstName = givenName ?? email?.split('@')[0] ?? userNameClaim ?? 'User';
+  const userName = (userNameClaim ?? email ?? '') as string;
+  const origin = (claims.origin as string | undefined) ?? '';
+
+  // Build full name for initials: prefer display name claim, fall back to given+family
+  const joinedName = [givenName, familyName].filter(Boolean).join(' ');
+  const fullName = (claims.name as string | undefined) ?? (joinedName || firstName);
+  const initials = fullName.trim().split(/\s+/).map(w => (w[0] ?? '').toUpperCase()).join('').slice(0, 2) || '?';
 
   const scopes = (claims.scope as string[] | string | undefined);
   const scopeList = Array.isArray(scopes) ? scopes : typeof scopes === 'string' ? scopes.split(' ') : [];
-  const isAdmin = scopeList.some(s => s === `${x.xsappname}.admin`);
+  // Match both 'btp-status.admin' and 'btp-status!t12345.admin' (tenant suffix added by XSUAA at runtime)
+  const appBase = x.xsappname.split('!')[0];
+  const isAdmin = scopeList.some(s => {
+    if (!s.endsWith('.admin')) return false;
+    const pfx = s.slice(0, -6);
+    return pfx === x.xsappname || pfx === appBase || pfx.startsWith(`${appBase}!`);
+  });
+  logger.debug({ xsappname: x.xsappname, scopes: scopeList, isAdmin }, 'JWT scope check');
 
   return {
     firstName,
+    userName,
+    email: email ?? '',
+    initials,
+    origin,
     isAdmin,
     sub: (claims.sub as string | undefined) ?? '',
     exp: (claims.exp as number | undefined) ?? Math.floor(Date.now() / 1000) + 86400,
