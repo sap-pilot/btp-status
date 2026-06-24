@@ -10,6 +10,9 @@ import { getService } from '../services/configService.js';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { getCity } from '../services/geoService.js';
+import { getXsuaaConfig, readSessionFromRequest } from '../services/authService.js';
+import { requireAuth, requireAdmin } from '../middleware/requireAuth.js';
+import type { AuthRequest } from '../middleware/requireAuth.js';
 import type { EvaluationMode, ServiceWithHistory } from '../types/index.js';
 
 const VALID_EVAL_MODES = new Set<string>(['condition', 'alwaysok', 'alwayserror']);
@@ -20,9 +23,10 @@ router.get('/services', (_req, res) => {
   res.json(getAllServices());
 });
 
-router.get('/check/:name', async (req, res, next) => {
-  const { name } = req.params;
-  logger.info({ service: name, from: req.ip }, 'Manual test triggered');
+router.get('/check/:name', requireAuth, async (req, res, next) => {
+  const name = req.params['name'] as string;
+  const user = (req as AuthRequest).authSession?.sub ?? 'anon';
+  logger.info({ service: name, from: req.ip, user }, 'Manual test triggered');
   try {
     const result = await checkService(name);
     res.json(result);
@@ -76,18 +80,28 @@ router.get('/info', (_req, res) => {
   res.json({ syncRemote: !!config.SYNC_REMOTE, city: getCity(), sites: getSites() });
 });
 
+router.get('/me', (req, res) => {
+  const x = getXsuaaConfig();
+  if (!x) { res.json({ enabled: false }); return; }
+  const session = readSessionFromRequest(req.headers.cookie ?? '', x.clientsecret);
+  if (!session) { res.json({ enabled: true, loggedIn: false }); return; }
+  res.json({ enabled: true, loggedIn: true, firstName: session.firstName, isAdmin: session.isAdmin });
+});
+
 router.get('/eval-mode/:name', (req, res) => {
   res.json({ mode: getEvaluationMode(req.params.name) });
 });
 
-router.post('/eval-mode/:name', (req, res) => {
+router.post('/eval-mode/:name', requireAdmin, (req, res) => {
+  const svcName = req.params['name'] as string;
+  const user = (req as AuthRequest).authSession?.sub ?? 'anon';
   const mode = (req.body as { mode?: string })?.mode;
   if (!mode || !VALID_EVAL_MODES.has(mode)) {
     res.status(400).json({ error: 'mode must be condition, alwaysok, or alwayserror' });
     return;
   }
-  setEvaluationMode(req.params.name, mode as EvaluationMode);
-  logger.info({ service: req.params.name, mode }, 'Evaluation mode updated');
+  setEvaluationMode(svcName, mode as EvaluationMode);
+  logger.info({ service: svcName, mode, user }, 'Evaluation mode updated');
   res.json({ ok: true, mode });
 });
 
@@ -102,8 +116,9 @@ router.get('/schedule/:name', (req, res) => {
   res.json({ intervalSeconds: svc?.interval ?? 0 });
 });
 
-router.post('/schedule/:name', (req, res) => {
-  const name = req.params.name;
+router.post('/schedule/:name', requireAdmin, (req, res) => {
+  const name = req.params['name'] as string;
+  const user = (req as AuthRequest).authSession?.sub ?? 'anon';
   const { intervalSeconds } = req.body as { intervalSeconds?: unknown };
   if (typeof intervalSeconds !== 'number' || !Number.isInteger(intervalSeconds) || intervalSeconds < 0) {
     res.status(400).json({ error: 'intervalSeconds must be a non-negative integer' });
@@ -111,17 +126,18 @@ router.post('/schedule/:name', (req, res) => {
   }
   setIntervalOverride(name, intervalSeconds);
   rescheduleService(name, intervalSeconds);
-  logger.info({ service: name, intervalSeconds }, 'Schedule updated');
+  logger.info({ service: name, intervalSeconds, user }, 'Schedule updated');
   res.json({ ok: true, intervalSeconds });
 });
 
-router.post('/sync', async (req, res, next) => {
+router.post('/sync', requireAuth, async (req, res, next) => {
   if (!config.SYNC_REMOTE) {
     res.status(400).json({ ok: false, reason: 'SYNC_REMOTE not configured' });
     return;
   }
   try {
-    logger.info({ from: req.ip }, 'On-demand sync triggered');
+    const user = (req as AuthRequest).authSession?.sub ?? 'anon';
+    logger.info({ from: req.ip, user }, 'On-demand sync triggered');
     const stats = await syncFromRemote(config.SYNC_REMOTE);
     res.json({ ok: !stats.error, ...stats });
   } catch (err) {

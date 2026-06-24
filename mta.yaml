@@ -28,5 +28,15 @@ modules:
         - response/
     properties:
       CONFIG_FILE: ./config.json
+    requires:
+      - name: btp-status-xsuaa
 
-resources: []
+resources:
+  - name: btp-status-xsuaa
+    type: org.cloudfoundry.managed-service
+    parameters:
+      config:
+        xsappname: btp-status
+      path: ./xs-security.json
+      service: xsuaa
+      service-plan: application

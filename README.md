@@ -266,6 +266,84 @@ GET https://<your-app>/health/<service-name>
 - Returns `200 OK` (plain text) → endpoint is healthy
 - Returns `500` (plain text with failure details) → endpoint is unhealthy
 
+## Authentication and Authorization
+
+By default the app runs without authentication — all endpoints and admin controls are publicly accessible. When a **XSUAA** service binding is present (`VCAP_SERVICES` contains an `xsuaa` entry), the app switches into authenticated mode automatically.
+
+### How It Works
+
+Authentication follows the **OAuth2 Authorization Code flow** via a browser popup — no `@sap/approuter` dependency. Everything is implemented with `node:crypto` and the Node.js standard library.
+
+1. The user clicks the person icon (top-right of any page).
+2. A popup opens `/login`, which immediately redirects to the XSUAA authorize URL.
+3. After the user authenticates, XSUAA redirects to `/login/callback?code=…`.
+4. The server exchanges the code for a JWT, verifies the RS256 signature against the `verificationkey` from the XSUAA binding, and extracts `firstName`, `isAdmin`, `sub`, and `exp`.
+5. A signed session cookie (`btpauth`) is set: `base64url(JSON payload) + "." + HMAC-SHA256(payload, clientSecret)`.
+6. The popup posts `{ type: "login", user: { firstName, isAdmin } }` back to the main window via `window.opener.postMessage` and closes itself — no page reload required.
+
+Logout follows the same popup pattern: the server clears the cookie and posts `{ type: "logout" }`.
+
+### Session Cookie
+
+| Property | Value |
+|----------|-------|
+| Name | `btpauth` |
+| Signing | HMAC-SHA256 (key = XSUAA `clientsecret`); verified on every protected request using `timingSafeEqual` |
+| HttpOnly | Yes — not accessible from JavaScript |
+| Secure | Yes when running on BTP (`VCAP_APPLICATION` is present); omitted for local HTTP dev |
+| SameSite | Lax |
+| Max-Age | Derived from the JWT `exp` claim |
+
+### Admin Role
+
+The **BTP Status Admin** role collection grants write access to evaluation mode and schedule overrides. It is created automatically on first deploy (defined in `xs-security.json` via `role-collections`). To activate it:
+
+1. In BTP Cockpit → Security → Role Collections, find **BTP Status Admin** (auto-created by the deployment).
+2. Assign it to the relevant users or user groups.
+
+### Protected Routes
+
+| Route | Guard | Description |
+|-------|-------|-------------|
+| `GET /api/check/:name` | Auth required | Run health check (used by Test All / Run Test) |
+| `POST /api/sync` | Auth required | Trigger on-demand remote sync |
+| `POST /api/eval-mode/:name` | Admin required | Change evaluation mode |
+| `POST /api/schedule/:name` | Admin required | Change schedule override |
+
+All other routes (read-only data, static assets) are public regardless of auth state.
+
+### UI Behaviour
+
+| Auth State | Test All / Sync / Run Test | Eval Mode / Schedule selectors |
+|-----------|---------------------------|-------------------------------|
+| XSUAA not configured | Visible and active | Visible and active |
+| Logged out | Hidden | Hidden |
+| Logged in (no admin role) | Visible and active | Visible but disabled |
+| Logged in (admin role) | Visible and active | Visible and active |
+
+### BTP Setup
+
+Add an XSUAA resource to `mta.yaml` (already included) and `xs-security.json` (already included in the repo). On first deploy with the XSUAA resource, BTP provisions the service instance automatically.
+
+```yaml
+# mta.yaml — resources section
+resources:
+  - name: btp-status-xsuaa
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      path: ./xs-security.json
+      config:
+        xsappname: btp-status
+```
+
+After deployment, the `VCAP_SERVICES` environment variable injected by BTP will contain the XSUAA credentials, and the app will enable authentication automatically.
+
+### Local Development (No Auth)
+
+When `VCAP_SERVICES` is not set (local dev), all auth middleware passes through — no login is required and all controls remain fully active. This is the default for `npm run dev`.
+
 ## Response File Storage
 
 Each health check saves a file at:

@@ -27,6 +27,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ArrowLeft, AlertCircle, ExternalLink, Menu, PlayCircle, Sun, Moon, X } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useWindowWidth } from '@/hooks/useWindowWidth';
+import { useAuth } from '@/hooks/useAuth';
+import AuthButton from '@/components/AuthButton';
 
 const HOUR_OPTIONS = [
   { value: '1', label: 'Last 1 hour' },
@@ -69,6 +71,10 @@ export default function History() {
   const autoOpenHandled = useRef(false);
   const initialHash = useRef(location.hash.slice(1));
   const { theme, toggleTheme } = useTheme();
+  const auth = useAuth();
+  const adminTooltip = auth.enabled && auth.loggedIn && !auth.isAdmin
+    ? 'Condition and schedule change are available for BTP_Status_Admin only; Contact security to get this role collection assigned to enable them'
+    : undefined;
   const windowWidth = useWindowWidth();
   const dotAreaWidth = Math.min(windowWidth, 1024) - 140;
   const maxDots = Math.max(8, Math.floor(dotAreaWidth / 12));
@@ -307,45 +313,59 @@ export default function History() {
           </div>
           {/* Desktop controls */}
           <div className="hidden sm:flex items-center gap-2">
-            {/* Evaluation Mode selector */}
-            <Select value={evalMode} onValueChange={handleEvalModeChange}>
-              <SelectTrigger className={`h-8 text-xs w-36 ${evalTriggerClass(evalMode)}`}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="condition" className="text-xs">Condition Based</SelectItem>
-                <SelectItem value="alwaysok" className="text-xs text-emerald-400">Always OK</SelectItem>
-                <SelectItem value="alwayserror" className="text-xs text-red-400">Always Error</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Evaluation Mode selector — hidden when XSUAA enabled + not logged in; disabled when logged in but not admin */}
+            {(!auth.enabled || auth.loggedIn) && (
+              <span title={adminTooltip}>
+                <Select
+                  value={evalMode}
+                  onValueChange={handleEvalModeChange}
+                  disabled={auth.enabled && auth.loggedIn && !auth.isAdmin}
+                >
+                  <SelectTrigger className={`h-8 text-xs w-36 ${evalTriggerClass(evalMode)}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="condition" className="text-xs">Condition Based</SelectItem>
+                    <SelectItem value="alwaysok" className="text-xs text-emerald-400">Always OK</SelectItem>
+                    <SelectItem value="alwayserror" className="text-xs text-red-400">Always Error</SelectItem>
+                  </SelectContent>
+                </Select>
+              </span>
+            )}
 
-            {/* Schedule selector */}
-            <Select
-              value={scheduleValue}
-              onValueChange={v => void applySchedule(Number(v))}
-              disabled={scheduleInterval === null}
-            >
-              <SelectTrigger className="h-8 text-xs w-36">
-                <SelectValue placeholder="Schedule…" />
-              </SelectTrigger>
-              <SelectContent>
-                {scheduleOptions.map(o => (
-                  <SelectItem key={o.value} value={o.value} className="text-xs">
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Schedule selector — hidden when XSUAA enabled + not logged in; disabled when logged in but not admin */}
+            {(!auth.enabled || auth.loggedIn) && (
+              <span title={adminTooltip}>
+                <Select
+                  value={scheduleValue}
+                  onValueChange={v => void applySchedule(Number(v))}
+                  disabled={scheduleInterval === null || (auth.enabled && auth.loggedIn && !auth.isAdmin)}
+                >
+                  <SelectTrigger className="h-8 text-xs w-36">
+                    <SelectValue placeholder="Schedule…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {scheduleOptions.map(o => (
+                      <SelectItem key={o.value} value={o.value} className="text-xs">
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </span>
+            )}
 
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 gap-1.5 text-xs"
-              onClick={() => setTestOpen(true)}
-            >
-              <PlayCircle className="h-3.5 w-3.5" />
-              Run Test
-            </Button>
+            {(!auth.enabled || auth.loggedIn) && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5 text-xs"
+                onClick={() => setTestOpen(true)}
+              >
+                <PlayCircle className="h-3.5 w-3.5" />
+                Run Test
+              </Button>
+            )}
             <Select value={String(hours)} onValueChange={v => setHours(Number(v))}>
               <SelectTrigger className="w-36 h-8 text-xs">
                 <SelectValue />
@@ -365,6 +385,7 @@ export default function History() {
             >
               {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
             </button>
+            <AuthButton auth={auth} />
           </div>
           {/* Mobile hamburger */}
           <button
@@ -379,32 +400,42 @@ export default function History() {
         {menuOpen && (
           <div className="sm:hidden border-t border-border bg-background">
             <div className="max-w-5xl mx-auto px-4 py-3 space-y-3">
-              <div className="grid grid-cols-2 gap-2">
-                <Select value={evalMode} onValueChange={handleEvalModeChange}>
-                  <SelectTrigger className={`h-9 text-xs ${evalTriggerClass(evalMode)}`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="condition" className="text-xs">Condition Based</SelectItem>
-                    <SelectItem value="alwaysok" className="text-xs text-emerald-400">Always OK</SelectItem>
-                    <SelectItem value="alwayserror" className="text-xs text-red-400">Always Error</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={scheduleValue}
-                  onValueChange={v => void applySchedule(Number(v))}
-                  disabled={scheduleInterval === null}
-                >
-                  <SelectTrigger className="h-9 text-xs">
-                    <SelectValue placeholder="Schedule…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {scheduleOptions.map(o => (
-                      <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {(!auth.enabled || auth.loggedIn) && (
+                <div className="grid grid-cols-2 gap-2">
+                  <span title={adminTooltip}>
+                    <Select
+                      value={evalMode}
+                      onValueChange={handleEvalModeChange}
+                      disabled={auth.enabled && auth.loggedIn && !auth.isAdmin}
+                    >
+                      <SelectTrigger className={`h-9 text-xs w-full ${evalTriggerClass(evalMode)}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="condition" className="text-xs">Condition Based</SelectItem>
+                        <SelectItem value="alwaysok" className="text-xs text-emerald-400">Always OK</SelectItem>
+                        <SelectItem value="alwayserror" className="text-xs text-red-400">Always Error</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </span>
+                  <span title={adminTooltip}>
+                    <Select
+                      value={scheduleValue}
+                      onValueChange={v => void applySchedule(Number(v))}
+                      disabled={scheduleInterval === null || (auth.enabled && auth.loggedIn && !auth.isAdmin)}
+                    >
+                      <SelectTrigger className="h-9 text-xs w-full">
+                        <SelectValue placeholder="Schedule…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {scheduleOptions.map(o => (
+                          <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </span>
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <Select value={String(hours)} onValueChange={v => setHours(Number(v))}>
                   <SelectTrigger className="flex-1 h-9 text-xs">
@@ -416,15 +447,17 @@ export default function History() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-9 gap-1.5 text-xs"
-                  onClick={() => { setTestOpen(true); setMenuOpen(false); }}
-                >
-                  <PlayCircle className="h-3.5 w-3.5" />
-                  Run Test
-                </Button>
+                {(!auth.enabled || auth.loggedIn) && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-9 gap-1.5 text-xs"
+                    onClick={() => { setTestOpen(true); setMenuOpen(false); }}
+                  >
+                    <PlayCircle className="h-3.5 w-3.5" />
+                    Run Test
+                  </Button>
+                )}
                 <button
                   onClick={toggleTheme}
                   className="text-muted-foreground hover:text-foreground"
@@ -432,6 +465,7 @@ export default function History() {
                 >
                   {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
                 </button>
+                <AuthButton auth={auth} />
               </div>
             </div>
           </div>

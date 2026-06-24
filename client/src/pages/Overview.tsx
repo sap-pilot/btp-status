@@ -12,6 +12,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { AlertCircle, ChevronDown, Menu, RefreshCw, Sun, Moon, ExternalLink, X, Zap } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useWindowWidth } from '@/hooks/useWindowWidth';
+import { useAuth } from '@/hooks/useAuth';
+import AuthButton from '@/components/AuthButton';
 
 const HOUR_OPTIONS = [
   { value: '1', label: 'Last 1 hour' },
@@ -60,6 +62,7 @@ function getUptimePct(history: HistoryFile[]): number {
 export default function Overview() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
+  const auth = useAuth();
   const windowWidth = useWindowWidth();
   // max-w-7xl (1280px) page with px-4 (32px) → page content width
   // table-fixed: service col w-56 (224px) + stats col w-40 (160px) + 3×px-4 cells (96px)
@@ -289,16 +292,18 @@ export default function Overview() {
             >
               {healthyServices}/{totalServices} healthy
             </Badge>
-            <button
-              onClick={() => void runAllTests()}
-              disabled={testingAll || data.length === 0}
-              className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 text-xs"
-              title="Run health checks for all services"
-            >
-              <Zap className={`h-4 w-4 ${testingAll ? 'animate-pulse text-yellow-400' : ''}`} />
-              {testingAll ? 'Running…' : 'Test all'}
-            </button>
-            {syncAvailable && (
+            {(!auth.enabled || auth.loggedIn) && (
+              <button
+                onClick={() => void runAllTests()}
+                disabled={testingAll || data.length === 0}
+                className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 text-xs"
+                title="Run health checks for all services"
+              >
+                <Zap className={`h-4 w-4 ${testingAll ? 'animate-pulse text-yellow-400' : ''}`} />
+                {testingAll ? 'Running…' : 'Test all'}
+              </button>
+            )}
+            {syncAvailable && (!auth.enabled || auth.loggedIn) && (
               <button
                 onClick={() => void runSync()}
                 disabled={syncing}
@@ -328,6 +333,7 @@ export default function Overview() {
             >
               {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
             </button>
+            <AuthButton auth={auth} />
           </div>
           {/* Mobile hamburger */}
           <button
@@ -366,16 +372,18 @@ export default function Overview() {
                     ))}
                   </SelectContent>
                 </Select>
-                <button
-                  onClick={() => void runAllTests()}
-                  disabled={testingAll || data.length === 0}
-                  className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 text-xs"
-                  title="Run health checks for all services"
-                >
-                  <Zap className={`h-4 w-4 ${testingAll ? 'animate-pulse text-yellow-400' : ''}`} />
-                  {testingAll ? 'Running…' : 'Test all'}
-                </button>
-                {syncAvailable && (
+                {(!auth.enabled || auth.loggedIn) && (
+                  <button
+                    onClick={() => void runAllTests()}
+                    disabled={testingAll || data.length === 0}
+                    className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 text-xs"
+                    title="Run health checks for all services"
+                  >
+                    <Zap className={`h-4 w-4 ${testingAll ? 'animate-pulse text-yellow-400' : ''}`} />
+                    {testingAll ? 'Running…' : 'Test all'}
+                  </button>
+                )}
+                {syncAvailable && (!auth.enabled || auth.loggedIn) && (
                   <button
                     onClick={() => void runSync()}
                     disabled={syncing}
@@ -393,6 +401,7 @@ export default function Overview() {
                 >
                   {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
                 </button>
+                <AuthButton auth={auth} />
               </div>
             </div>
           </div>

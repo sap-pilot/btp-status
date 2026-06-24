@@ -1,0 +1,53 @@
+{
+	"xsappname": "btp-status",
+	"tenant-mode": "dedicated",
+	"description": "File-backed status page and health checker for SAP BTP services",
+	"scopes": [
+		{
+			"name": "$XSAPPNAME.admin",
+			"description": "Grants admin privileges: change evaluation mode and schedule overrides, trigger tests and on-demand sync"
+		}
+	],
+	"role-templates": [
+		{
+			"name": "BTP_Status_Admin",
+			"description": "Admin access to BTP Status — evaluation mode, schedule overrides, Run Test and Sync",
+			"scope-references": [
+				"$XSAPPNAME.admin"
+			]
+		}
+	],
+	"role-collections": [
+		{
+			"name": "BTP Status Admin",
+			"description": "Assign to users who need admin access to BTP Status",
+			"role-template-references": [
+				"$XSAPPNAME.BTP_Status_Admin"
+			]
+		}
+	],
+	"oauth2-configuration": {
+		"token-validity": 86400,
+		"redirect-uris": [
+			"https://*.cfapps.us10*.hana.ondemand.com/**",
+			"https://*.cfapps.us20.hana.ondemand.com/**",
+			"https://*.cfapps.us30.hana.ondemand.com/**",
+			"https://*.cfapps.eu10*.hana.ondemand.com/**",
+			"https://*.cfapps.eu20.hana.ondemand.com/**",
+			"https://*.cfapps.ap10.hana.ondemand.com/**",
+			"https://*.cfapps.ap20.hana.ondemand.com/**",
+			"https://*.cfapps.ap21.hana.ondemand.com/**",
+			"https://*.cfapps.jp10.hana.ondemand.com/**",
+			"https://*.cfapps.jp20.hana.ondemand.com/**",
+			"https://*.cfapps.ca10.hana.ondemand.com/**",
+			"https://*.cfapps.br10.hana.ondemand.com/**",
+			"https://*.cfapps.au10.hana.ondemand.com/**",
+			"http://localhost:3000/**"
+		],
+		"refresh-token-validity": 604800,
+		"system-attributes": [
+			"groups",
+			"rolecollections"
+		]
+	}
+}

@@ -3,8 +3,22 @@
 ## [v0.8.0] - 2026-06-23
 
 ### Added
+- **XSUAA login/logout** — OAuth2 Authorization Code flow without `@sap/approuter` dependency; when `VCAP_SERVICES` exposes an `xsuaa` binding the app enters authenticated mode; login and logout are handled via a browser popup (`/login` → XSUAA → `/login/callback`); the callback exchanges the code for a JWT, verifies it with RS256 against the `verificationkey` from the binding, extracts `firstName`/`isAdmin`/`sub`/`exp`, and sets an httpOnly signed cookie (`btpauth`) using HMAC-SHA256 over the session payload with `clientsecret` as the key; all verification uses `node:crypto` with `timingSafeEqual` for HMAC comparison; the popup notifies the main window via `postMessage` so the UI updates without a page reload
+- **Route-level auth guards** — `requireAuth` middleware protects `GET /api/check/:name` (Run Test) and `POST /api/sync`; `requireAdmin` protects `POST /api/eval-mode/:name` and `POST /api/schedule/:name`; all guards pass through (no-op) when XSUAA is not configured so local dev works unchanged
+- **Person icon in the header** — empty `User` icon (click to log in) when not authenticated; filled `CircleUser` icon with a dropdown showing `Welcome, {firstName}` and a Log out item when authenticated; appears next to the moon/sun icon on both the Overview and Service detail pages
+- **Auth-conditional UI** — Test All / Sync / Run Test buttons are hidden when XSUAA is enabled but the user is not logged in; Evaluation Mode and Schedule selectors remain visible but are disabled when the user is logged in without the admin scope (`{xsappname}.admin`); all controls revert to fully active when XSUAA is not configured
+- `GET /api/me` — returns `{ enabled, loggedIn, firstName, isAdmin }` for session hydration on page load; `enabled: false` when no XSUAA binding is present
+- `GET /login`, `GET /login/callback`, `GET /logout`, `GET /logout/callback` — auth flow endpoints; `/logout` clears the local session cookie then redirects the popup through `{xsuaa.url}/logout` to terminate the XSUAA session before `GET /logout/callback` notifies the opener and closes
 - **Site switcher** — when `config.json` includes a top-level `sites` array (each entry has `name` and `url`), a compact dropdown appears in the Overview header next to the app title; the current site is auto-detected by comparing `window.location.origin` against each configured URL's origin; selecting a different site navigates via `window.location.replace()` so no extra browser history entry is added; the dropdown is hidden when fewer than 2 sites are configured
 - **Page title sync** — `document.title` is kept in sync with the app title (e.g. `BTP Status (Ashburn)`); the city suffix is derived from the server's geo-resolved location and is reflected in both the `<h1>` and the browser tab title
+- `POST /api/batch-download` — accepts `{ paths: string[] }` (max 500 entries, each `folder/filename`); reads each file from `RESPONSE_DIR`, packages them into an in-memory ZIP archive (STORE method), and returns `application/zip`; missing or pruned files are silently skipped; path traversal is rejected with `400`
+- `SYNC_REMOTE_BATCH_SIZE` env var — controls how many files are requested per batch-download call (default `50`, minimum `1`)
+
+### Fixed
+- **Admin scope check** — admin detection now checks `{xsappname}.admin` against the JWT `scope` claim; `xsappname` from VCAP_SERVICES credentials includes the XSUAA tenant suffix (e.g. `btp-status!t12345`) and matches the actual scope string emitted by XSUAA; users assigned the `BTP Status Admin` role collection will now correctly have Evaluation Mode and Schedule selectors enabled
+- **XSUAA logout** — `/logout` now redirects the popup through `{xsuaa.url}/logout` to terminate the XSUAA session before completing; previously only the local `btpauth` cookie was cleared, leaving the XSUAA session alive so the next login would skip the credentials screen
+- **Auth popup fallback** — `useAuth` now polls for popup close; if `postMessage` is not received (cross-origin redirect through XSUAA can drop `window.opener`), login re-fetches `/api/me` to hydrate state and logout forces the logged-out state; this ensures the UI updates correctly in all browser environments
+- **Login/logout audit logging** — successful login logs `sub`, `firstName`, `isAdmin` at INFO; logout logs `sub` and `firstName`; all write operations on protected routes (`/api/check/:name`, `/api/eval-mode/:name`, `/api/schedule/:name`, `/api/sync`) now include the caller's `user` (XSUAA `sub`) in the log entry
 
 ### Changed
 - App title renamed from **BTP Service Status** to **BTP Status** in `client/index.html`
@@ -14,10 +28,6 @@
 
 ### Performance
 - **Initial JS bundle reduced by ~63%** (481 kB → 165 kB minified; 147 kB → 55 kB gzip) — both pages are now lazy-loaded at the router level (`React.lazy`), and `LandscapeDiagram` (and therefore all of Mermaid, including its heaviest dependencies: mermaid core 593 kB, cytoscape 435 kB, katex 258 kB) is deferred until the user opens a landscape tab for the first time; diagram chunks remain code-split and are fetched on demand as before
-
-### Added (server API)
-- `POST /api/batch-download` — accepts `{ paths: string[] }` (max 500 entries, each `folder/filename`); reads each file from `RESPONSE_DIR`, packages them into an in-memory ZIP archive (STORE method), and returns `application/zip`; missing or pruned files are silently skipped; path traversal is rejected with `400`
-- `SYNC_REMOTE_BATCH_SIZE` env var — controls how many files are requested per batch-download call (default `50`, minimum `1`)
 
 ## [v0.7.0] - 2026-06-23
 
