@@ -1,42 +1,44 @@
-# BTP Service Status
+# BTP Status
 
 A lightweight, file-backed status page and health checker for SAP BTP services. Compatible with Azure Traffic Manager's HTTP probe mechanism and provides a Gatus-style admin dashboard for reviewing availability history.
 
 ![BTP Status Dashboard](doc/img/btp-status-compare.png)
 
+## Screenshots
+
+**Overview** — landscape diagram with live service status and timeline dots
+
+![BTP Status Overview](doc/img/overview-v0.8.png)
+
+**Service detail** — uptime stats, response time chart, and full check history
+
+![BTP Service History](doc/img/service-history-v0.8.png)
+
+**Drill-down** — full request/response detail and screenshot from a past check
+
+![BTP Service Screenshot](doc/img/service-screenshot-v0.8.png)
+
 ## Features
 
-- **Site switcher** on the Overview page — when `sites` is configured, a compact dropdown next to the app title lets users switch between deployed instances (e.g. different BTP subaccounts or regions); the current site is auto-detected by matching the browser origin against the configured URLs; switching replaces the current URL without adding a browser history entry; page title (`<title>`) is synced to the app title (e.g. `BTP Status (Ashburn)`)
-- **Landscape tabs** on the Overview page — tabbed Mermaid diagrams showing the architecture of each landscape; diagram nodes whose ID matches a service name are coloured by live health status and are clickable; active tab persisted in the URL hash
-- **Variable substitution** in `config.json` — define a top-level `variables` map; `{{key}}` placeholders in endpoint `url`, `username`, `password`, `headers`, and `body` fields are substituted at server startup
-- **`/dummy` URL** — set any endpoint `url` to `/dummy` to skip the actual check and record a synthetic `200 OK`; useful for endpoints not yet configured
-- **HTTP health checks** with Gatus-style condition evaluation (`[STATUS]`, `[BODY]`, `[HEADER.*]`, `[RESPONSE_TIME]`, `len()`, `pat()`)
-- **Browser-based IAS login check** (`mode: browser-ias-login`) — headless Chromium fills the SAP IAS login form, waits for a CSS selector to appear (`waitForSelector`), captures a screenshot; the screenshot is stored alongside the JSON record, shown in the history detail modal and the Test popup
-- **Azure Traffic Manager integration** — `GET /health/:name` returns `200 OK` when all conditions pass, `500` with failure details when any condition fails
-- **Gatus-style overview dashboard** at `/overview` — services grouped by group name with colored status timeline dots; clicking any dot navigates to the service detail page and opens the response modal for that check
-- **Per-service detail** at `/service/:name` — uptime %, avg response time, full check history table with inline filters (endpoint, from location, status), response time line chart per endpoint; clicking any timeline dot opens the response detail modal for that check directly
-- **Drill-down modal** — inspect every request/response/condition result for any past check; the Overview tab shows a ↗ icon button next to the endpoint name to open the endpoint URL directly in a new tab
-- **Evaluation mode selector** — per-service override to force Always OK (`203`) or Always Error (`503`) regardless of actual check results; useful during maintenance
-- **Schedule selector** — change the auto-run interval per service live without restarting the server
-- **File-based storage** — no database required; responses saved as JSON files under `./response/`
-- **Dark-themed React UI** built with shadcn/ui + Tailwind CSS; mobile-responsive with hamburger menu on narrow screens
-- **SAP BTP Cloud Foundry deployment** via MTA (`mta.yaml`)
+1. **Azure Traffic Manager probe endpoint** — `GET /health/{service}` returns `200 OK` when all conditions pass or `500` with failure details when any condition fails; designed as a drop-in health probe for Azure Traffic Manager so unhealthy BTP services are automatically taken out of rotation
 
-## Condition Syntax
+2. **Browser-based IAS login check** (`mode: browser-ias-login`) — headless Chromium fills the SAP IAS login form, waits for a CSS selector to confirm the post-login page loaded, and captures a screenshot; validates the full authentication flow end-to-end, not just HTTP reachability; screenshot is stored with the check record and visible in the history drill-down and Test popup
 
-Conditions follow [Gatus](https://github.com/TwiN/gatus#conditions) syntax:
+3. **Status timeline, history, and drill-down** — color-coded dot timeline per service on the Overview page; per-service detail shows uptime %, avg response time, a response time chart per endpoint, and a full history table with filters (endpoint, location, status, date range); clicking any dot opens a modal with the complete request/response/condition result and screenshot
 
-| Condition | Description | Example |
-|-----------|-------------|---------|
-| `[STATUS] == 200` | HTTP status code | `[STATUS] == 301` |
-| `[RESPONSE_TIME] < 500` | Response time in ms | `[RESPONSE_TIME] < 2000` |
-| `[BODY] == "text"` | Body equals string | `[BODY] == "OK"` |
-| `[BODY].key == "value"` | JSON body field (dot-path) | `[BODY].status == "healthy"` |
-| `[HEADER.name] == "value"` | Response header value | `[HEADER.content-type] == "application/json"` |
-| `len([BODY].arr) > 0` | Array/object length | `len([BODY].items) > 0` |
-| `[BODY] == pat(*glob*)` | Glob/regex pattern match | `[BODY] == pat(*authentication*)` |
+4. **Evaluation mode override** (`Always OK` / `Always Error`) — per-service toggle to force a service to report healthy or failing regardless of actual check results; use **Always Error** to deliberately route traffic away during a known incident or planned failover; use **Always OK** to restore a service to rotation after maintenance without waiting for checks to pass; changes take effect immediately across all execution paths (scheduled checks, `/health/:name`, Run Test)
 
-Operators: `==`, `!=`, `<`, `>`, `<=`, `>=`
+5. **Landscape diagram with live status** — tabbed Mermaid flowchart diagrams on the Overview page showing service topology; diagram nodes are coloured by live health status and are clickable links to the service detail page; compose diagrams at [mermaid.live](https://mermaid.live/); active tab is persisted in the URL hash for easy sharing
+
+6. **File-based storage — no database** — every check result is saved as a plain JSON file under `./response/`; no database, message broker, or external service required; XSUAA is optional and used only for authentication; the response directory is the only persistent state
+
+7. **Two-instance sync for CF file persistence** — Cloud Foundry containers are ephemeral and lose local files on restart; point one instance at another via `SYNC_REMOTE` and each instance will download missing response files from its peer on startup and periodically thereafter, forming a resilient pair; see [Remote Sync](#remote-sync)
+
+8. **Minimal server dependencies** — production runtime requires only Express (HTTP), Pino (logging), and Playwright (browser checks); all HTTP requests, crypto, gzip compression, and ZIP packaging use native Node.js APIs — no axios, no ORM, no utility libraries
+
+9. **Modern, fast React UI** — built with shadcn/ui + Tailwind CSS; initial JS bundle ~55 kB gzip (lazy-loaded pages, Mermaid deferred); dark theme; mobile-responsive with hamburger menu; shared date range picker with localStorage persistence across pages
+
+> Also supports: HTTP health checks with [Gatus](https://github.com/TwiN/gatus#conditions)-style conditions (`[STATUS]`, `[BODY]`, `[HEADER.*]`, `[RESPONSE_TIME]`, `len()`, `pat()`); variable substitution in `config.json`; `/dummy` URL to skip checks; auto-run schedule selector; site switcher for multi-region deployments; SAP BTP Cloud Foundry MTA deployment
 
 ## Quick Start
 
@@ -148,6 +150,8 @@ Create `server/config.json` (based on `config-sample.json`):
 | `sites[].url` | string | Base URL of that deployed instance (e.g. `"https://btp-status-ashburn.cfapps.us10.hana.ondemand.com"`); the current site is matched by comparing the browser's `window.location.origin` against the configured URL's origin |
 | `services` | array | List of service configs |
 
+- Tip: compose landscape diagrams at [mermaid.live](https://mermaid.live/)
+
 **Per service**
 
 | Field | Type | Description |
@@ -169,6 +173,22 @@ Create `server/config.json` (based on `config-sample.json`):
 | `endpoints[].password` | string | IAS password; `{{variable}}` substitution supported |
 | `endpoints[].waitForSelector` | string | CSS selector to wait for after login (browser-ias-login only) |
 | `endpoints[].timeout` | number | Request timeout in ms. For standard HTTP checks, overrides `REQUEST_TIMEOUT_MS` for this endpoint; a timed-out check is recorded as `504`. For `browser-ias-login` mode, sets the overall browser session timeout (default `30000`). |
+
+### Condition Syntax
+
+Conditions follow [Gatus](https://github.com/TwiN/gatus#conditions) syntax:
+
+| Condition | Description | Example |
+|-----------|-------------|---------|
+| `[STATUS] == 200` | HTTP status code | `[STATUS] == 301` |
+| `[RESPONSE_TIME] < 500` | Response time in ms | `[RESPONSE_TIME] < 2000` |
+| `[BODY] == "text"` | Body equals string | `[BODY] == "OK"` |
+| `[BODY].key == "value"` | JSON body field (dot-path) | `[BODY].status == "healthy"` |
+| `[HEADER.name] == "value"` | Response header value | `[HEADER.content-type] == "application/json"` |
+| `len([BODY].arr) > 0` | Array/object length | `len([BODY].items) > 0` |
+| `[BODY] == pat(*glob*)` | Glob/regex pattern match | `[BODY] == pat(*authentication*)` |
+
+Operators: `==`, `!=`, `<`, `>`, `<=`, `>=`
 
 ### Browser-based IAS Login Check
 
@@ -410,6 +430,11 @@ The server uses [pino](https://getpino.io) with colorized pretty-print output.
 | `LOG_LEVEL` | `debug` | Pino log level: `trace`, `debug`, `info`, `warn`, `error` |
 
 ## Remote Sync
+
+Cloud Foundry containers are ephemeral — local files are lost on restart. Remote Sync lets two BTP Status instances back each other up: each downloads missing response files from its peer on startup and on a configurable interval, so history is preserved across restarts as long as both instances are not restarted simultaneously.
+
+> [!WARNING]
+> Do not restart both instances at the same time — they will each find nothing to sync from the other and all accumulated response files will be lost.
 
 Set `SYNC_REMOTE` to the base URL of another running BTP Status instance to seed the local response directory on startup:
 
