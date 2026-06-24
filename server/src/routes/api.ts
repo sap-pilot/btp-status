@@ -11,7 +11,7 @@ import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { getCity } from '../services/geoService.js';
 import { getXsuaaConfig, readSessionFromRequest, userLabel } from '../services/authService.js';
-import { requireAuth, requireAdmin } from '../middleware/requireAuth.js';
+import { requireAuth, requireAdmin, requireSyncAuth } from '../middleware/requireAuth.js';
 import type { AuthRequest } from '../middleware/requireAuth.js';
 import type { EvaluationMode, ServiceWithHistory, ServiceSummary } from '../types/index.js';
 
@@ -221,7 +221,7 @@ router.post('/sync', requireAuth, async (req, res, next) => {
   }
 });
 
-router.post('/batch-download', async (req, res, next) => {
+router.post('/batch-download', requireSyncAuth, async (req, res, next) => {
   try {
     const { paths } = req.body as { paths?: unknown };
     if (!Array.isArray(paths) || paths.length === 0) {
@@ -273,7 +273,7 @@ router.get('/browse', async (_req, res, next) => {
   }
 });
 
-router.get('/download', async (req, res, next) => {
+router.get('/download', requireSyncAuth, async (req, res, next) => {
   try {
     const rawPath = typeof req.query['path'] === 'string' ? req.query['path'] : '';
     if (!rawPath || rawPath.includes('..') || rawPath.startsWith('/') || rawPath.startsWith('\\')) {

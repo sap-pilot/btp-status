@@ -1,0 +1,116 @@
+{
+  "variables": {
+    "MONITOR_USERNAME": "monitor@example.com",
+    "MONITOR_PASSWORD": "your-monitor-password",
+    "SYNC_KEY": "your-secret-sync-key"
+  },
+  "sites": [
+    {
+      "name": "BTP Status (Region A)",
+      "url": "https://btp-status-instance-a.cfapps.us10.hana.ondemand.com"
+    },
+    {
+      "name": "BTP Status (Region B)",
+      "url": "https://btp-status-instance-b.cfapps.us20.hana.ondemand.com"
+    }
+  ],
+  "landscapes": [
+    {
+      "name": "production",
+      "diagram": "flowchart LR\n    subgraph Azure [Microsoft Azure]\n        TR[Traffic Manager]\n    end\n    subgraph BTP [BTP Landscape]\n        subgraph org-us10 [US East Subaccount]\n            wz-us10[Workzone]\n            cf-us10[Cloud Foundry]\n        end\n        subgraph org-us20 [US West Subaccount]\n            wz-us20[Workzone]\n            cf-us20[Cloud Foundry]\n        end\n    end\n    User --> TR\n    TR --> wz-us10\n    wz-us10 --> cf-us10\n    TR --> wz-us20\n    wz-us20 --> cf-us20\n    "
+    }
+  ],
+  "services": [
+    {
+      "group": "workzone",
+      "landscapes": ["production"],
+      "name": "wz-us10",
+      "homepage": "https://your-launchpad.cfapps.us10.hana.ondemand.com/sites",
+      "enabled": true,
+      "interval": 900,
+      "endpoints": [
+        {
+          "mode": "browser-ias-login",
+          "name": "Workzone-Login",
+          "url": "https://your-launchpad.cfapps.us10.hana.ondemand.com/site/your-site?sap_idp=your-idp.accounts.ondemand.com",
+          "username": "{{MONITOR_USERNAME}}",
+          "password": "{{MONITOR_PASSWORD}}",
+          "waitForSelector": "#shellAppTitle",
+          "timeout": 15000
+        }
+      ]
+    },
+    {
+      "group": "workzone",
+      "landscapes": ["production"],
+      "name": "wz-us20",
+      "homepage": "https://your-launchpad.cfapps.us20.hana.ondemand.com/sites",
+      "enabled": true,
+      "interval": 900,
+      "endpoints": [
+        {
+          "mode": "browser-ias-login",
+          "name": "Workzone-Login",
+          "url": "https://your-launchpad.cfapps.us20.hana.ondemand.com/site/your-site?sap_idp=your-idp.accounts.ondemand.com",
+          "username": "{{MONITOR_USERNAME}}",
+          "password": "{{MONITOR_PASSWORD}}",
+          "waitForSelector": "#shellAppTitle",
+          "timeout": 15000
+        }
+      ]
+    },
+    {
+      "group": "integration-suite",
+      "landscapes": ["production"],
+      "name": "int-us10",
+      "homepage": "https://your-integration-suite.cfapps.us10.hana.ondemand.com/",
+      "enabled": true,
+      "interval": 900,
+      "endpoints": [
+        {
+          "name": "API-Portal",
+          "url": "https://your-integration-suite.cfapps.us10.hana.ondemand.com/",
+          "method": "GET",
+          "headers": {},
+          "body": null,
+          "conditions": [
+            "[STATUS] == 200",
+            "[RESPONSE_TIME] < 20000"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "cockpit",
+      "landscapes": ["production"],
+      "name": "btp-cockpit",
+      "homepage": "https://cockpit.btp.cloud.sap/",
+      "enabled": true,
+      "interval": 1800,
+      "endpoints": [
+        {
+          "name": "BTP AMER Cockpit",
+          "url": "https://amer.cockpit.btp.cloud.sap/",
+          "method": "GET",
+          "headers": {},
+          "body": null,
+          "conditions": [
+            "[STATUS] == 200",
+            "[RESPONSE_TIME] < 20000"
+          ]
+        },
+        {
+          "name": "BTP EMEA Cockpit",
+          "url": "https://emea.cockpit.btp.cloud.sap/",
+          "method": "GET",
+          "headers": {},
+          "body": null,
+          "conditions": [
+            "[STATUS] == 200",
+            "[RESPONSE_TIME] < 20000"
+          ]
+        }
+      ]
+    }
+  ]
+}

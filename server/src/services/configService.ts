@@ -83,3 +83,9 @@ export function getLandscapes(): LandscapeConfig[] {
 export function getSites(): SiteConfig[] {
   return getConfig().sites ?? [];
 }
+
+/** Returns the sync key: SYNC_KEY env var takes precedence over config.variables['SYNC_KEY']. */
+export function getSyncKey(): string | null {
+  if (process.env.SYNC_KEY) return process.env.SYNC_KEY;
+  return getConfig().variables?.['SYNC_KEY'] ?? null;
+}

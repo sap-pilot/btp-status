@@ -8,9 +8,18 @@ import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { browseResponseFiles, parseFilename } from './responseStore.js';
 import { extractZip } from './zipBuilder.js';
+import { getSyncKey } from './configService.js';
 
 const gunzipAsync = promisify(gunzip);
 const INDIVIDUAL_CONCURRENCY = 10;
+
+/** Thrown when the remote rejects the sync key with 401; always aborts the full sync. */
+class SyncAuthError extends Error {
+  constructor(url: string) {
+    super(`Remote rejected sync request (HTTP 401) for ${url} — check SYNC_KEY / sync.key configuration`);
+    this.name = 'SyncAuthError';
+  }
+}
 
 let syncTimer: ReturnType<typeof setInterval> | null = null;
 let syncInProgress = false;
@@ -30,10 +39,15 @@ interface FetchResult {
   decompressed: number;
 }
 
-function fetchRaw(url: string): Promise<FetchResult> {
+function fetchRaw(url: string, extraHeaders: Record<string, string> = {}): Promise<FetchResult> {
   const get = url.startsWith('https://') ? httpsGet : httpGet;
   return new Promise((resolve, reject) => {
-    const req = get(url, { headers: { 'Accept-Encoding': 'gzip' } }, (res) => {
+    const req = get(url, { headers: { 'Accept-Encoding': 'gzip', ...extraHeaders } }, (res) => {
+      if (res.statusCode === 401) {
+        res.resume();
+        reject(new SyncAuthError(url));
+        return;
+      }
       if (res.statusCode && res.statusCode >= 400) {
         res.resume();
         reject(new Error(`HTTP ${res.statusCode} for ${url}`));
@@ -56,7 +70,7 @@ function fetchRaw(url: string): Promise<FetchResult> {
   });
 }
 
-function fetchPost(url: string, body: string): Promise<FetchResult> {
+function fetchPost(url: string, body: string, extraHeaders: Record<string, string> = {}): Promise<FetchResult> {
   const isHttps = url.startsWith('https://');
   const request = isHttps ? httpsRequest : httpRequest;
   return new Promise((resolve, reject) => {
@@ -69,9 +83,15 @@ function fetchPost(url: string, body: string): Promise<FetchResult> {
           'Content-Type': 'application/json',
           'Content-Length': bodyBytes.length,
           'Accept-Encoding': 'gzip',
+          ...extraHeaders,
         },
       },
       (res) => {
+        if (res.statusCode === 401) {
+          res.resume();
+          reject(new SyncAuthError(url));
+          return;
+        }
         if (res.statusCode && res.statusCode >= 400) {
           res.resume();
           reject(new Error(`HTTP ${res.statusCode} for ${url}`));
@@ -97,12 +117,17 @@ function fetchPost(url: string, body: string): Promise<FetchResult> {
   });
 }
 
+function syncKeyHeader(): Record<string, string> {
+  const key = getSyncKey();
+  return key ? { 'x-sync-key': key } : {};
+}
+
 async function downloadOne(
   remoteBase: string,
   filePath: string,
 ): Promise<{ transferred: number; decompressed: number }> {
   const url = `${remoteBase}/api/download?path=${encodeURIComponent(filePath)}`;
-  const { buf, transferred, decompressed } = await fetchRaw(url);
+  const { buf, transferred, decompressed } = await fetchRaw(url, syncKeyHeader());
 
   const [folder, filename] = filePath.split('/');
   const dir = join(config.RESPONSE_DIR, folder!);
@@ -118,7 +143,7 @@ async function downloadBatch(
   filePaths: string[],
 ): Promise<{ transferred: number; decompressed: number }> {
   const url = `${remoteBase}/api/batch-download`;
-  const { buf: zip, transferred } = await fetchPost(url, JSON.stringify({ paths: filePaths }));
+  const { buf: zip, transferred } = await fetchPost(url, JSON.stringify({ paths: filePaths }), syncKeyHeader());
   const entries = extractZip(zip);
 
   await Promise.all(
@@ -197,6 +222,7 @@ export async function syncFromRemote(remoteBase: string): Promise<SyncStats> {
           logger.debug({ done: Math.min(i + batchSize, missing.length), total: missing.length }, 'Sync batch complete');
           continue;
         } catch (err) {
+          if (err instanceof SyncAuthError) throw err; // auth failure — abort entire sync
           if (batchAvailable === null) {
             logger.info({ err }, 'Batch download not available, falling back to individual downloads');
             batchAvailable = false;

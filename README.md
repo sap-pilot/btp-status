@@ -53,9 +53,9 @@ A lightweight, file-backed status page and health checker for SAP BTP services. 
 # 1. Install dependencies
 npm install
 
-# 2. Copy sample config into the server folder and edit
-cp config-sample.json server/config.json
-# Edit server/config.json with your real service endpoints
+# 2. Copy sample config and fill in real values
+cp server/config-sample.json server/config.json
+# Edit server/config.json with your real service endpoints and credentials
 
 # 3. Build client once, then start Express (serves UI + API on :3000)
 npm run dev
@@ -89,13 +89,14 @@ The server resolves configuration in this priority order:
 1. **`CONFIG_JSON` env var** — JSON string with the full config (useful for BTP env properties, no file needed)
 2. **`CONFIG_FILE` env var / default** — path to a JSON file (default: `./config.json` relative to the `server/` working directory, i.e. `server/config.json` from the repo root)
 
-Create `server/config.json` (based on `config-sample.json`):
+Create `server/config.json` (copy `server/config-sample.json` and fill in real values):
 
 ```json
 {
   "variables": {
-    "svc.username": "monitor@example.com",
-    "svc.password": "secret"
+    "MONITOR_USERNAME": "monitor@example.com",
+    "MONITOR_PASSWORD": "your-monitor-password",
+    "SYNC_KEY": "your-secret-sync-key"
   },
   "landscapes": [
     {
@@ -124,8 +125,8 @@ Create `server/config.json` (based on `config-sample.json`):
           "mode": "browser-ias-login",
           "name": "Login Check",
           "url": "https://my-service.example.com/login",
-          "username": "{{svc.username}}",
-          "password": "{{svc.password}}",
+          "username": "{{MONITOR_USERNAME}}",
+          "password": "{{MONITOR_PASSWORD}}",
           "waitForSelector": "#app-title",
           "timeout": 30000
         }
@@ -449,6 +450,33 @@ On boot the server will:
 4. Log total files, transferred MB, decompressed MB, and elapsed seconds at `INFO`
 
 After the initial sync, the same logic runs again every `SYNC_INTERVAL` seconds (default `900` / 15 minutes) as a background job — keeping the local instance in sync with the remote over time. Files already present locally are never re-downloaded. The timer uses `unref()` so it does not prevent graceful shutdown.
+
+### Sync Key (optional)
+
+To prevent unauthenticated access to the `/api/download` and `/api/batch-download` endpoints, set a shared secret on both instances:
+
+```jsonc
+// config.json
+{
+  "variables": {
+    "SYNC_KEY": "your-secret-sync-key"
+  }
+}
+```
+
+Or via environment variable (takes precedence over `config.json`):
+
+```bash
+SYNC_KEY=your-secret-sync-key npm start
+```
+
+When a sync key is configured:
+- The download endpoints require either a matching `x-sync-key` request header **or** a valid XSUAA session cookie
+- The sync client automatically includes `x-sync-key` in all download requests to the remote
+- If the remote rejects the key with `401`, the entire sync is aborted immediately with an explanatory error
+- Requests with neither a valid key nor a session receive `401 Unauthorized`
+
+Both instances must use the same key. If XSUAA is configured, authenticated browser users can also access the download endpoints without a key.
 
 ## Gzip Compression
 
