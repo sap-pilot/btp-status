@@ -13,7 +13,7 @@ import { getCity } from '../services/geoService.js';
 import { getXsuaaConfig, readSessionFromRequest, userLabel } from '../services/authService.js';
 import { requireAuth, requireAdmin } from '../middleware/requireAuth.js';
 import type { AuthRequest } from '../middleware/requireAuth.js';
-import type { EvaluationMode, ServiceWithHistory } from '../types/index.js';
+import type { EvaluationMode, ServiceWithHistory, ServiceSummary } from '../types/index.js';
 
 const VALID_EVAL_MODES = new Set<string>(['condition', 'alwaysok', 'alwayserror']);
 
@@ -99,6 +99,50 @@ router.get('/overview', async (req, res, next) => {
       }),
     );
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/service-summary', async (req, res, next) => {
+  try {
+    const range = parseTimeRangeQuery(req.query);
+    const services = getAllServices();
+    const summaries: ServiceSummary[] = await Promise.all(
+      services.map(async s => {
+        const files = await listResponseFiles(s.name, range);
+        // Group by 1-second timestamp bucket (same-second files = same check run)
+        const byBucket = new Map<number, typeof files>();
+        for (const f of files) {
+          const bucket = Math.floor(f.timestamp / 1000);
+          if (!byBucket.has(bucket)) byBucket.set(bucket, []);
+          byBucket.get(bucket)!.push(f);
+        }
+        // Compute combined status for every run, track latest and whether any failed
+        let latestBucket = -Infinity;
+        let latestPassed = false;
+        let anyFailed = false;
+        let hasRuns = false;
+        for (const [bucket, runFiles] of byBucket) {
+          const override = runFiles.find(f => f.overallStatus === 203 || f.overallStatus === 503);
+          const runPassed = override
+            ? override.overallStatus === 203
+            : runFiles.every(f => f.overallStatus === 200);
+          hasRuns = true;
+          if (!runPassed) anyFailed = true;
+          if (bucket > latestBucket) { latestBucket = bucket; latestPassed = runPassed; }
+        }
+        const rangeStatus: ServiceSummary['rangeStatus'] = !hasRuns
+          ? null
+          : !latestPassed
+            ? 'error'
+            : anyFailed
+              ? 'warning'
+              : 'ok';
+        return { name: s.name, group: s.group, rangeStatus };
+      }),
+    );
+    res.json(summaries);
   } catch (err) {
     next(err);
   }

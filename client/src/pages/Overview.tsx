@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { parseFilename } from '@/lib/parseFilename';
 import { Link, useNavigate } from 'react-router-dom';
-import type { ServiceWithHistory, HistoryFile, LandscapeConfig, SiteConfig } from '@shared/types';
+import type { ServiceWithHistory, HistoryFile, LandscapeConfig, ServiceSummary, SiteConfig } from '@shared/types';
 import StatusDots from '@/components/StatusDots';
 import type { NodeStatus } from '@/components/LandscapeDiagram';
 const LandscapeDiagram = lazy(() => import('@/components/LandscapeDiagram'));
@@ -90,6 +90,7 @@ export default function Overview() {
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [maxStorageDays, setMaxStorageDays] = useState(7);
   const [data, setData] = useState<ParsedService[]>([]);
+  const [summaries, setSummaries] = useState<ServiceSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
@@ -145,6 +146,10 @@ export default function Overview() {
       })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false));
+    fetch(`/api/service-summary?${queryString}`)
+      .then(r => r.json() as Promise<ServiceSummary[]>)
+      .then(d => setSummaries(d))
+      .catch(() => null);
   }, [queryString, refreshTick]);
 
   async function runSync() {
@@ -178,20 +183,15 @@ export default function Overview() {
     return acc;
   }, {});
 
+  const summaryMap = useMemo(
+    () => Object.fromEntries(summaries.map(s => [s.name, s.rangeStatus])) as Record<string, ServiceSummary['rangeStatus']>,
+    [summaries],
+  );
+
   const totalServices = data.length;
-  const healthyServices = data.filter(s => {
-    const h = getServiceOverallHistory(s);
-    const last = h[0]?.overallStatus;
-    return h.length === 0 || last === 200 || last === 203;
-  }).length;
-  const anyCurrentlyFailing = data.some(s => {
-    const last = getServiceOverallHistory(s)[0]?.overallStatus;
-    return last === 500 || last === 503;
-  });
-  const anyImperfect = data.some(s => {
-    const h = getServiceOverallHistory(s);
-    return h.length > 0 && getUptimePct(h) < 100;
-  });
+  const healthyServices = data.filter(s => (summaryMap[s.name] ?? null) !== 'error').length;
+  const anyCurrentlyFailing = summaries.some(s => s.rangeStatus === 'error');
+  const anyImperfect = summaries.some(s => s.rangeStatus === 'warning');
 
   // Aggregate stats — raw endpoint files for check/response counts; combined runs for uptime
   const allFiles = data.flatMap(s => s.history);
@@ -208,36 +208,30 @@ export default function Overview() {
     : 100;
   const overallUptimeColor = anyCurrentlyFailing ? 'text-red-500' : overallUptime < 100 ? 'text-yellow-500' : 'text-green-500';
 
-  // Per-service status for diagram coloring (3 states)
+  // Per-service status for diagram coloring — derived from summaryMap (same source as table dots)
   const serviceStatusMap = useMemo<Record<string, NodeStatus>>(() => {
     const map: Record<string, NodeStatus> = {};
-    for (const svc of data) {
-      const combined = getServiceOverallHistory(svc);
-      const last = combined[0]?.overallStatus;
-      if (last === 500 || last === 503) {
-        map[svc.name] = 'error';
-      } else if (last === 200 || last === 203) {
-        const allOk = combined.every(h => h.overallStatus === 200 || h.overallStatus === 203);
-        map[svc.name] = allOk ? 'ok' : 'warn';
-      }
+    for (const [name, rs] of Object.entries(summaryMap)) {
+      if (rs === 'error') map[name] = 'error';
+      else if (rs === 'warning') map[name] = 'warn';
+      else if (rs === 'ok') map[name] = 'ok';
     }
     return map;
-  }, [data]);
+  }, [summaryMap]);
 
   // Per-landscape availability badge
   function landscapeBadgeProps(landscapeName: string) {
     const svcs = data.filter(s => s.landscapes?.includes(landscapeName));
     if (svcs.length === 0) return { label: '—', cls: '' };
-    const statuses = svcs.map(s => getServiceOverallHistory(s)[0]?.overallStatus);
-    const anyFail = statuses.some(st => st === 500 || st === 503);
-    const allOk = statuses.every(st => st === 200 || st === 203 || st === undefined);
+    const anyFail = svcs.some(s => summaryMap[s.name] === 'error');
+    const anyWarn = svcs.some(s => summaryMap[s.name] === 'warning');
     const combinedRuns = svcs.flatMap(s => getServiceOverallHistory(s));
     const uptime = combinedRuns.length > 0
       ? combinedRuns.filter(h => h.overallStatus === 200 || h.overallStatus === 203).length / combinedRuns.length * 100
       : 100;
     const label = fmtUptime(uptime);
     if (anyFail) return { label, cls: 'border-red-600 text-red-400' };
-    if (!allOk) return { label, cls: 'border-yellow-600 text-yellow-400' };
+    if (anyWarn) return { label, cls: 'border-yellow-600 text-yellow-400' };
     return { label, cls: 'border-green-600 text-green-400' };
   }
 
@@ -566,12 +560,12 @@ export default function Overview() {
                   {services.map(svc => {
                     const combined = getServiceOverallHistory(svc);
                     const uptime = getUptimePct(combined);
-                    const lastStatus = combined[0]?.overallStatus;
                     const lastMs = combined[0] ? rtOf(combined[0]) : null;
                     const timedCombined = combined.filter(h => h.overallStatus !== 504);
                     const avgMs = timedCombined.length > 0
                       ? Math.round(timedCombined.reduce((s, h) => s + rtOf(h), 0) / timedCombined.length)
                       : null;
+                    const rs = summaryMap[svc.name] ?? null;
 
                     return (
                       <tr
@@ -583,10 +577,9 @@ export default function Overview() {
                           <div className="flex items-center gap-2">
                             <span
                               className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                lastStatus === 200 ? 'bg-green-500' :
-                                lastStatus === 203 ? 'bg-emerald-700' :
-                                lastStatus === 503 ? 'bg-red-900' :
-                                lastStatus === 500 ? 'bg-red-500' :
+                                rs === 'ok' ? 'bg-green-500' :
+                                rs === 'warning' ? 'bg-amber-400' :
+                                rs === 'error' ? 'bg-red-500' :
                                 'bg-gray-500'
                               }`}
                             />
@@ -638,7 +631,7 @@ export default function Overview() {
                               className={`text-xs ${
                                 combined.length === 0
                                   ? 'text-muted-foreground'
-                                  : lastStatus === 500 || lastStatus === 503
+                                  : rs === 'error'
                                   ? 'border-red-600 text-red-400'
                                   : uptime < 100
                                   ? 'border-yellow-600 text-yellow-400'

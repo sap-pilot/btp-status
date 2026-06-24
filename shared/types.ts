@@ -77,5 +77,18 @@ export interface ServiceWithHistory extends ServiceConfig {
   history: string[];
 }
 
+/** Per-service status summary returned by GET /api/service-summary */
+export interface ServiceSummary {
+  name: string;
+  group: string;
+  /**
+   * ok      — all runs in the selected range passed
+   * warning — latest run passed but at least one earlier run failed
+   * error   — latest run failed
+   * null    — no history in the selected range
+   */
+  rangeStatus: 'ok' | 'warning' | 'error' | null;
+}
+
 /** Evaluation mode — controls what /health and Run Test return regardless of actual condition results */
 export type EvaluationMode = 'condition' | 'alwaysok' | 'alwayserror';

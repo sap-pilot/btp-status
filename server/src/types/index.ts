@@ -101,3 +101,9 @@ export interface CheckResult {
 }
 
 export type EvaluationMode = 'condition' | 'alwaysok' | 'alwayserror';
+
+export interface ServiceSummary {
+  name: string;
+  group: string;
+  rangeStatus: 'ok' | 'warning' | 'error' | null;
+}

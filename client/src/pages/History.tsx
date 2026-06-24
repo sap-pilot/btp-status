@@ -3,8 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 function fmtUptime(n: number): string {
   return parseFloat(n.toFixed(2)) === 100 ? '100%' : `${n.toFixed(2)}%`;
 }
-import { Link, useLocation, useParams } from 'react-router-dom';
-import type { EvaluationMode, HistoryFile, ServiceConfig } from '@shared/types';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import type { EvaluationMode, HistoryFile, ServiceConfig, ServiceSummary } from '@shared/types';
 import StatusDots from '@/components/StatusDots';
 import ResponseTimeChart from '@/components/ResponseTimeChart';
 import ResponseDetailModal from '@/components/ResponseDetailModal';
@@ -23,11 +23,12 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, AlertCircle, ExternalLink, Menu, PlayCircle, Sun, Moon, X } from 'lucide-react';
+import { ArrowLeft, AlertCircle, ChevronDown, ExternalLink, Menu, PlayCircle, Sun, Moon, X } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useWindowWidth } from '@/hooks/useWindowWidth';
 import { useAuth } from '@/hooks/useAuth';
@@ -52,6 +53,13 @@ const SCHEDULE_OPTIONS = [
   { value: '0', label: 'Disable autorun' },
 ];
 
+function statusDotClass(status: ServiceSummary['rangeStatus']): string {
+  if (status === 'ok') return 'bg-green-500';
+  if (status === 'warning') return 'bg-amber-400';
+  if (status === 'error') return 'bg-red-500';
+  return 'bg-gray-500';
+}
+
 function evalTriggerClass(mode: EvaluationMode): string {
   if (mode === 'alwaysok') return 'bg-emerald-950 border-emerald-700 text-emerald-300 hover:bg-emerald-900';
   if (mode === 'alwayserror') return 'bg-red-950 border-red-700 text-red-400 hover:bg-red-900';
@@ -70,6 +78,7 @@ function formatTs(ms: number): string {
 export default function History() {
   const { name = '' } = useParams<{ name: string }>();
   const location = useLocation();
+  const navigate = useNavigate();
   const backTo = new URLSearchParams(location.search).get('from') ?? '/overview';
   const autoOpenFilename = (location.state as { autoOpenFilename?: string } | null)?.autoOpenFilename;
   const autoOpenHandled = useRef(false);
@@ -87,6 +96,7 @@ export default function History() {
   const { range, setRange, queryString } = useTimeRange();
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [maxStorageDays, setMaxStorageDays] = useState(7);
+  const [summaries, setSummaries] = useState<ServiceSummary[]>([]);
   const [files, setFiles] = useState<HistoryFile[]>([]);
   const [service, setService] = useState<ServiceConfig | null>(null);
   const [selected, setSelected] = useState<HistoryFile | null>(null);
@@ -144,6 +154,13 @@ export default function History() {
   }, [name, queryString]);
 
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
+
+  useEffect(() => {
+    fetch(`/api/service-summary?${queryString}`)
+      .then(r => r.json() as Promise<ServiceSummary[]>)
+      .then(d => setSummaries(d))
+      .catch(() => null);
+  }, [queryString]);
 
   function openFile(file: HistoryFile | null) {
     setSelected(file);
@@ -305,6 +322,48 @@ export default function History() {
             </Link>
             <span className="text-muted-foreground">/</span>
             <h1 className="text-base font-semibold">{name}</h1>
+            {summaries.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                    title="Switch service"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-60 max-h-80 overflow-y-auto">
+                  {Object.entries(
+                    summaries.reduce<Record<string, ServiceSummary[]>>((acc, s) => {
+                      (acc[s.group] ??= []).push(s);
+                      return acc;
+                    }, {}),
+                  ).map(([group, svcs], gi) => (
+                    <div key={group}>
+                      {gi > 0 && <DropdownMenuSeparator />}
+                      <DropdownMenuLabel className="text-xs font-normal text-muted-foreground px-2 py-1">
+                        {group}
+                      </DropdownMenuLabel>
+                      {svcs.map(s => (
+                        <DropdownMenuItem
+                          key={s.name}
+                          onSelect={() => navigate(`/service/${encodeURIComponent(s.name)}`)}
+                          className="flex items-center gap-2 cursor-pointer"
+                        >
+                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDotClass(s.rangeStatus)}`} />
+                          <span className={`truncate flex-1 ${s.name === name ? 'font-semibold' : ''}`}>
+                            {s.name}
+                          </span>
+                          {s.name === name && (
+                            <span className="text-muted-foreground text-xs ml-auto flex-shrink-0">current</span>
+                          )}
+                        </DropdownMenuItem>
+                      ))}
+                    </div>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             {service?.homepage && (
               <a
                 href={service.homepage}
