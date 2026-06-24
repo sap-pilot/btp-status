@@ -4,6 +4,7 @@
 
 ### Security / Performance
 - **Minimal history payload** — `GET /api/overview` and `GET /api/history/:name` now return history as a plain `string[]` of filenames (without `.json` extension) instead of arrays of JSON objects; all fields — `timestamp`, `overallStatus`, `responseTime`, `city`, `endpointSlug` — are derived client-side by parsing the filename, eliminating per-record JSON object overhead; the client uses a shared `parseFilename` utility that handles both new-format (UTC timestamp) and old-format (local-timezone) filenames
+- **Auth-gated response detail** — `GET /api/history/:name/:filename` (the full JSON record with request/response/conditions/screenshot) now requires authentication when XSUAA is configured; unauthenticated requests receive `401`; the Response Detail modal detects the unauthenticated state (both pre-emptively and on a `401` response from an expired session) and shows a **Login** button that opens the same OAuth2 popup as the main login flow; once authenticated, the modal fetches and displays the detail automatically
 
 ## [v0.8.0] - 2026-06-23
 

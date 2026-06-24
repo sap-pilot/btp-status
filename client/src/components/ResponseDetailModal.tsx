@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ResponseRecord } from '@shared/types';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, LogIn } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -12,10 +12,17 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
+interface AuthProp {
+  enabled: boolean;
+  loggedIn: boolean;
+  login: () => void;
+}
+
 interface Props {
   file: { filename: string } | null;
   serviceName: string;
   onClose: () => void;
+  auth?: AuthProp;
 }
 
 function prettifyBody(body: string): string {
@@ -30,27 +37,38 @@ function formatTs(iso: string): string {
   return new Date(iso).toLocaleString();
 }
 
-export default function ResponseDetailModal({ file, serviceName, onClose }: Props) {
+export default function ResponseDetailModal({ file, serviceName, onClose, auth }: Props) {
   const [record, setRecord] = useState<ResponseRecord | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsAuth, setNeedsAuth] = useState(false);
+
+  const requiresLogin = auth?.enabled && !auth.loggedIn;
 
   useEffect(() => {
     if (!file) {
       setRecord(null);
+      setNeedsAuth(false);
       return;
     }
+    if (requiresLogin) {
+      setRecord(null);
+      setNeedsAuth(true);
+      return;
+    }
+    setNeedsAuth(false);
     setLoading(true);
     setError(null);
     fetch(`/api/history/${encodeURIComponent(serviceName)}/${encodeURIComponent(file.filename)}`)
       .then(r => {
+        if (r.status === 401) { setNeedsAuth(true); throw new Error('401'); }
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json() as Promise<ResponseRecord>;
       })
       .then(data => setRecord(data))
-      .catch(e => setError(String(e)))
+      .catch(e => { if (String(e) !== 'Error: 401') setError(String(e)); })
       .finally(() => setLoading(false));
-  }, [file, serviceName]);
+  }, [file, serviceName, requiresLogin]);
 
   const isBrowser = record?.request.method === 'BROWSER';
   const screenshotUrl = record?.screenshotFile
@@ -74,8 +92,20 @@ export default function ResponseDetailModal({ file, serviceName, onClose }: Prop
           </DialogTitle>
         </DialogHeader>
 
-        {loading && <div className="text-muted-foreground text-sm p-4">Loading…</div>}
-        {error && <div className="text-destructive text-sm p-4">{error}</div>}
+        {needsAuth && auth && (
+          <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+            <p className="text-sm text-muted-foreground">Login required to view response detail.</p>
+            <button
+              onClick={auth.login}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              <LogIn className="h-4 w-4" />
+              Login
+            </button>
+          </div>
+        )}
+        {!needsAuth && loading && <div className="text-muted-foreground text-sm p-4">Loading…</div>}
+        {!needsAuth && error && <div className="text-destructive text-sm p-4">{error}</div>}
 
         {record && (
           <Tabs defaultValue={screenshotUrl ? 'screenshot' : 'overview'} className="flex-1 flex flex-col min-h-0">

@@ -716,6 +716,7 @@ export default function History() {
         file={selected}
         serviceName={name}
         onClose={() => openFile(null)}
+        auth={auth}
       />
 
       <TestModal

@@ -71,9 +71,9 @@ router.get('/history/:name', async (req, res, next) => {
   }
 });
 
-router.get('/history/:name/:filename', async (req, res, next) => {
+router.get('/history/:name/:filename', requireAuth, async (req, res, next) => {
   try {
-    const data = await readResponseFile(req.params.name, req.params.filename);
+    const data = await readResponseFile(req.params['name'] as string, req.params['filename'] as string);
     res.json(data);
   } catch (err) {
     next(err);
