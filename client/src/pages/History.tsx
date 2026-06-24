@@ -294,7 +294,7 @@ export default function History() {
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
       <header className="border-b border-border sticky top-0 bg-background z-10">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link
               to={backTo}
@@ -419,7 +419,7 @@ export default function History() {
         {/* Mobile dropdown menu */}
         {menuOpen && (
           <div className="sm:hidden border-t border-border bg-background">
-            <div className="max-w-5xl mx-auto px-4 py-3 space-y-3">
+            <div className="max-w-7xl mx-auto px-4 py-3 space-y-3">
               {(!auth.enabled || auth.loggedIn) && (
                 <div className="grid grid-cols-2 gap-2">
                   <span title={adminTooltip}>
@@ -510,7 +510,7 @@ export default function History() {
         maxStorageDays={maxStorageDays}
       />
 
-      <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+      <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {error && (
           <div className="flex items-center gap-2 text-destructive text-sm">
             <AlertCircle className="h-4 w-4" />
