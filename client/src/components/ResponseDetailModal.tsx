@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { HistoryFile, ResponseRecord } from '@shared/types';
+import type { ResponseRecord } from '@shared/types';
 import { ExternalLink } from 'lucide-react';
 import {
   Dialog,
@@ -13,7 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 interface Props {
-  file: HistoryFile | null;
+  file: { filename: string } | null;
   serviceName: string;
   onClose: () => void;
 }

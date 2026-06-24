@@ -61,23 +61,20 @@ export interface ResponseRecord {
   screenshotFile?: string;
 }
 
+/** Parsed representation of a response filename. All fields are derived from the filename itself. */
 export interface HistoryFile {
-  filename: string;
-  timestamp: number;
-  /** -1 for new-format files (use endpointSlug instead) */
-  endpointIndex: number;
-  /** Sanitized endpoint name from filename; present in new-format files only */
-  endpointSlug?: string;
-  /** Geo-resolved city at time of check; present in new-format files only */
-  city?: string;
-  responseTime: number;
-  httpStatus: number;
+  filename: string;                              // always includes .json
   overallStatus: 200 | 203 | 500 | 503 | 504;
-  screenshotFile?: string;
+  timestamp?: number;                            // absent only if filename is unrecognised
+  responseTime?: number;
+  city?: string;
+  endpointSlug?: string;                         // new-format files only
+  endpointIndex?: number;                        // old-format files only
 }
 
 export interface ServiceWithHistory extends ServiceConfig {
-  history: HistoryFile[];
+  /** Filenames without .json — parse with parseFilename on the client to get HistoryFile fields. */
+  history: string[];
 }
 
 /** Evaluation mode — controls what /health and Run Test return regardless of actual condition results */

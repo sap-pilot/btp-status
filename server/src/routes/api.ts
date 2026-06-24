@@ -38,7 +38,15 @@ function parseTimeRangeQuery(
 const router = Router();
 
 router.get('/services', (_req, res) => {
-  res.json(getAllServices());
+  const services = getAllServices().map(s => ({
+    ...s,
+    endpoints: s.endpoints.map(ep => {
+      const { username, password, ...safe } = ep;
+      void username; void password;
+      return safe;
+    }),
+  }));
+  res.json(services);
 });
 
 router.get('/check/:name', requireAuth, async (req, res, next) => {
@@ -57,7 +65,7 @@ router.get('/history/:name', async (req, res, next) => {
   try {
     const range = parseTimeRangeQuery(req.query);
     const files = await listResponseFiles(req.params.name, range);
-    res.json(files);
+    res.json(files.map(f => f.filename.replace(/\.json$/, '')));
   } catch (err) {
     next(err);
   }
@@ -76,11 +84,19 @@ router.get('/overview', async (req, res, next) => {
   try {
     const range = parseTimeRangeQuery(req.query);
     const services = getAllServices();
-    const result: ServiceWithHistory[] = await Promise.all(
-      services.map(async s => ({
-        ...s,
-        history: await listResponseFiles(s.name, range),
-      })),
+    const result = await Promise.all(
+      services.map(async s => {
+        const history = await listResponseFiles(s.name, range);
+        // Strip credentials and browser-check config from endpoints
+        const safeEndpoints = s.endpoints.map(ep => {
+          const { username, password, waitForSelector, timeout, ...safe } = ep;
+          void username; void password; void waitForSelector; void timeout;
+          return safe;
+        });
+        // Filenames without .json — all fields (timestamp, status, city, responseTime) are parsed client-side
+        const safeHistory = history.map(f => f.filename.replace(/\.json$/, ''));
+        return { ...s, endpoints: safeEndpoints, history: safeHistory };
+      }),
     );
     res.json(result);
   } catch (err) {

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { parseFilename } from '@/lib/parseFilename';
 import { Link, useNavigate } from 'react-router-dom';
 import type { ServiceWithHistory, HistoryFile, LandscapeConfig, SiteConfig } from '@shared/types';
 import StatusDots from '@/components/StatusDots';
@@ -27,12 +28,22 @@ const HOUR_OPTIONS = [
   { value: 'range', label: 'Date Range…' },
 ];
 
-function getServiceOverallHistory(service: ServiceWithHistory): HistoryFile[] {
+function tsOf(f: HistoryFile): number {
+  return f.timestamp ?? parseFilename(f.filename)?.timestamp ?? 0;
+}
+
+function rtOf(f: HistoryFile): number {
+  return f.responseTime ?? parseFilename(f.filename)?.responseTime ?? 0;
+}
+
+type ParsedService = Omit<ServiceWithHistory, 'history'> & { history: HistoryFile[] };
+
+function getServiceOverallHistory(service: ParsedService): HistoryFile[] {
   // Group files by timestamp bucket (same second = same check run)
   // For each check run (same-timestamp files), overall pass = ALL endpoints passed
   const byTs = new Map<number, HistoryFile[]>();
   for (const f of service.history) {
-    const bucket = Math.floor(f.timestamp / 1000); // group by second
+    const bucket = Math.floor(tsOf(f) / 1000);
     if (!byTs.has(bucket)) byTs.set(bucket, []);
     byTs.get(bucket)!.push(f);
   }
@@ -49,7 +60,7 @@ function getServiceOverallHistory(service: ServiceWithHistory): HistoryFile[] {
       combined.push({ ...first, overallStatus: allPassed ? 200 : 500 });
     }
   }
-  return combined.sort((a, b) => b.timestamp - a.timestamp);
+  return combined.sort((a, b) => tsOf(b) - tsOf(a));
 }
 
 function fmtUptime(n: number): string {
@@ -78,7 +89,7 @@ export default function Overview() {
   const { range, setRange, queryString } = useTimeRange();
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [maxStorageDays, setMaxStorageDays] = useState(7);
-  const [data, setData] = useState<ServiceWithHistory[]>([]);
+  const [data, setData] = useState<ParsedService[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
@@ -126,7 +137,10 @@ export default function Overview() {
         return r.json() as Promise<ServiceWithHistory[]>;
       })
       .then(d => {
-        setData(d);
+        setData(d.map(svc => ({
+          ...svc,
+          history: svc.history.map(fn => parseFilename(fn) ?? { filename: fn + '.json', overallStatus: 200 as const }),
+        })));
         setLastRefresh(new Date());
       })
       .catch(e => setError(String(e)))
@@ -157,7 +171,7 @@ export default function Overview() {
     }
   }
 
-  const groups = data.reduce<Record<string, ServiceWithHistory[]>>((acc, svc) => {
+  const groups = data.reduce<Record<string, ParsedService[]>>((acc, svc) => {
     const g = svc.group || 'Default';
     if (!acc[g]) acc[g] = [];
     acc[g].push(svc);
@@ -185,7 +199,7 @@ export default function Overview() {
   const failedChecks = allFiles.filter(f => f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504).length;
   const timedFiles = allFiles.filter(f => f.overallStatus !== 504);
   const avgResponseTime = timedFiles.length > 0
-    ? Math.round(timedFiles.reduce((s, f) => s + f.responseTime, 0) / timedFiles.length)
+    ? Math.round(timedFiles.reduce((s, f) => s + rtOf(f), 0) / timedFiles.length)
     : 0;
   // Use combined per-run history so multi-endpoint services don't dilute the uptime %
   const allCombinedRuns = data.flatMap(s => getServiceOverallHistory(s));
@@ -553,10 +567,10 @@ export default function Overview() {
                     const combined = getServiceOverallHistory(svc);
                     const uptime = getUptimePct(combined);
                     const lastStatus = combined[0]?.overallStatus;
-                    const lastMs = combined[0]?.responseTime ?? null;
+                    const lastMs = combined[0] ? rtOf(combined[0]) : null;
                     const timedCombined = combined.filter(h => h.overallStatus !== 504);
                     const avgMs = timedCombined.length > 0
-                      ? Math.round(timedCombined.reduce((s, h) => s + h.responseTime, 0) / timedCombined.length)
+                      ? Math.round(timedCombined.reduce((s, h) => s + rtOf(h), 0) / timedCombined.length)
                       : null;
 
                     return (

@@ -11,6 +11,7 @@ import ResponseDetailModal from '@/components/ResponseDetailModal';
 import TestModal from '@/components/TestModal';
 import { useTimeRange, fmtDateRange } from '@/hooks/useTimeRange';
 import DateRangePicker from '@/components/DateRangePicker';
+import { parseFilename } from '@/lib/parseFilename';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -135,9 +136,9 @@ export default function History() {
     fetch(`/api/history/${encodeURIComponent(name)}?${queryString}`)
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json() as Promise<HistoryFile[]>;
+        return r.json() as Promise<string[]>;
       })
-      .then(d => setFiles(d))
+      .then(d => setFiles(d.map(fn => parseFilename(fn) ?? { filename: fn + '.json', overallStatus: 200 as const })))
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false));
   }, [name, queryString]);
@@ -218,15 +219,15 @@ export default function History() {
   const upCount = files.filter(f => f.overallStatus === 200 || f.overallStatus === 203).length;
   const failedCount = files.filter(f => f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504).length;
   const uptime = files.length > 0 ? (upCount / files.length) * 100 : 100;
-  const latestTs = files.reduce((max, f) => Math.max(max, f.timestamp), 0);
+  const latestTs = files.reduce((max, f) => Math.max(max, f.timestamp ?? 0), 0);
   const latestFailed = files.some(
-    f => Math.floor(f.timestamp / 1000) === Math.floor(latestTs / 1000) && (f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504),
+    f => Math.floor((f.timestamp ?? 0) / 1000) === Math.floor(latestTs / 1000) && (f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504),
   );
   const uptimeColor = files.length === 0 ? 'text-muted-foreground' : latestFailed ? 'text-red-500' : uptime < 100 ? 'text-yellow-500' : 'text-green-500';
   const timedFiles = files.filter(f => f.overallStatus !== 504);
   const avgMs =
     timedFiles.length > 0
-      ? Math.round(timedFiles.reduce((s, f) => s + f.responseTime, 0) / timedFiles.length)
+      ? Math.round(timedFiles.reduce((s, f) => s + (f.responseTime ?? 0), 0) / timedFiles.length)
       : 0;
 
   const endpointLabel = (f: HistoryFile): string => {
@@ -237,7 +238,7 @@ export default function History() {
       );
       return match?.name ?? f.endpointSlug;
     }
-    return service?.endpoints[f.endpointIndex]?.name ?? `Endpoint ${f.endpointIndex}`;
+    return service?.endpoints[f.endpointIndex ?? 0]?.name ?? `Endpoint ${f.endpointIndex ?? 0}`;
   };
 
 
@@ -668,7 +669,7 @@ export default function History() {
                       onClick={() => openFile(f)}
                     >
                       <TableCell className="text-xs font-mono">
-                        {formatTs(f.timestamp)}
+                        {formatTs(f.timestamp ?? 0)}
                       </TableCell>
                       <TableCell className="text-sm">
                         {endpointLabel(f)}
@@ -696,11 +697,11 @@ export default function History() {
                           <Badge variant="outline" className="text-xs border-orange-500 text-orange-400">TIMEOUT</Badge>
                         )}
                         {isMobile && (
-                          <div className="text-xs text-muted-foreground mt-0.5">{f.responseTime}ms</div>
+                          <div className="text-xs text-muted-foreground mt-0.5">{f.responseTime ?? 0}ms</div>
                         )}
                       </TableCell>
                       <TableCell className="hidden sm:table-cell text-right text-sm">
-                        {f.responseTime}ms
+                        {f.responseTime ?? 0}ms
                       </TableCell>
                     </TableRow>
                   ))}

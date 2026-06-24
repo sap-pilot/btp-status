@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.9.0] - 2026-06-24
+
+### Security / Performance
+- **Minimal history payload** — `GET /api/overview` and `GET /api/history/:name` now return history as a plain `string[]` of filenames (without `.json` extension) instead of arrays of JSON objects; all fields — `timestamp`, `overallStatus`, `responseTime`, `city`, `endpointSlug` — are derived client-side by parsing the filename, eliminating per-record JSON object overhead; the client uses a shared `parseFilename` utility that handles both new-format (UTC timestamp) and old-format (local-timezone) filenames
+
 ## [v0.8.0] - 2026-06-23
 
 ### Added

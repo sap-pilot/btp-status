@@ -34,7 +34,10 @@ function fmtTick(ts: number, spanMs: number): string {
   return `${mo}/${dy} ${hh}:${mm}`;
 }
 
-export default function ResponseTimeChart({ files, service }: Props) {
+// ResponseTimeChart is only used on /service/:name which receives full data from /api/history/:name
+type FullFile = HistoryFile & { timestamp: number; responseTime: number; endpointIndex: number };
+
+export default function ResponseTimeChart({ files: rawFiles, service }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
 
@@ -49,8 +52,13 @@ export default function ResponseTimeChart({ files, service }: Props) {
     return () => ro.disconnect();
   }, []);
 
+  // Narrow to files with complete data (always true for /api/history/:name responses)
+  const files = rawFiles.filter((f): f is FullFile =>
+    f.timestamp !== undefined && f.responseTime !== undefined && f.endpointIndex !== undefined,
+  );
+
   // Group files by endpoint+city; new-format files use endpointSlug, old-format use endpointIndex
-  const byEndpoint = new Map<string, { name: string; pts: HistoryFile[] }>();
+  const byEndpoint = new Map<string, { name: string; pts: FullFile[] }>();
   for (const f of files) {
     const key = `${f.endpointSlug ?? f.endpointIndex}__${f.city ?? 'unknown'}`;
     if (!byEndpoint.has(key)) {
@@ -67,7 +75,7 @@ export default function ResponseTimeChart({ files, service }: Props) {
     .map(([key, { name, pts }]) => ({
       key,
       name,
-      pts: [...pts].sort((a, b) => a.timestamp - b.timestamp),
+      pts: [...pts].sort((a, b) => a.timestamp - b.timestamp) as FullFile[],
     }));
 
   if (files.length === 0) {
@@ -94,7 +102,7 @@ export default function ResponseTimeChart({ files, service }: Props) {
     tsMax === tsMin ? chartW / 2 : ((ts - tsMin) / (tsMax - tsMin)) * chartW;
   const sy = (ms: number) => chartH - (ms / yMax) * chartH;
 
-  const buildPath = (pts: HistoryFile[]) =>
+  const buildPath = (pts: FullFile[]) =>
     pts
       .map((p, i) => `${i === 0 ? 'M' : 'L'}${sx(p.timestamp).toFixed(1)},${sy(p.responseTime).toFixed(1)}`)
       .join(' ');

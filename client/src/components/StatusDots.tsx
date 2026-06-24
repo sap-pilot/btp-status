@@ -1,4 +1,5 @@
 import type { HistoryFile } from '@shared/types';
+import { parseFilename } from '@/lib/parseFilename';
 
 interface StatusDotsProps {
   history: HistoryFile[];
@@ -8,8 +9,20 @@ interface StatusDotsProps {
   onDotClick?: (file: HistoryFile) => void;
 }
 
+function getMeta(d: HistoryFile) {
+  const parsed = d.timestamp === undefined || d.responseTime === undefined || d.city === undefined
+    ? parseFilename(d.filename)
+    : null;
+  return {
+    timestamp: d.timestamp ?? parsed?.timestamp ?? 0,
+    responseTime: d.responseTime ?? parsed?.responseTime ?? 0,
+    city: d.city ?? parsed?.city ?? 'unknown',
+  };
+}
+
 function dotTooltip(d: HistoryFile): string {
-  const date = new Date(d.timestamp);
+  const { timestamp, responseTime, city } = getMeta(d);
+  const date = new Date(timestamp);
   const label =
     d.overallStatus === 200 ? 'OK' :
     d.overallStatus === 203 ? 'OK (always ok)' :
@@ -19,8 +32,8 @@ function dotTooltip(d: HistoryFile): string {
     d.filename,
     `date: ${date.toLocaleDateString()}`,
     `time: ${date.toLocaleTimeString()}`,
-    `from: ${d.city ?? 'unknown'}`,
-    `response time: ${d.responseTime} ms`,
+    `from: ${city}`,
+    `response time: ${responseTime} ms`,
     `status: ${d.overallStatus} ${label}`,
   ].join('\n');
 }
@@ -31,9 +44,11 @@ export default function StatusDots({ history, maxDots = 48, showAvg = true, show
   const uptime = nonEmpty > 0 ? Math.round((upCount / nonEmpty) * 100) : 100;
   const timedHistory = history.filter(h => h.overallStatus !== 504);
   const avgMs =
-    timedHistory.length > 0 ? Math.round(timedHistory.reduce((s, h) => s + h.responseTime, 0) / timedHistory.length) : 0;
+    timedHistory.length > 0
+      ? Math.round(timedHistory.reduce((s, h) => s + getMeta(h).responseTime, 0) / timedHistory.length)
+      : 0;
 
-  const sorted = [...history].sort((a, b) => a.timestamp - b.timestamp);
+  const sorted = [...history].sort((a, b) => getMeta(a).timestamp - getMeta(b).timestamp);
   const hasOverflow = sorted.length > maxDots;
 
   // Normal: pad left with empty slots up to maxDots so the bar always looks full.
