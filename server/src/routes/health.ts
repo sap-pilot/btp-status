@@ -22,6 +22,9 @@ router.get('/:name', async (req, res, next) => {
     } else if (result.success) {
       logger.info({ service: name }, 'Health check passed');
       res.status(200).type('text/plain').send('OK');
+    } else if (result.timedOut) {
+      logger.warn({ service: name, message: result.message }, 'Health check timed out');
+      res.status(504).type('text/plain').send(result.message);
     } else {
       logger.warn({ service: name, message: result.message }, 'Health check failed');
       res.status(500).type('text/plain').send(result.message);

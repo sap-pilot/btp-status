@@ -56,7 +56,7 @@ export interface ResponseRecord {
   endpointIndex: number;
   endpointName: string;
   conditions: ConditionResult[];
-  overallStatus: 200 | 203 | 500 | 503;
+  overallStatus: 200 | 203 | 500 | 503 | 504;
   city?: string;
   screenshotFile?: string;
 }
@@ -72,7 +72,7 @@ export interface HistoryFile {
   city?: string;
   responseTime: number;
   httpStatus: number;
-  overallStatus: 200 | 203 | 500 | 503;
+  overallStatus: 200 | 203 | 500 | 503 | 504;
   screenshotFile?: string;
 }
 

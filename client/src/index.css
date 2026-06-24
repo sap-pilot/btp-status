@@ -57,3 +57,11 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Narrow the left/right padding of stat grid cards on mobile portrait */
+@media (max-width: 639px) {
+  .stat-grid .p-6 {
+    padding-left: 0.8rem;
+    padding-right: 0.8rem;
+  }
+}

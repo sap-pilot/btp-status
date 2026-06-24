@@ -207,16 +207,17 @@ export default function History() {
   }
 
   const upCount = files.filter(f => f.overallStatus === 200 || f.overallStatus === 203).length;
-  const failedCount = files.filter(f => f.overallStatus === 500 || f.overallStatus === 503).length;
+  const failedCount = files.filter(f => f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504).length;
   const uptime = files.length > 0 ? (upCount / files.length) * 100 : 100;
   const latestTs = files.reduce((max, f) => Math.max(max, f.timestamp), 0);
   const latestFailed = files.some(
-    f => Math.floor(f.timestamp / 1000) === Math.floor(latestTs / 1000) && (f.overallStatus === 500 || f.overallStatus === 503),
+    f => Math.floor(f.timestamp / 1000) === Math.floor(latestTs / 1000) && (f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504),
   );
   const uptimeColor = files.length === 0 ? 'text-muted-foreground' : latestFailed ? 'text-red-500' : uptime < 100 ? 'text-yellow-500' : 'text-green-500';
+  const timedFiles = files.filter(f => f.overallStatus !== 504);
   const avgMs =
-    files.length > 0
-      ? Math.round(files.reduce((s, f) => s + f.responseTime, 0) / files.length)
+    timedFiles.length > 0
+      ? Math.round(timedFiles.reduce((s, f) => s + f.responseTime, 0) / timedFiles.length)
       : 0;
 
   const endpointLabel = (f: HistoryFile): string => {
@@ -481,7 +482,7 @@ export default function History() {
         )}
 
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-3 sm:gap-4">
+        <div className="stat-grid grid grid-cols-4 gap-3 sm:gap-4">
           <Card>
             <CardContent className="pt-4">
               <div className={`text-base sm:text-2xl font-bold ${uptimeColor}`}>{fmtUptime(uptime)}</div>
@@ -586,6 +587,7 @@ export default function History() {
                       <SelectItem value="203" className="text-xs">PASS (always ok)</SelectItem>
                       <SelectItem value="500" className="text-xs">FAIL</SelectItem>
                       <SelectItem value="503" className="text-xs">FAIL (always error)</SelectItem>
+                      <SelectItem value="504" className="text-xs">TIMEOUT</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -624,6 +626,7 @@ export default function History() {
                       className={`cursor-pointer ${
                         f.overallStatus === 500 ? 'bg-red-950/20 hover:bg-red-950/30' :
                         f.overallStatus === 503 ? 'bg-red-950/30 hover:bg-red-950/40' :
+                        f.overallStatus === 504 ? 'bg-orange-950/20 hover:bg-orange-950/30' :
                         'hover:bg-muted/30'
                       }`}
                       onClick={() => openFile(f)}
@@ -652,6 +655,9 @@ export default function History() {
                         )}
                         {f.overallStatus === 503 && (
                           <Badge variant="destructive" className="text-xs bg-red-900 hover:bg-red-900">FAIL (always error)</Badge>
+                        )}
+                        {f.overallStatus === 504 && (
+                          <Badge variant="outline" className="text-xs border-orange-500 text-orange-400">TIMEOUT</Badge>
                         )}
                         {isMobile && (
                           <div className="text-xs text-muted-foreground mt-0.5">{f.responseTime}ms</div>

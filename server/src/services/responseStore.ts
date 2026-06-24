@@ -89,7 +89,7 @@ export async function readScreenshotFile(
 export function parseFilename(filename: string): HistoryFile | null {
   // New format (v0.5.0+): yyyyMMdd-HHmmss_{slug}_{city}_{ms}_{status}.json  (UTC timestamp)
   const newM = filename.match(
-    /^(\d{8}-\d{6})_([a-zA-Z0-9-]+)_([a-zA-Z0-9-]+)_(\d+)_(200|203|500|503)\.json$/,
+    /^(\d{8}-\d{6})_([a-zA-Z0-9-]+)_([a-zA-Z0-9-]+)_(\d+)_(200|203|500|503|504)\.json$/,
   );
   if (newM) {
     const [, dateStr, slug, city, msStr, statusStr] = newM;
@@ -101,13 +101,13 @@ export function parseFilename(filename: string): HistoryFile | null {
       city,
       responseTime: parseInt(msStr, 10),
       httpStatus: 0,
-      overallStatus: parseInt(statusStr, 10) as 200 | 203 | 500 | 503,
+      overallStatus: parseInt(statusStr, 10) as 200 | 203 | 500 | 503 | 504,
     };
   }
 
   // Old format (pre-v0.5.0): yyyyMMdd-HHmmss_{idx}_{ms}ms_{status}.json  (local timestamp)
   const oldM = filename.match(
-    /^(\d{8}-\d{6})_(\d+)_(\d+)ms_(200|203|500|503)\.json$/,
+    /^(\d{8}-\d{6})_(\d+)_(\d+)ms_(200|203|500|503|504)\.json$/,
   );
   if (oldM) {
     const [, dateStr, idxStr, msStr, statusStr] = oldM;
@@ -117,7 +117,7 @@ export function parseFilename(filename: string): HistoryFile | null {
       endpointIndex: parseInt(idxStr, 10),
       responseTime: parseInt(msStr, 10),
       httpStatus: 0,
-      overallStatus: parseInt(statusStr, 10) as 200 | 203 | 500 | 503,
+      overallStatus: parseInt(statusStr, 10) as 200 | 203 | 500 | 503 | 504,
     };
   }
 

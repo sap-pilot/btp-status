@@ -168,7 +168,7 @@ Create `server/config.json` (based on `config-sample.json`):
 | `endpoints[].username` | string | IAS username; `{{variable}}` substitution supported |
 | `endpoints[].password` | string | IAS password; `{{variable}}` substitution supported |
 | `endpoints[].waitForSelector` | string | CSS selector to wait for after login (browser-ias-login only) |
-| `endpoints[].timeout` | number | Overall browser session timeout in ms (default `30000`; browser-ias-login only) |
+| `endpoints[].timeout` | number | Request timeout in ms. For standard HTTP checks, overrides `REQUEST_TIMEOUT_MS` for this endpoint; a timed-out check is recorded as `504`. For `browser-ias-login` mode, sets the overall browser session timeout (default `30000`). |
 
 ### Browser-based IAS Login Check
 
@@ -404,8 +404,9 @@ The server uses [pino](https://getpino.io) with colorized pretty-print output.
 | `RESPONSE_DIR` | `./response` | Directory for response file storage |
 | `SYNC_REMOTE` | — | Base URL of another BTP Status instance (e.g. `https://btp-status-prod.cfapps.eu10.hana.ondemand.com`). On startup, missing response files are downloaded from the remote and saved to the local `RESPONSE_DIR`. Periodic sync runs every `SYNC_INTERVAL` seconds. |
 | `SYNC_INTERVAL` | `900` | Seconds between periodic remote sync runs (minimum 60). Only effective when `SYNC_REMOTE` is set. |
-| `SYNC_REMOTE_BATCH_SIZE` | `50` | Number of files requested per `POST /api/batch-download` call during sync. The sync job tries the batch endpoint first; if the remote does not support it, it falls back to individual `GET /api/download` requests with concurrency 10. |
+| `SYNC_REMOTE_BATCH_SIZE` | `100` | Number of files requested per `POST /api/batch-download` call during sync. The sync job tries the batch endpoint first; if the remote does not support it, it falls back to individual `GET /api/download` requests with concurrency 10. |
 | `MAX_RESPONSE_STORAGE_DAYS` | `3` | Response files (JSON + PNG) older than this many days are automatically deleted. Housekeeping runs once on startup then every 24 hours. Set to `0` to disable. |
+| `REQUEST_TIMEOUT_MS` | `30000` | Default HTTP request timeout in milliseconds for standard endpoint checks. A check that exceeds this limit is recorded with status `504` and the response filename ends in `_504.json`. Per-endpoint `timeout` in `config.json` overrides this value for that endpoint only. |
 | `LOG_LEVEL` | `debug` | Pino log level: `trace`, `debug`, `info`, `warn`, `error` |
 
 ## Remote Sync
@@ -419,7 +420,7 @@ SYNC_REMOTE=https://btp-status-prod.cfapps.eu10.hana.ondemand.com npm start
 On boot the server will:
 1. Call `GET /api/browse` on the remote to get its full file list
 2. Compare against the local `./response/` directory
-3. Download all missing files via `POST /api/batch-download` (ZIP batches of `SYNC_REMOTE_BATCH_SIZE`, default 50); falls back automatically to `GET /api/download?path=…` (concurrency 10) if the remote does not support the batch endpoint
+3. Download all missing files via `POST /api/batch-download` (ZIP batches of `SYNC_REMOTE_BATCH_SIZE`, default 100); falls back automatically to `GET /api/download?path=…` (concurrency 10) if the remote does not support the batch endpoint
 4. Log total files, transferred MB, decompressed MB, and elapsed seconds at `INFO`
 
 After the initial sync, the same logic runs again every `SYNC_INTERVAL` seconds (default `900` / 15 minutes) as a background job — keeping the local instance in sync with the remote over time. Files already present locally are never re-downloaded. The timer uses `unref()` so it does not prevent graceful shutdown.

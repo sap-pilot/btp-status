@@ -13,7 +13,8 @@ function dotTooltip(d: HistoryFile): string {
   const label =
     d.overallStatus === 200 ? 'OK' :
     d.overallStatus === 203 ? 'OK (always ok)' :
-    d.overallStatus === 503 ? 'FAIL (always error)' : 'FAIL';
+    d.overallStatus === 503 ? 'FAIL (always error)' :
+    d.overallStatus === 504 ? 'TIMEOUT' : 'FAIL';
   return [
     d.filename,
     `date: ${date.toLocaleDateString()}`,
@@ -28,8 +29,9 @@ export default function StatusDots({ history, maxDots = 48, showAvg = true, show
   const nonEmpty = history.length;
   const upCount = history.filter(h => h.overallStatus === 200 || h.overallStatus === 203).length;
   const uptime = nonEmpty > 0 ? Math.round((upCount / nonEmpty) * 100) : 100;
+  const timedHistory = history.filter(h => h.overallStatus !== 504);
   const avgMs =
-    nonEmpty > 0 ? Math.round(history.reduce((s, h) => s + h.responseTime, 0) / nonEmpty) : 0;
+    timedHistory.length > 0 ? Math.round(timedHistory.reduce((s, h) => s + h.responseTime, 0) / timedHistory.length) : 0;
 
   const sorted = [...history].sort((a, b) => a.timestamp - b.timestamp);
   const hasOverflow = sorted.length > maxDots;
@@ -59,6 +61,7 @@ export default function StatusDots({ history, maxDots = 48, showAvg = true, show
             d.overallStatus === 200 ? 'bg-green-500' :
             d.overallStatus === 203 ? 'bg-emerald-700' :
             d.overallStatus === 503 ? 'bg-red-900' :
+            d.overallStatus === 504 ? 'bg-orange-500' :
             'bg-red-500';
           const title = dotTooltip(d);
           if (onDotClick) {

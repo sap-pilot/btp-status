@@ -176,9 +176,10 @@ export default function Overview() {
   // Aggregate stats — raw endpoint files for check/response counts; combined runs for uptime
   const allFiles = data.flatMap(s => s.history);
   const totalChecks = allFiles.length;
-  const failedChecks = allFiles.filter(f => f.overallStatus === 500 || f.overallStatus === 503).length;
-  const avgResponseTime = totalChecks > 0
-    ? Math.round(allFiles.reduce((s, f) => s + f.responseTime, 0) / totalChecks)
+  const failedChecks = allFiles.filter(f => f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504).length;
+  const timedFiles = allFiles.filter(f => f.overallStatus !== 504);
+  const avgResponseTime = timedFiles.length > 0
+    ? Math.round(timedFiles.reduce((s, f) => s + f.responseTime, 0) / timedFiles.length)
     : 0;
   // Use combined per-run history so multi-endpoint services don't dilute the uptime %
   const allCombinedRuns = data.flatMap(s => getServiceOverallHistory(s));
@@ -420,7 +421,7 @@ export default function Overview() {
 
         {/* Aggregate stats */}
         {data.length > 0 && (
-          <div className="grid grid-cols-4 gap-3 sm:gap-4">
+          <div className="stat-grid grid grid-cols-4 gap-3 sm:gap-4">
             <Card>
               <CardContent className="pt-4">
                 <div className={`text-base sm:text-2xl font-bold ${overallUptimeColor}`}>{fmtUptime(overallUptime)}</div>
@@ -520,8 +521,9 @@ export default function Overview() {
                     const uptime = getUptimePct(combined);
                     const lastStatus = combined[0]?.overallStatus;
                     const lastMs = combined[0]?.responseTime ?? null;
-                    const avgMs = combined.length > 0
-                      ? Math.round(combined.reduce((s, h) => s + h.responseTime, 0) / combined.length)
+                    const timedCombined = combined.filter(h => h.overallStatus !== 504);
+                    const avgMs = timedCombined.length > 0
+                      ? Math.round(timedCombined.reduce((s, h) => s + h.responseTime, 0) / timedCombined.length)
                       : null;
 
                     return (

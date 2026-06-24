@@ -5,6 +5,7 @@ import { getEvaluationMode } from './overrideService.js';
 import { runBrowserIasLogin } from './browserCheckService.js';
 import { getCity } from './geoService.js';
 import { logger } from '../logger.js';
+import { config } from '../config.js';
 import type { ConditionResult, ResponseRecord, CheckResult, EndpointCheckResult } from '../types/index.js';
 
 export type { CheckResult, EndpointCheckResult };
@@ -124,9 +125,10 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
     // ── Standard HTTP check ─────────────────────────────────────────────────
     const reqHeaders = normalizeHeaders(ep.headers);
     const method = ep.method ?? 'GET';
+    const timeoutMs = ep.timeout ?? config.REQUEST_TIMEOUT_MS;
 
     logger.debug(
-      { service: serviceName, endpoint: epName, method, url: ep.url },
+      { service: serviceName, endpoint: epName, method, url: ep.url, timeoutMs },
       'Sending request',
     );
 
@@ -136,6 +138,7 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
     let respBody = '';
     let responseTime = 0;
     let fetchError: string | null = null;
+    let didTimeout = false;
 
     try {
       const resp = await fetch(ep.url, {
@@ -143,6 +146,7 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
         headers: reqHeaders,
         body: ep.body ?? undefined,
         redirect: 'manual',
+        signal: AbortSignal.timeout(timeoutMs),
       });
       responseTime = Date.now() - start;
       respStatus = resp.status;
@@ -161,17 +165,34 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
       );
     } catch (err) {
       responseTime = Date.now() - start;
+      didTimeout = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
       fetchError = err instanceof Error ? err.message : String(err);
-      respBody = fetchError;
+      respBody = didTimeout ? `Request timed out after ${timeoutMs}ms` : fetchError;
 
-      logger.error(
-        { service: serviceName, endpoint: epName, url: ep.url, responseTime, err },
-        'Request failed with network error',
-      );
+      if (didTimeout) {
+        logger.warn(
+          { service: serviceName, endpoint: epName, url: ep.url, timeoutMs, responseTime },
+          'Request timed out',
+        );
+      } else {
+        logger.error(
+          { service: serviceName, endpoint: epName, url: ep.url, responseTime, err },
+          'Request failed with network error',
+        );
+      }
     }
 
     const ctx = { status: respStatus, responseTime, body: respBody, headers: respHeaders };
     const conditions: ConditionResult[] = (ep.conditions ?? []).map(c => evaluateCondition(c, ctx));
+
+    if (didTimeout) {
+      conditions.push({
+        condition: `[TIMEOUT] response within ${timeoutMs}ms`,
+        passed: false,
+        actual: `${responseTime}ms`,
+        expected: `< ${timeoutMs}ms`,
+      });
+    }
 
     if (evalMode === 'alwayserror') {
       conditions.push({
@@ -183,10 +204,11 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
     }
 
     const conditionsPassed = fetchError === null && conditions.every(c => c.passed);
-    const overallStatus: 200 | 203 | 500 | 503 =
+    const overallStatus: 200 | 203 | 500 | 503 | 504 =
       evalMode === 'alwaysok' ? 203 :
       evalMode === 'alwayserror' ? 503 :
-      (conditionsPassed ? 200 : 500);
+      conditionsPassed ? 200 :
+      didTimeout ? 504 : 500;
 
     for (const c of conditions) {
       if (!c.passed) {
@@ -236,6 +258,9 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
 
   return {
     success: allPassed,
+    timedOut: !allPassed && details.some(d =>
+      d.conditions.some(c => c.condition.startsWith('[TIMEOUT]')),
+    ),
     message: allPassed ? 'OK' : failMessages.join('\n'),
     details,
   };
