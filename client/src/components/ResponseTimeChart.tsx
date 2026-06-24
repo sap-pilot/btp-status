@@ -35,7 +35,7 @@ function fmtTick(ts: number, spanMs: number): string {
 }
 
 // ResponseTimeChart is only used on /service/:name which receives full data from /api/history/:name
-type FullFile = HistoryFile & { timestamp: number; responseTime: number; endpointIndex: number };
+type FullFile = HistoryFile & { timestamp: number; responseTime: number };
 
 export default function ResponseTimeChart({ files: rawFiles, service }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -52,9 +52,10 @@ export default function ResponseTimeChart({ files: rawFiles, service }: Props) {
     return () => ro.disconnect();
   }, []);
 
-  // Narrow to files with complete data (always true for /api/history/:name responses)
+  // Narrow to files with the minimum fields needed to plot; new-format files have endpointSlug,
+  // old-format have endpointIndex — both are handled in the grouping below
   const files = rawFiles.filter((f): f is FullFile =>
-    f.timestamp !== undefined && f.responseTime !== undefined && f.endpointIndex !== undefined,
+    f.timestamp !== undefined && f.responseTime !== undefined,
   );
 
   // Group files by endpoint+city; new-format files use endpointSlug, old-format use endpointIndex
@@ -64,7 +65,9 @@ export default function ResponseTimeChart({ files: rawFiles, service }: Props) {
     if (!byEndpoint.has(key)) {
       const epName = f.endpointSlug !== undefined
         ? f.endpointSlug
-        : (service?.endpoints[f.endpointIndex]?.name ?? `Endpoint ${f.endpointIndex}`);
+        : f.endpointIndex !== undefined
+          ? (service?.endpoints[f.endpointIndex]?.name ?? `Endpoint ${f.endpointIndex}`)
+          : 'Unknown';
       const city = f.city ?? 'unknown';
       byEndpoint.set(key, { name: `${epName} (${city})`, pts: [] });
     }
