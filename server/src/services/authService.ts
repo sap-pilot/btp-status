@@ -13,6 +13,7 @@ export interface XsuaaConfig {
 
 export interface SessionPayload {
   firstName: string;
+  lastName: string;
   userName: string;
   email: string;
   initials: string;
@@ -22,12 +23,17 @@ export interface SessionPayload {
   exp: number;
 }
 
-/** Returns "userName <email> (origin)" with parts omitted when absent or redundant. */
+/** Returns "userName <email> (origin)" — compact form used in operation audit logs. */
 export function userLabel(s: SessionPayload): string {
   const parts: string[] = [s.userName];
   if (s.email && s.email !== s.userName) parts.push(`<${s.email}>`);
   if (s.origin) parts.push(`(${s.origin})`);
   return parts.join(' ');
+}
+
+/** Returns full user info object for login/logout audit logs. */
+export function userAuditLog(s: SessionPayload): { id: string; name: string; email: string; origin: string; isAdmin: boolean; firstName: string; lastName: string } {
+  return { id: s.sub, name: s.userName, email: s.email, origin: s.origin, isAdmin: s.isAdmin, firstName: s.firstName, lastName: s.lastName };
 }
 
 // Cache after first parse so we don't re-parse VCAP on every request
@@ -124,19 +130,20 @@ export async function exchangeCode(code: string, callbackBase: string): Promise<
   const fullName = (claims.name as string | undefined) ?? (joinedName || firstName);
   const initials = fullName.trim().split(/\s+/).map(w => (w[0] ?? '').toUpperCase()).join('').slice(0, 2) || '?';
 
+  const lastName = familyName ?? '';
+
   const scopes = (claims.scope as string[] | string | undefined);
   const scopeList = Array.isArray(scopes) ? scopes : typeof scopes === 'string' ? scopes.split(' ') : [];
-  // Match both 'btp-status.admin' and 'btp-status!t12345.admin' (tenant suffix added by XSUAA at runtime)
-  const appBase = x.xsappname.split('!')[0];
-  const isAdmin = scopeList.some(s => {
-    if (!s.endsWith('.admin')) return false;
-    const pfx = s.slice(0, -6);
-    return pfx === x.xsappname || pfx === appBase || pfx.startsWith(`${appBase}!`);
-  });
-  logger.debug({ xsappname: x.xsappname, scopes: scopeList, isAdmin }, 'JWT scope check');
+  const isAdmin = scopeList.includes(`${x.xsappname}.admin`);
+  logger.debug({
+    user: { id: (claims.sub as string | undefined) ?? '', name: userName, email: email ?? '', origin, isAdmin, firstName, lastName },
+    xsappname: x.xsappname,
+    scopes: scopeList,
+  }, 'JWT scope check');
 
   return {
     firstName,
+    lastName,
     userName,
     email: email ?? '',
     initials,

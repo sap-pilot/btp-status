@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { getXsuaaConfig, getAppUrl, buildAuthUrl, exchangeCode, signSession, readSessionFromRequest, userLabel } from '../services/authService.js';
+import { getXsuaaConfig, getAppUrl, buildAuthUrl, exchangeCode, signSession, readSessionFromRequest, userAuditLog } from '../services/authService.js';
 import { logger } from '../logger.js';
 
 const router = Router();
@@ -59,7 +59,7 @@ router.get('/login/callback', async (req: Request, res: Response) => {
     const cookieValue = signSession(session, x.clientsecret);
     const ttl = Math.max(60, session.exp - Math.floor(Date.now() / 1000));
     setCookie(res, cookieValue, ttl);
-    logger.info({ user: userLabel(session), firstName: session.firstName, isAdmin: session.isAdmin }, 'User logged in');
+    logger.info({ user: userAuditLog(session) }, 'User logged in');
     const origin = targetOrigin(req);
     const msg = JSON.stringify({ type: 'login', user: { firstName: session.firstName, initials: session.initials, isAdmin: session.isAdmin } });
     const script = `try{window.opener&&window.opener.postMessage(${msg},${JSON.stringify(origin)});}catch(e){}window.close();`;
@@ -78,7 +78,7 @@ router.get('/logout', (req: Request, res: Response) => {
   const x = getXsuaaConfig();
   const session = x ? readSessionFromRequest(req.headers.cookie ?? '', x.clientsecret) : null;
   if (session) {
-    logger.info({ user: userLabel(session) }, 'User logged out');
+    logger.info({ user: userAuditLog(session) }, 'User logged out');
   }
   clearCookie(res);
   if (x) {
