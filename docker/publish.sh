@@ -7,7 +7,7 @@
 #   REGISTRY=ghcr.io/myorg ./docker/publish.sh  # custom registry
 #
 # After pushing, update the running CF app without a full MTA redeploy:
-#   cf push btp-status-srv --docker-image <SHA tag printed below>
+#   cf push btp-status --docker-image <SHA tag printed below>
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -42,4 +42,4 @@ echo "  ${SHA_TAG}"
 echo "  ${LATEST_TAG}"
 echo ""
 echo "To update the running CF app (no MTA rebuild needed):"
-echo "  cf push btp-status-srv --docker-image ${SHA_TAG}"
+echo "  cf push btp-status --docker-image ${SHA_TAG}"

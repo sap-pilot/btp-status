@@ -542,7 +542,7 @@ Two options for providing the service config on BTP:
 _schema-version: "3.3"
 extends: btp-status
 modules:
-  - name: btp-status-srv
+  - name: btp-status
     properties:
       CONFIG_JSON: '{"services":[...]}'
 ```
@@ -554,6 +554,6 @@ Then deploy with: `cf deploy mta_archives/btp-status_0.1.0.mtar -e config-dev.mt
 ```bash
 cf mtas                               # list deployed MTAs
 cf mta btp-status                     # show modules/services
-cf logs btp-status-srv --recent       # recent logs
+cf logs btp-status --recent       # recent logs
 cf undeploy btp-status                # tear down
 ```

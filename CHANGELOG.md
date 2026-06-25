@@ -2,6 +2,9 @@
 
 ## [v0.9.0] - 2026-06-24
 
+### Changed
+- **CF module renamed** — the MTA module name changed from `btp-status-srv` to `btp-status`; update any existing `cf logs`, `cf ssh`, `cf push`, or `cf restart` commands accordingly; the MTA ID (`btp-status`) and application title are unchanged
+
 ### Security / Performance
 - **Minimal history payload** — `GET /api/overview` and `GET /api/history/:name` now return history as a plain `string[]` of filenames (without `.json` extension) instead of arrays of JSON objects; all fields — `timestamp`, `overallStatus`, `responseTime`, `city`, `endpointSlug` — are derived client-side by parsing the filename, eliminating per-record JSON object overhead; the client uses a shared `parseFilename` utility that handles both new-format (UTC timestamp) and old-format (local-timezone) filenames
 - **Sync endpoint auth (`SYNC_KEY`)** — `GET /api/download` and `POST /api/batch-download` now support an optional shared-secret guard; when `variables['SYNC_KEY']` is set in `config.json` (or the `SYNC_KEY` environment variable overrides it), requests must supply a matching `x-sync-key` request header **or** carry a valid XSUAA session cookie; unauthenticated requests receive `401`; when the sync client calls these endpoints on a remote instance it automatically includes the local `x-sync-key` header; a `401` from the remote aborts the entire sync immediately (no fallback to individual downloads) with a clear error message

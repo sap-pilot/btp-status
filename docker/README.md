@@ -108,7 +108,7 @@ Open http://localhost:3000/overview
 After `./docker/build.sh` prints the SHA tag, push it directly to the running CF app:
 
 ```bash
-cf push btp-status-srv --docker-image sapux/btp-status:<sha>
+cf push btp-status --docker-image sapux/btp-status:<sha>
 ```
 
 CF pulls the image by its exact SHA tag so it cannot reuse a cached layer.  
@@ -123,7 +123,7 @@ Update the `docker.image` value in `mta.yaml` to the SHA tag, then deploy:
 
 ```yaml
 modules:
-  - name: btp-status-srv
+  - name: btp-status
     type: nodejs
     path: server
     parameters:
@@ -149,7 +149,7 @@ cf deploy mta_archives/btp-status_0.3.0.mtar -f --retries 1 \
 
 ### CF SSH
 
-`enable-ssh: true` in `mta.yaml` enables `cf ssh btp-status-srv`.
+`enable-ssh: true` in `mta.yaml` enables `cf ssh btp-status`.
 The image includes `openssh-server` as required by the CF Docker SSH specification.
 
 ### PORT binding

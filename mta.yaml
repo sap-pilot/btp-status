@@ -3,7 +3,7 @@ ID: btp-status
 version: 0.9.0
 
 modules:
-  - name: btp-status-srv
+  - name: btp-status
     type: nodejs
     path: server
     parameters:
