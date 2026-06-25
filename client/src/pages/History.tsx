@@ -162,6 +162,10 @@ export default function History() {
       .catch(() => null);
   }, [queryString]);
 
+  useEffect(() => {
+    document.title = `${name} - BTP Service Status`;
+  }, [name]);
+
   function openFile(file: HistoryFile | null) {
     setSelected(file);
     const base = `/service/${encodeURIComponent(name)}`;

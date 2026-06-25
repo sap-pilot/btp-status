@@ -243,8 +243,8 @@ export default function Overview() {
   const appTitle = `BTP Status${serverCity ? ` (${serverCity})` : ''}`;
 
   useEffect(() => {
-    document.title = appTitle;
-  }, [appTitle]);
+    document.title = serverCity ? `${serverCity} - BTP Status Overview` : 'BTP Status Overview';
+  }, [serverCity]);
 
   const currentSiteUrl = sites.find(s => {
     try { return new URL(s.url).origin === window.location.origin; } catch { return false; }

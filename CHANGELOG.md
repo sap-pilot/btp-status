@@ -3,6 +3,7 @@
 ## [v0.9.0] - 2026-06-24
 
 ### Changed
+- **Dynamic browser tab title** — Overview tab shows `{location} - BTP Status Overview` (e.g. `Ashburn - BTP Status Overview`) when the server's geo-resolved city is available, falling back to `BTP Status Overview`; the service detail tab shows `{service} - BTP Service Status` and updates immediately when the user switches to a different service via the dropdown; the `<h1>` heading on both pages is unchanged
 - **CF module renamed** — the MTA module name changed from `btp-status-srv` to `btp-status`; update any existing `cf logs`, `cf ssh`, `cf push`, or `cf restart` commands accordingly; the MTA ID (`btp-status`) and application title are unchanged
 
 ### Security / Performance
