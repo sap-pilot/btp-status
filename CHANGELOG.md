@@ -8,6 +8,9 @@
 - **Response Detail modal tab reorder for browser checks** — tabs are now ordered **Overview → Screenshot → Console → Page Source** and the modal always opens on **Overview** by default (previously Screenshot was first and default when present); Console and Page Source tabs appear only when the respective sidecar files exist
 - Console log and page source sidecar files are included in remote sync (`/api/browse`, `/api/download`, `/api/batch-download`) and are pruned by the housekeeping scheduler alongside their corresponding JSON and PNG files
 
+### Fixed
+- **Browser check response time accuracy** — the timer now starts after the browser process is launched (excluding Chromium startup overhead) and stops before the screenshot and page source are captured (excluding post-check I/O); the recorded `responseTime` reflects the actual login flow duration only
+
 ## [v0.9.0] - 2026-06-24
 
 ### Changed

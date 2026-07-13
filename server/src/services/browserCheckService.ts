@@ -19,11 +19,12 @@ export async function runBrowserIasLogin(
   serviceName: string,
 ): Promise<BrowserCheckResult> {
   const timeout = ep.timeout ?? 30_000;
-  const start = Date.now();
   let passed = false;
   let message = '';
   let browser: Browser | undefined;
   let page: Page | undefined;
+  let responseTime = 0;
+  let start = 0;
 
   const consoleLogs: string[] = [];
 
@@ -33,6 +34,7 @@ export async function runBrowserIasLogin(
       executablePath: existsSync(SYSTEM_CHROME) ? SYSTEM_CHROME : undefined,
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
+    
     page = await browser.newPage();
     page.on('console', msg => {
       consoleLogs.push(`[${new Date().toISOString()}] [${msg.type()}] ${msg.text()}`);
@@ -40,6 +42,8 @@ export async function runBrowserIasLogin(
     await page.setViewportSize({ width: 1280, height: 800 });
 
     logger.debug({ service: serviceName, endpoint: ep.name, url: ep.url }, 'Browser: navigating');
+
+    start = Date.now();
     await page.goto(ep.url, { timeout });
 
     await page.waitForSelector('#j_username', { timeout });
@@ -60,7 +64,9 @@ export async function runBrowserIasLogin(
     passed = true;
     message = `Login succeeded — element "${selector}" found`;
     logger.info({ service: serviceName, endpoint: ep.name, finalUrl: page.url() }, 'Browser check passed');
+    responseTime = Date.now() - start;
   } catch (err) {
+    responseTime = Date.now() - start;
     message = err instanceof Error ? err.message : String(err);
     logger.warn({ service: serviceName, endpoint: ep.name, err }, 'Browser check failed');
   }
@@ -82,5 +88,5 @@ export async function runBrowserIasLogin(
 
   try { await browser?.close(); } catch { /* ignore */ }
 
-  return { passed, message, responseTime: Date.now() - start, screenshot, consoleLogs, htmlContent };
+  return { passed, message, responseTime, screenshot, consoleLogs, htmlContent };
 }
