@@ -59,6 +59,8 @@ export interface ResponseRecord {
   overallStatus: 200 | 203 | 500 | 503 | 504;
   city?: string;
   screenshotFile?: string;
+  consoleLogFile?: string;
+  contentFile?: string;
 }
 
 /** Parsed representation of a response filename. All fields are derived from the filename itself. */

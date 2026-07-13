@@ -212,13 +212,23 @@ The check flow:
 2. Fill `#j_username`, click `#next-button`
 3. Fill `#j_password`, click `#logOnFormSubmit`
 4. Wait for the CSS selector `waitForSelector` to appear in the DOM — success if found before `timeout`, failure otherwise
-5. Capture a screenshot regardless of outcome
-6. Save screenshot as `yyyyMMdd-HHmmss_{endpointSlug}_{city}_{ms}_{status}.png` alongside the JSON record
+5. Capture a screenshot and collect all browser console messages regardless of outcome
+6. Dump the current page HTML source
+7. Save three sidecar files alongside the JSON record:
+   - `…_{status}.png` — screenshot
+   - `…_{status}_console.log` — timestamped browser console output (log, error, warning, etc.)
+   - `…_{status}_content.html` — raw HTML source of the page at check completion
 
-The screenshot appears in:
-- `/api/browse` and `/api/download` (same folder as JSON records)
-- The **Screenshot** tab when clicking a history row on the Service detail page
-- The **Test** popup after "Run Test" or "Test all"
+The **Response Detail** modal shows four tabs for browser checks (tabs appear only when the corresponding file exists):
+
+| Tab | Content |
+|-----|---------|
+| **Overview** | Check metadata, result message, conditions table (default) |
+| **Screenshot** | Full-page screenshot |
+| **Console** | Timestamped browser console messages (useful for JS errors and blank-screen failures) |
+| **Page Source** | Raw HTML of the page (useful for inspecting what was rendered during a failed login) |
+
+All three sidecar files are included in remote sync and pruned by the housekeeping scheduler alongside their JSON counterpart.
 
 > **Chromium setup (local dev)**: run `npx playwright install chromium` once after `npm install`.  
 > On SAP BTP Cloud Foundry, Google Chrome is installed automatically via the apt-buildpack — no manual step required (see [BTP deployment notes](#deployment-sap-btp-mta)).

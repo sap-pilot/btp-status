@@ -22,6 +22,8 @@ export async function saveResponse(
   serviceName: string,
   record: ResponseRecord,
   screenshot?: Buffer,
+  consoleLogs?: string[],
+  htmlContent?: string,
 ): Promise<string> {
   const dir = join(config.RESPONSE_DIR, sanitizeName(serviceName));
   await mkdir(dir, { recursive: true });
@@ -35,7 +37,17 @@ export async function saveResponse(
   if (screenshot && screenshot.length > 0) {
     const pngFilename = `${base}.png`;
     await writeFile(join(dir, pngFilename), screenshot);
-    finalRecord = { ...record, screenshotFile: pngFilename };
+    finalRecord = { ...finalRecord, screenshotFile: pngFilename };
+  }
+  if (consoleLogs && consoleLogs.length > 0) {
+    const logFilename = `${base}_console.log`;
+    await writeFile(join(dir, logFilename), consoleLogs.join('\n'), 'utf-8');
+    finalRecord = { ...finalRecord, consoleLogFile: logFilename };
+  }
+  if (htmlContent && htmlContent.length > 0) {
+    const htmlFilename = `${base}_content.html`;
+    await writeFile(join(dir, htmlFilename), htmlContent, 'utf-8');
+    finalRecord = { ...finalRecord, contentFile: htmlFilename };
   }
 
   const filename = `${base}.json`;
@@ -83,6 +95,24 @@ export async function readScreenshotFile(
   filename: string,
 ): Promise<Buffer> {
   if (!/^[\w-]+\.png$/.test(filename)) throw new Error('Invalid filename');
+  const filepath = join(config.RESPONSE_DIR, sanitizeName(serviceName), filename);
+  return readFile(filepath);
+}
+
+export async function readConsoleLogFile(
+  serviceName: string,
+  filename: string,
+): Promise<Buffer> {
+  if (!/^[\w-]+_console\.log$/.test(filename)) throw new Error('Invalid filename');
+  const filepath = join(config.RESPONSE_DIR, sanitizeName(serviceName), filename);
+  return readFile(filepath);
+}
+
+export async function readContentFile(
+  serviceName: string,
+  filename: string,
+): Promise<Buffer> {
+  if (!/^[\w-]+_content\.html$/.test(filename)) throw new Error('Invalid filename');
   const filepath = join(config.RESPONSE_DIR, sanitizeName(serviceName), filename);
   return readFile(filepath);
 }
@@ -155,7 +185,10 @@ export async function browseResponseFiles(): Promise<Record<string, string[]>> {
         .map(async (dir) => {
           try {
             const files = await readdir(join(config.RESPONSE_DIR, dir.name));
-            result[dir.name] = files.filter(f => f.endsWith('.json') || f.endsWith('.png')).sort();
+            result[dir.name] = files.filter(f =>
+            f.endsWith('.json') || f.endsWith('.png') ||
+            f.endsWith('_console.log') || f.endsWith('_content.html'),
+          ).sort();
           } catch {
             result[dir.name] = [];
           }

@@ -29,9 +29,15 @@ export async function runHousekeeping(): Promise<void> {
       }
 
       for (const file of files) {
-        if (!file.endsWith('.json') && !file.endsWith('.png')) continue;
+        // Derive the corresponding .json filename so we can parse the timestamp
+        let jsonName: string;
+        if (file.endsWith('.json')) jsonName = file;
+        else if (file.endsWith('.png')) jsonName = file.replace(/\.png$/, '.json');
+        else if (file.endsWith('_console.log')) jsonName = file.slice(0, -12) + '.json';
+        else if (file.endsWith('_content.html')) jsonName = file.slice(0, -13) + '.json';
+        else continue;
         // Use the shared parser which correctly handles UTC (new format) and local (old format)
-        const meta = parseFilename(file.endsWith('.png') ? file.replace(/\.png$/, '.json') : file);
+        const meta = parseFilename(jsonName);
         if (meta === null || meta.timestamp >= cutoff) continue;
         try {
           await unlink(join(serviceDir, file));
