@@ -42,6 +42,8 @@ export default function ResponseDetailModal({ file, serviceName, onClose, auth }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsAuth, setNeedsAuth] = useState(false);
+  const [consoleText, setConsoleText] = useState<string | null>(null);
+  const [htmlText, setHtmlText] = useState<string | null>(null);
 
   const requiresLogin = auth?.enabled && !auth.loggedIn;
 
@@ -69,6 +71,21 @@ export default function ResponseDetailModal({ file, serviceName, onClose, auth }
       .catch(e => { if (String(e) !== 'Error: 401') setError(String(e)); })
       .finally(() => setLoading(false));
   }, [file, serviceName, requiresLogin]);
+
+  useEffect(() => {
+    if (!record) { setConsoleText(null); setHtmlText(null); return; }
+    const fetchSidecar = async (sidecarFile: string) => {
+      const url = `/api/download?path=${encodeURIComponent(serviceName)}/${encodeURIComponent(sidecarFile)}`;
+      try {
+        const r = await fetch(url);
+        return r.ok ? r.text() : null;
+      } catch { return null; }
+    };
+    void Promise.all([
+      record.consoleLogFile ? fetchSidecar(record.consoleLogFile) : Promise.resolve(null),
+      record.contentFile ? fetchSidecar(record.contentFile) : Promise.resolve(null),
+    ]).then(([c, h]) => { setConsoleText(c); setHtmlText(h); });
+  }, [record, serviceName]);
 
   const isBrowser = record?.request.method === 'BROWSER';
   const screenshotUrl = record?.screenshotFile
@@ -108,16 +125,18 @@ export default function ResponseDetailModal({ file, serviceName, onClose, auth }
         {!needsAuth && error && <div className="text-destructive text-sm p-4">{error}</div>}
 
         {record && (
-          <Tabs defaultValue={screenshotUrl ? 'screenshot' : 'overview'} className="flex-1 flex flex-col min-h-0">
+          <Tabs defaultValue="overview" className="flex-1 flex flex-col min-h-0">
             <TabsList className="flex-shrink-0">
-              {screenshotUrl && <TabsTrigger value="screenshot">Screenshot</TabsTrigger>}
               <TabsTrigger value="overview">Overview</TabsTrigger>
+              {isBrowser && screenshotUrl && <TabsTrigger value="screenshot">Screenshot</TabsTrigger>}
+              {isBrowser && consoleText !== null && <TabsTrigger value="console">Console</TabsTrigger>}
+              {isBrowser && htmlText !== null && <TabsTrigger value="pagesource">Page Source</TabsTrigger>}
               {!isBrowser && <TabsTrigger value="request">Request</TabsTrigger>}
               {!isBrowser && <TabsTrigger value="response">Response</TabsTrigger>}
             </TabsList>
 
             <div className="flex-1 min-h-0 mt-2">
-              {screenshotUrl && (
+              {isBrowser && screenshotUrl && (
                 <TabsContent value="screenshot" className="h-full">
                   <ScrollArea className="h-full">
                     <img
@@ -267,6 +286,26 @@ export default function ResponseDetailModal({ file, serviceName, onClose, auth }
                         </pre>
                       </div>
                     </div>
+                  </ScrollArea>
+                </TabsContent>
+              )}
+
+              {isBrowser && consoleText !== null && (
+                <TabsContent value="console" className="h-full">
+                  <ScrollArea className="h-full">
+                    <pre className="text-xs font-mono bg-muted rounded p-2 whitespace-pre-wrap break-all">
+                      {consoleText || '(no console output)'}
+                    </pre>
+                  </ScrollArea>
+                </TabsContent>
+              )}
+
+              {isBrowser && htmlText !== null && (
+                <TabsContent value="pagesource" className="h-full">
+                  <ScrollArea className="h-full">
+                    <pre className="text-xs font-mono bg-muted rounded p-2 whitespace-pre-wrap break-all">
+                      {htmlText}
+                    </pre>
                   </ScrollArea>
                 </TabsContent>
               )}

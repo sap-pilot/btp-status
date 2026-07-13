@@ -103,7 +103,7 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
         city: getCity(),
       };
 
-      const jsonFile = await saveResponse(serviceName, record, result.screenshot);
+      const jsonFile = await saveResponse(serviceName, record, result.screenshot, result.consoleLogs, result.htmlContent);
       const screenshotFile = jsonFile.replace(/\.json$/, '.png');
       const hasScreenshot = result.screenshot.length > 0;
 

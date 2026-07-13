@@ -10,6 +10,8 @@ export interface BrowserCheckResult {
   message: string;
   responseTime: number;
   screenshot: Buffer;
+  consoleLogs: string[];
+  htmlContent: string;
 }
 
 export async function runBrowserIasLogin(
@@ -23,6 +25,8 @@ export async function runBrowserIasLogin(
   let browser: Browser | undefined;
   let page: Page | undefined;
 
+  const consoleLogs: string[] = [];
+
   try {
     browser = await chromium.launch({
       headless: true,
@@ -30,6 +34,9 @@ export async function runBrowserIasLogin(
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
     page = await browser.newPage();
+    page.on('console', msg => {
+      consoleLogs.push(`[${new Date().toISOString()}] [${msg.type()}] ${msg.text()}`);
+    });
     await page.setViewportSize({ width: 1280, height: 800 });
 
     logger.debug({ service: serviceName, endpoint: ep.name, url: ep.url }, 'Browser: navigating');
@@ -59,15 +66,21 @@ export async function runBrowserIasLogin(
   }
 
   let screenshot: Buffer = Buffer.alloc(0);
+  let htmlContent = '';
   if (page) {
     try {
       screenshot = await page.screenshot({ fullPage: false });
     } catch (err) {
       logger.debug({ service: serviceName, err }, 'Browser screenshot failed');
     }
+    try {
+      htmlContent = await page.content();
+    } catch (err) {
+      logger.debug({ service: serviceName, err }, 'Browser page.content() failed');
+    }
   }
 
   try { await browser?.close(); } catch { /* ignore */ }
 
-  return { passed, message, responseTime: Date.now() - start, screenshot };
+  return { passed, message, responseTime: Date.now() - start, screenshot, consoleLogs, htmlContent };
 }

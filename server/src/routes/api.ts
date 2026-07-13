@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getAllServices, getLandscapes, getSites } from '../services/configService.js';
-import { listResponseFiles, readResponseFile, readRawResponseFile, readScreenshotFile, browseResponseFiles } from '../services/responseStore.js';
+import { listResponseFiles, readResponseFile, readRawResponseFile, readScreenshotFile, readConsoleLogFile, readContentFile, browseResponseFiles } from '../services/responseStore.js';
 import { buildZip } from '../services/zipBuilder.js';
 import { checkService } from '../services/healthCheckService.js';
 import { syncFromRemote } from '../services/syncService.js';
@@ -289,6 +289,12 @@ router.get('/download', requireSyncAuth, async (req, res, next) => {
     if (filename.endsWith('.png')) {
       const buf = await readScreenshotFile(folder, filename);
       res.type('image/png').send(buf);
+    } else if (filename.endsWith('_console.log')) {
+      const buf = await readConsoleLogFile(folder, filename);
+      res.type('text/plain').send(buf);
+    } else if (filename.endsWith('_content.html')) {
+      const buf = await readContentFile(folder, filename);
+      res.type('text/plain').send(buf);
     } else {
       const data = await readResponseFile(folder, filename);
       res.json(data);
