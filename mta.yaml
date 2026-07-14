@@ -7,7 +7,7 @@ modules:
     type: nodejs
     path: server
     parameters:
-      memory: 512M          # Chrome is memory-hungry — 256M is not enough
+      memory: 1G         # Chrome is memory-hungry — 512M is not enough
       disk-quota: 4G     # Chrome + libs are large
       # docker:
       #   image: sapux/btp-status:latest

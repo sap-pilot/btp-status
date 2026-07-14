@@ -10,6 +10,7 @@
 
 ### Fixed
 - **Browser check response time accuracy** — the timer now starts after the browser process is launched (excluding Chromium startup overhead) and stops before the screenshot and page source are captured (excluding post-check I/O); the recorded `responseTime` reflects the actual login flow duration only
+- **Shared browser instance** — `browserCheckService` now maintains a single long-lived Chromium process shared across all `browser-ias-login` checks; each check run creates an isolated `BrowserContext` (separate cookies, storage, etc.) and closes it on completion regardless of outcome; this eliminates per-check browser launch overhead and reduces memory/CPU usage; the shared instance is closed cleanly on server shutdown (`SIGTERM`/`SIGINT`); if the browser process disconnects unexpectedly it is automatically re-launched on the next check
 
 ## [v0.9.0] - 2026-06-24
 

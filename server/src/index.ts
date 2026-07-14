@@ -6,6 +6,7 @@ import { startScheduler, stopScheduler } from './services/schedulerService.js';
 import { syncFromRemote, startSyncScheduler, stopSyncScheduler } from './services/syncService.js';
 import { startHousekeepingScheduler, stopHousekeepingScheduler } from './services/housekeepingService.js';
 import { initGeo } from './services/geoService.js';
+import { closeBrowser } from './services/browserCheckService.js';
 import healthRouter from './routes/health.js';
 import apiRouter from './routes/api.js';
 import authRouter from './routes/auth.js';
@@ -52,7 +53,9 @@ function shutdown(signal: string) {
   stopScheduler();
   stopSyncScheduler();
   stopHousekeepingScheduler();
-  server.close(() => process.exit(0));
+  server.close(() => {
+    closeBrowser().finally(() => process.exit(0));
+  });
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));

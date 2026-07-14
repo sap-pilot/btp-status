@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { chromium, type Browser, type Page } from 'playwright';
+import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { logger } from '../logger.js';
 import type { EndpointConfig } from '../types/index.js';
 
@@ -14,6 +14,27 @@ export interface BrowserCheckResult {
   htmlContent: string;
 }
 
+let _browser: Browser | null = null;
+
+async function getBrowser(): Promise<Browser> {
+  if (_browser?.isConnected()) return _browser;
+  _browser = await chromium.launch({
+    headless: true,
+    executablePath: existsSync(SYSTEM_CHROME) ? SYSTEM_CHROME : undefined,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
+  _browser.on('disconnected', () => { _browser = null; });
+  logger.info('Shared browser instance launched');
+  return _browser;
+}
+
+export async function closeBrowser(): Promise<void> {
+  if (_browser) {
+    try { await _browser.close(); } catch { /* ignore */ }
+    _browser = null;
+  }
+}
+
 export async function runBrowserIasLogin(
   ep: EndpointConfig,
   serviceName: string,
@@ -21,7 +42,7 @@ export async function runBrowserIasLogin(
   const timeout = ep.timeout ?? 30_000;
   let passed = false;
   let message = '';
-  let browser: Browser | undefined;
+  let context: BrowserContext | undefined;
   let page: Page | undefined;
   let responseTime = 0;
   let start = 0;
@@ -29,13 +50,9 @@ export async function runBrowserIasLogin(
   const consoleLogs: string[] = [];
 
   try {
-    browser = await chromium.launch({
-      headless: true,
-      executablePath: existsSync(SYSTEM_CHROME) ? SYSTEM_CHROME : undefined,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-    
-    page = await browser.newPage();
+    const browser = await getBrowser();
+    context = await browser.newContext();
+    page = await context.newPage();
     page.on('console', msg => {
       consoleLogs.push(`[${new Date().toISOString()}] [${msg.type()}] ${msg.text()}`);
     });
@@ -86,7 +103,7 @@ export async function runBrowserIasLogin(
     }
   }
 
-  try { await browser?.close(); } catch { /* ignore */ }
+  try { await context?.close(); } catch { /* ignore */ }
 
   return { passed, message, responseTime, screenshot, consoleLogs, htmlContent };
 }
