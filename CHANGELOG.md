@@ -10,6 +10,7 @@
 - Console log and page source sidecar files are included in remote sync (`/api/browse`, `/api/download`, `/api/batch-download`) and are pruned by the housekeeping scheduler alongside their corresponding JSON and PNG files
 
 ### Fixed
+- **Browser check `waitForSelector` uses `state: 'attached'`** — the post-login selector wait now uses `state: 'attached'` instead of the default `state: 'visible'`; this passes as soon as the target element is present in the DOM regardless of visibility, which is more reliable for apps that render the element hidden or off-screen before the page fully transitions
 - **Browser check response time accuracy** — the timer now starts after the browser process is launched (excluding Chromium startup overhead) and stops before the screenshot and page source are captured (excluding post-check I/O); the recorded `responseTime` reflects the actual login flow duration only
 - **Shared browser instance** — `browserCheckService` now maintains a single long-lived Chromium process shared across all `browser-ias-login` checks; each check run creates an isolated `BrowserContext` (separate cookies, storage, etc.) and closes it on completion regardless of outcome; this eliminates per-check browser launch overhead and reduces memory/CPU usage; the shared instance is closed cleanly on server shutdown (`SIGTERM`/`SIGINT`); if the browser process disconnects unexpectedly it is automatically re-launched on the next check
 

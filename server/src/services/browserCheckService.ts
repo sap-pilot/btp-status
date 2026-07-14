@@ -76,7 +76,7 @@ export async function runBrowserIasLogin(
     await page.click('#logOnFormSubmit');
 
     const selector = ep.waitForSelector ?? '';
-    await page.waitForSelector(selector, { timeout });
+    await page.waitForSelector(selector, { timeout: timeout, state: 'attached' });
 
     passed = true;
     message = `Login succeeded — element "${selector}" found`;
