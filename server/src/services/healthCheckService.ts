@@ -118,6 +118,8 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
         screenshotUrl: hasScreenshot
           ? `/api/download?path=${encodeURIComponent(serviceName)}/${encodeURIComponent(screenshotFile)}`
           : undefined,
+        consoleText: result.consoleLogs.length > 0 ? result.consoleLogs.join('\n') : undefined,
+        htmlText: result.htmlContent || undefined,
       });
       continue;
     }
