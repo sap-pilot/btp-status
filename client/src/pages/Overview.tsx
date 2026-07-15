@@ -676,20 +676,27 @@ export default function Overview() {
                               </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start">
-                              {svc.endpoints.map((ep, ei) =>
-                                ep.url.startsWith('http') ? (
-                                  <DropdownMenuItem key={ei} asChild>
-                                    <a href={ep.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 cursor-pointer">
-                                      <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                                      <span className="truncate">{ep.name ?? ep.url}</span>
+                              {svc.endpoints.map((ep, ei) => (
+                                <DropdownMenuItem
+                                  key={ei}
+                                  className="flex items-center justify-between gap-2 pr-1 cursor-pointer"
+                                  onSelect={() => navigate(`/service/${encodeURIComponent(svc.name)}?endpoint=${encodeURIComponent(ep.name ?? ep.url)}`)}
+                                >
+                                  <span className="truncate">{ep.name ?? ep.url}</span>
+                                  {ep.url.startsWith('http') && (
+                                    <a
+                                      href={ep.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex-shrink-0 text-muted-foreground hover:text-foreground"
+                                      onClick={e => e.stopPropagation()}
+                                      onPointerDown={e => e.stopPropagation()}
+                                    >
+                                      <ExternalLink className="h-3 w-3" />
                                     </a>
-                                  </DropdownMenuItem>
-                                ) : (
-                                  <DropdownMenuItem key={ei} disabled>
-                                    <span className="truncate">{ep.name ?? ep.url}</span>
-                                  </DropdownMenuItem>
-                                )
-                              )}
+                                  )}
+                                </DropdownMenuItem>
+                              ))}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </td>

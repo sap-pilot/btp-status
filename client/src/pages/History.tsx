@@ -335,10 +335,21 @@ export default function History() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files, service, filterEndpoint, filterLocation, filterStatus, hasFilter]);
 
+  function setSearchParam(updates: Record<string, string | null>) {
+    const p = new URLSearchParams(location.search);
+    for (const [k, v] of Object.entries(updates)) {
+      if (v === null) p.delete(k);
+      else p.set(k, v);
+    }
+    const qs = p.toString();
+    navigate(qs ? `?${qs}` : location.pathname, { replace: true });
+  }
+
   function clearFilters() {
     setFilterEndpoint('all');
     setFilterLocation('all');
     setFilterStatus('all');
+    setSearchParam({ endpoint: null, status: null });
   }
 
   // Build schedule select value — may not match a preset if config uses a custom interval
@@ -654,7 +665,7 @@ export default function History() {
             <CardContent className="pt-4">
               <button
                 className={`text-base sm:text-2xl font-bold hover:opacity-70 transition-opacity disabled:opacity-40 disabled:cursor-default ${failedCount > 0 ? 'text-red-500' : ''}`}
-                onClick={() => setFilterStatus('failed')}
+                onClick={() => { setFilterStatus('failed'); setSearchParam({ status: 'failed' }); }}
                 disabled={failedCount === 0}
                 title={failedCount > 0 ? 'Show only FAIL / FAIL (always error)' : undefined}
               >
@@ -682,19 +693,26 @@ export default function History() {
                 <div className="space-y-1 max-h-20 overflow-y-auto">
                   {epStats.map((ep, i) => (
                     <div key={i} className="flex items-center justify-between gap-1 min-w-0">
-                      {ep.url.startsWith('http') ? (
-                        <a
-                          href={ep.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-foreground hover:underline flex items-center gap-0.5 min-w-0"
+                      <div className="flex items-center gap-0.5 min-w-0 flex-1">
+                        <button
+                          className="text-xs text-foreground hover:underline truncate text-left"
+                          title={`Filter by ${ep.name}`}
+                          onClick={() => { setFilterEndpoint(ep.name); setSearchParam({ endpoint: ep.name }); }}
                         >
-                          <ExternalLink className="h-2.5 w-2.5 flex-shrink-0" />
-                          <span className="truncate">{ep.name}</span>
-                        </a>
-                      ) : (
-                        <span className="text-xs text-muted-foreground truncate">{ep.name}</span>
-                      )}
+                          {ep.name}
+                        </button>
+                        {ep.url.startsWith('http') && (
+                          <a
+                            href={ep.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-shrink-0 text-muted-foreground hover:text-foreground"
+                            title={ep.url}
+                          >
+                            <ExternalLink className="h-2.5 w-2.5" />
+                          </a>
+                        )}
+                      </div>
                       <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0 ml-1">
                         {ep.avg != null ? `${ep.avg}ms` : '—'}
                       </span>
