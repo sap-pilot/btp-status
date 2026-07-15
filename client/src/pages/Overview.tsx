@@ -8,7 +8,7 @@ const LandscapeDiagram = lazy(() => import('@/components/LandscapeDiagram'));
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { AlertCircle, ChevronDown, Menu, RefreshCw, Sun, Moon, ExternalLink, X, Zap } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
@@ -34,6 +34,10 @@ function tsOf(f: HistoryFile): number {
 
 function rtOf(f: HistoryFile): number {
   return f.responseTime ?? parseFilename(f.filename)?.responseTime ?? 0;
+}
+
+function slugify(s: string): string {
+  return s.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'endpoint';
 }
 
 type ParsedService = Omit<ServiceWithHistory, 'history'> & { history: HistoryFile[] };
@@ -197,10 +201,7 @@ export default function Overview() {
   const allFiles = data.flatMap(s => s.history);
   const totalChecks = allFiles.length;
   const failedChecks = allFiles.filter(f => f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504).length;
-  const timedFiles = allFiles.filter(f => f.overallStatus !== 504);
-  const avgResponseTime = timedFiles.length > 0
-    ? Math.round(timedFiles.reduce((s, f) => s + rtOf(f), 0) / timedFiles.length)
-    : 0;
+  const totalEndpoints = data.reduce((sum, s) => sum + s.endpoints.length, 0);
   // Use combined per-run history so multi-endpoint services don't dilute the uptime %
   const allCombinedRuns = data.flatMap(s => getServiceOverallHistory(s));
   const overallUptime = allCombinedRuns.length > 0
@@ -482,8 +483,45 @@ export default function Overview() {
             </Card>
             <Card>
               <CardContent className="pt-4">
-                <div className="text-base sm:text-2xl font-bold">{avgResponseTime > 0 ? `${avgResponseTime}ms` : '—'}</div>
-                <div className="text-xs text-muted-foreground mt-1">Avg Response Time</div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="text-base sm:text-2xl font-bold flex items-center gap-0.5 hover:opacity-70 transition-opacity">
+                      {totalEndpoints}
+                      <ChevronDown className="h-4 w-4 sm:h-5 sm:w-5 mt-0.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto min-w-[14rem]">
+                    {data.map((svc, si) => (
+                      <div key={si}>
+                        {si > 0 && <DropdownMenuSeparator />}
+                        <DropdownMenuLabel className="text-xs text-muted-foreground px-2 py-1">
+                          {svc.name}
+                        </DropdownMenuLabel>
+                        {svc.endpoints.map((ep, ei) => {
+                          const slug = slugify(ep.name ?? '');
+                          const epFiles = svc.history.filter(f => f.endpointSlug === slug && f.overallStatus !== 504);
+                          const avg = epFiles.length > 0
+                            ? Math.round(epFiles.reduce((sum, f) => sum + rtOf(f), 0) / epFiles.length)
+                            : null;
+                          return ep.url.startsWith('http') ? (
+                            <DropdownMenuItem key={ei} asChild>
+                              <a href={ep.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between gap-4 cursor-pointer">
+                                <span className="truncate">{ep.name ?? ep.url}</span>
+                                <span className="text-xs text-muted-foreground flex-shrink-0">{avg != null ? `${avg}ms` : '—'}</span>
+                              </a>
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem key={ei} disabled className="flex items-center justify-between gap-4">
+                              <span className="truncate">{ep.name ?? ep.url}</span>
+                              <span className="text-xs text-muted-foreground flex-shrink-0">{avg != null ? `${avg}ms` : '—'}</span>
+                            </DropdownMenuItem>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <div className="text-xs text-muted-foreground mt-1">Endpoints</div>
               </CardContent>
             </Card>
           </div>
@@ -601,9 +639,30 @@ export default function Overview() {
                               </a>
                             )}
                           </div>
-                          <div className="text-xs text-muted-foreground pl-4 mt-0.5">
-                            {svc.endpoints.length} endpoint{svc.endpoints.length !== 1 ? 's' : ''}
-                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button className="text-xs text-muted-foreground pl-4 mt-0.5 flex items-center gap-0.5 hover:text-foreground transition-colors">
+                                {svc.endpoints.length} endpoint{svc.endpoints.length !== 1 ? 's' : ''}
+                                <ChevronDown className="h-3 w-3" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                              {svc.endpoints.map((ep, ei) =>
+                                ep.url.startsWith('http') ? (
+                                  <DropdownMenuItem key={ei} asChild>
+                                    <a href={ep.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 cursor-pointer">
+                                      <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                                      <span className="truncate">{ep.name ?? ep.url}</span>
+                                    </a>
+                                  </DropdownMenuItem>
+                                ) : (
+                                  <DropdownMenuItem key={ei} disabled>
+                                    <span className="truncate">{ep.name ?? ep.url}</span>
+                                  </DropdownMenuItem>
+                                )
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </td>
 
                         {/* Timeline — hidden on mobile */}

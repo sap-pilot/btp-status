@@ -10,7 +10,11 @@ import type { ConditionResult, ResponseRecord, CheckResult, EndpointCheckResult 
 
 export type { CheckResult, EndpointCheckResult };
 
-export async function checkService(serviceName: string): Promise<CheckResult> {
+function extractRegion(host: string): string | null {
+  return host.match(/cfapps\.([^.]+)\.hana/)?.[1] ?? null;
+}
+
+export async function checkService(serviceName: string, requestHost?: string): Promise<CheckResult> {
   const service = getService(serviceName);
   if (!service) {
     throw Object.assign(new Error(`Service '${serviceName}' not found`), { status: 404 });
@@ -18,10 +22,17 @@ export async function checkService(serviceName: string): Promise<CheckResult> {
 
   const evalMode = getEvaluationMode(serviceName);
   const details: EndpointCheckResult[] = [];
+  const hostRegion = requestHost ? extractRegion(requestHost) : null;
 
   for (let i = 0; i < service.endpoints.length; i++) {
     const ep = service.endpoints[i];
     const epName = ep.name ?? `Endpoint ${i}`;
+
+    // ── Region filter ───────────────────────────────────────────────────────
+    if (ep.region && hostRegion && ep.region !== hostRegion) {
+      logger.debug({ service: serviceName, endpoint: epName, epRegion: ep.region, hostRegion }, 'Endpoint skipped — region mismatch');
+      continue;
+    }
 
     // ── Dummy endpoint — skip actual check ─────────────────────────────────
     if (ep.url === '/dummy') {

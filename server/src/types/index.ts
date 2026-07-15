@@ -10,6 +10,7 @@ export interface EndpointConfig {
   password?: string;
   waitForSelector?: string;
   timeout?: number;
+  region?: string;
 }
 
 export interface ServiceConfig {

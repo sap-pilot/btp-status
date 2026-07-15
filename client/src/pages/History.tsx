@@ -265,6 +265,18 @@ export default function History() {
       ? Math.round(timedFiles.reduce((s, f) => s + (f.responseTime ?? 0), 0) / timedFiles.length)
       : 0;
 
+  const epStats = useMemo(() => {
+    const eps = service?.endpoints ?? [];
+    return eps.map(ep => {
+      const slug = (ep.name ?? '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'endpoint';
+      const epFiles = timedFiles.filter(f => f.endpointSlug === slug);
+      const avg = epFiles.length > 0
+        ? Math.round(epFiles.reduce((s, f) => s + (f.responseTime ?? 0), 0) / epFiles.length)
+        : null;
+      return { name: ep.name ?? 'endpoint', url: ep.url, avg };
+    });
+  }, [service, timedFiles]);
+
   const endpointLabel = (f: HistoryFile): string => {
     if (f.endpointSlug !== undefined) {
       // New-format file: try to match sanitized config name, else show slug as-is
@@ -637,8 +649,33 @@ export default function History() {
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <div className="text-base sm:text-2xl font-bold">{avgMs > 0 ? `${avgMs}ms` : '—'}</div>
-              <div className="text-xs text-muted-foreground mt-1">Avg Response Time</div>
+              <div className="text-xs text-muted-foreground mb-1.5">Avg Response Time</div>
+              {epStats.length > 0 ? (
+                <div className="space-y-1 max-h-20 overflow-y-auto">
+                  {epStats.map((ep, i) => (
+                    <div key={i} className="flex items-center justify-between gap-1 min-w-0">
+                      {ep.url.startsWith('http') ? (
+                        <a
+                          href={ep.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-foreground hover:underline flex items-center gap-0.5 min-w-0"
+                        >
+                          <ExternalLink className="h-2.5 w-2.5 flex-shrink-0" />
+                          <span className="truncate">{ep.name}</span>
+                        </a>
+                      ) : (
+                        <span className="text-xs text-muted-foreground truncate">{ep.name}</span>
+                      )}
+                      <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0 ml-1">
+                        {ep.avg != null ? `${ep.avg}ms` : '—'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-base sm:text-2xl font-bold">{avgMs > 0 ? `${avgMs}ms` : '—'}</div>
+              )}
             </CardContent>
           </Card>
         </div>

@@ -174,6 +174,7 @@ Create `server/config.json` (copy `server/config-sample.json` and fill in real v
 | `endpoints[].password` | string | IAS password; `{{variable}}` substitution supported |
 | `endpoints[].waitForSelector` | string | CSS selector to wait for after login (browser-ias-login only) |
 | `endpoints[].timeout` | number | Request timeout in ms. For standard HTTP checks, overrides `REQUEST_TIMEOUT_MS` for this endpoint; a timed-out check is recorded as `504`. For `browser-ias-login` mode, sets the overall browser session timeout (default `30000`). |
+| `endpoints[].region` | string | Optional. BTP region code (e.g. `"us10"`, `"us20"`, `"eu10"`). When set, this endpoint is only checked when the request hostname matches `cfapps.<region>.hana` (extracted from `x-forwarded-host` or `Host`). Used for multi-region deployments where each btp-status instance should only probe its local endpoints. Scheduler and manual "Run Test" always run all endpoints regardless of region. |
 
 ### Condition Syntax
 
