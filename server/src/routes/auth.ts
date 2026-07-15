@@ -14,9 +14,12 @@ function callbackBase(req: Request): string {
   return `${proto}://${host}`;
 }
 
-/** Origin to use as postMessage target. Falls back to '*' in local dev. */
+/** Origin to use as postMessage target — always derived from the actual request so it matches
+ *  the opener window's origin regardless of how many CF routes or custom domains are in use. */
 function targetOrigin(req: Request): string {
-  return getAppUrl() || `${(req.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0]?.trim() ?? req.protocol}://${req.headers.host ?? 'localhost'}`;
+  const proto = (req.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0]?.trim() ?? req.protocol;
+  const host = (req.headers['x-forwarded-host'] as string | undefined)?.split(',')[0]?.trim() ?? (req.headers.host ?? 'localhost');
+  return `${proto}://${host}`;
 }
 
 function setCookie(res: Response, value: string, maxAge: number): void {
@@ -33,6 +36,17 @@ function popupHtml(script: string, message: string): string {
     `<style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;` +
     `height:100vh;margin:0;background:#0f0f0f;color:#888;font-size:13px}</style></head>` +
     `<body><p>${message}</p><script>${script}<\/script></body></html>`;
+}
+
+/**
+ * Build the notification script that runs in the popup after login/logout.
+ * Uses two channels in parallel:
+ *  1. postMessage via window.opener (may be null in Chrome after cross-origin XSUAA navigation)
+ *  2. BroadcastChannel (works regardless of opener state; same-origin only)
+ */
+function notifyScript(msg: string, origin: string): string {
+  const bc = `try{var _bc=new BroadcastChannel('btpauth');_bc.postMessage(${msg});_bc.close();}catch(e){}`;
+  return `try{window.opener&&window.opener.postMessage(${msg},${JSON.stringify(origin)});}catch(e){}${bc}window.close();`;
 }
 
 /** Redirect popup to XSUAA authorize endpoint. */
@@ -62,14 +76,12 @@ router.get('/login/callback', async (req: Request, res: Response) => {
     logger.info({ user: userAuditLog(session) }, 'User logged in');
     const origin = targetOrigin(req);
     const msg = JSON.stringify({ type: 'login', user: { firstName: session.firstName, initials: session.initials, isAdmin: session.isAdmin } });
-    const script = `try{window.opener&&window.opener.postMessage(${msg},${JSON.stringify(origin)});}catch(e){}window.close();`;
-    res.type('html').send(popupHtml(script, 'Login successful — this window will close.'));
+    res.type('html').send(popupHtml(notifyScript(msg, origin), 'Login successful — this window will close.'));
   } catch (err) {
     logger.error({ err }, 'Login callback error');
     const origin = targetOrigin(req);
     const msg = JSON.stringify({ type: 'login-error' });
-    const script = `try{window.opener&&window.opener.postMessage(${msg},${JSON.stringify(origin)});}catch(e){}window.close();`;
-    res.status(500).type('html').send(popupHtml(script, 'Login failed — please close this window and try again.'));
+    res.status(500).type('html').send(popupHtml(notifyScript(msg, origin), 'Login failed — please close this window and try again.'));
   }
 });
 
@@ -88,8 +100,7 @@ router.get('/logout', (req: Request, res: Response) => {
   } else {
     const origin = targetOrigin(req);
     const msg = JSON.stringify({ type: 'logout' });
-    const script = `try{window.opener&&window.opener.postMessage(${msg},${JSON.stringify(origin)});}catch(e){}window.close();`;
-    res.type('html').send(popupHtml(script, 'Logged out — this window will close.'));
+    res.type('html').send(popupHtml(notifyScript(msg, origin), 'Logged out — this window will close.'));
   }
 });
 
@@ -97,8 +108,7 @@ router.get('/logout', (req: Request, res: Response) => {
 router.get('/logout/callback', (req: Request, res: Response) => {
   const origin = targetOrigin(req);
   const msg = JSON.stringify({ type: 'logout' });
-  const script = `try{window.opener&&window.opener.postMessage(${msg},${JSON.stringify(origin)});}catch(e){}window.close();`;
-  res.type('html').send(popupHtml(script, 'Logged out — this window will close.'));
+  res.type('html').send(popupHtml(notifyScript(msg, origin), 'Logged out — this window will close.'));
 });
 
 export default router;
