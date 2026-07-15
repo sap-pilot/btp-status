@@ -5,7 +5,7 @@ export type TimeRange =
   | { mode: 'dateRange'; fromDate: string; untilDate: string };
 
 const STORAGE_KEY = 'btp-time-range';
-const DEFAULT: TimeRange = { mode: 'hours', hours: 1 };
+const DEFAULT: TimeRange = { mode: 'hours', hours: 12 };
 
 function load(): TimeRange {
   try {
