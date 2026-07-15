@@ -688,39 +688,47 @@ export default function History() {
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <div className="text-xs text-muted-foreground mb-1.5">Endpoints / Avg Response Time</div>
               {epStats.length > 0 ? (
-                <div className="space-y-1 max-h-20 overflow-y-auto">
-                  {epStats.map((ep, i) => (
-                    <div key={i} className="flex items-center justify-between gap-1 min-w-0">
-                      <div className="flex items-center gap-0.5 min-w-0 flex-1">
-                        <button
-                          className={`text-xs hover:underline truncate text-left ${filterEndpoint === ep.name ? 'font-bold text-foreground' : 'text-foreground'}`}
-                          title={`Filter by ${ep.name}`}
-                          onClick={() => { setFilterEndpoint(ep.name); setSearchParam({ endpoint: ep.name }); }}
-                        >
-                          {ep.name}
-                        </button>
-                        {ep.url.startsWith('http') && (
-                          <a
-                            href={ep.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex-shrink-0 text-muted-foreground hover:text-foreground"
-                            title={ep.url}
+                <>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="text-xs text-muted-foreground">Endpoints</div>
+                    <div className="text-xs text-muted-foreground">Avg Response Time</div>
+                  </div>
+                  <div className="space-y-1 max-h-20 overflow-y-auto">
+                    {epStats.map((ep, i) => (
+                      <div key={i} className="flex items-center justify-between gap-1 min-w-0">
+                        <div className="flex items-center gap-0.5 min-w-0 flex-1">
+                          <button
+                            className={`text-xs hover:underline truncate text-left ${filterEndpoint === ep.name ? 'font-bold text-foreground' : 'text-foreground'}`}
+                            title={`Filter by ${ep.name}`}
+                            onClick={() => { setFilterEndpoint(ep.name); setSearchParam({ endpoint: ep.name }); }}
                           >
-                            <ExternalLink className="h-2.5 w-2.5" />
-                          </a>
-                        )}
+                            {ep.name}
+                          </button>
+                          {ep.url.startsWith('http') && (
+                            <a
+                              href={ep.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-shrink-0 text-muted-foreground hover:text-foreground"
+                              title={ep.url}
+                            >
+                              <ExternalLink className="h-2.5 w-2.5" />
+                            </a>
+                          )}
+                        </div>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0 ml-1">
+                          {ep.avg != null ? `${ep.avg}ms` : '—'}
+                        </span>
                       </div>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0 ml-1">
-                        {ep.avg != null ? `${ep.avg}ms` : '—'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                </>
               ) : (
-                <div className="text-base sm:text-2xl font-bold">{avgMs > 0 ? `${avgMs}ms` : '—'}</div>
+                <>
+                  <div className="text-base sm:text-2xl font-bold">{avgMs > 0 ? `${avgMs}ms` : '—'}</div>
+                  <div className="text-xs text-muted-foreground mt-1">Avg Response Time</div>
+                </>
               )}
             </CardContent>
           </Card>
