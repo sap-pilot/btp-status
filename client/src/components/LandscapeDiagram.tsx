@@ -46,12 +46,16 @@ export default function LandscapeDiagram({
 
     void (async () => {
       try {
-        // Inject style + click directives at the end of the diagram string
+        // Inject style + click directives at the end of the diagram string.
+        // Only emit directives for node IDs that actually appear in the diagram source
+        // so we don't pass unknown IDs to Mermaid (dots in IDs can trip up its CSS selector logic).
         const lines = [diagramText.trimEnd()];
         for (const [name, status] of Object.entries(serviceStatuses)) {
+          if (!diagramText.includes(name)) continue;
           lines.push(`style ${name} fill:${STATUS_FILL[status]},stroke:${STATUS_STROKE[status]},color:#fff`);
         }
         for (const name of serviceNames) {
+          if (!diagramText.includes(name)) continue;
           const dotIdx = name.indexOf('.');
           let href: string;
           if (dotIdx !== -1) {
