@@ -14,10 +14,11 @@ modules:
       buildpacks:
         - https://github.com/cloudfoundry/apt-buildpack
         - nodejs_buildpack
-      host: btp-status-${org}-${space}
+      # host: btp-status-${org}-${space}
       enable-ssh: true
       keep-existing:
         env: true
+        routes: true
     build-parameters:
       # no-source: true
       builder: custom
