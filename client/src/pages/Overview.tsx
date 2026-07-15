@@ -40,6 +40,18 @@ function slugify(s: string): string {
   return s.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'endpoint';
 }
 
+function getEndpointNodeStatus(files: HistoryFile[]): NodeStatus | null {
+  if (files.length === 0) return null;
+  const sorted = [...files].sort((a, b) => tsOf(b) - tsOf(a));
+  const latestTs = tsOf(sorted[0]);
+  const latestPassed = sorted
+    .filter(f => Math.floor(tsOf(f) / 1000) === Math.floor(latestTs / 1000))
+    .every(f => f.overallStatus === 200 || f.overallStatus === 203);
+  if (!latestPassed) return 'error';
+  const anyFailed = sorted.some(f => f.overallStatus !== 200 && f.overallStatus !== 203);
+  return anyFailed ? 'warn' : 'ok';
+}
+
 type ParsedService = Omit<ServiceWithHistory, 'history'> & { history: HistoryFile[] };
 
 function getServiceOverallHistory(service: ParsedService): HistoryFile[] {
@@ -209,7 +221,7 @@ export default function Overview() {
     : 100;
   const overallUptimeColor = anyCurrentlyFailing ? 'text-red-500' : overallUptime < 100 ? 'text-yellow-500' : 'text-green-500';
 
-  // Per-service status for diagram coloring — derived from summaryMap (same source as table dots)
+  // Per-service + per-endpoint status for diagram coloring
   const serviceStatusMap = useMemo<Record<string, NodeStatus>>(() => {
     const map: Record<string, NodeStatus> = {};
     for (const [name, rs] of Object.entries(summaryMap)) {
@@ -217,8 +229,17 @@ export default function Overview() {
       else if (rs === 'warning') map[name] = 'warn';
       else if (rs === 'ok') map[name] = 'ok';
     }
+    // Endpoint-level nodes: keyed as "service.endpoint"
+    for (const svc of data) {
+      for (const ep of svc.endpoints) {
+        if (!ep.name) continue;
+        const epFiles = svc.history.filter(f => f.endpointSlug === slugify(ep.name!));
+        const st = getEndpointNodeStatus(epFiles);
+        if (st) map[`${svc.name}.${ep.name}`] = st;
+      }
+    }
     return map;
-  }, [summaryMap]);
+  }, [summaryMap, data]);
 
   // Per-landscape availability badge
   function landscapeBadgeProps(landscapeName: string) {
@@ -556,6 +577,14 @@ export default function Overview() {
                     lsNames.add(svc.name);
                     const st = serviceStatusMap[svc.name];
                     if (st) lsStatuses[svc.name] = st;
+                    // Add per-endpoint nodes (service.endpoint format)
+                    for (const ep of svc.endpoints) {
+                      if (!ep.name) continue;
+                      const nodeKey = `${svc.name}.${ep.name}`;
+                      lsNames.add(nodeKey);
+                      const epSt = serviceStatusMap[nodeKey];
+                      if (epSt) lsStatuses[nodeKey] = epSt;
+                    }
                   }
                   return (
                     <TabsContent key={ls.name} value={ls.name}>

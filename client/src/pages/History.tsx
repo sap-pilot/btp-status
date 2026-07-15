@@ -115,10 +115,19 @@ export default function History() {
   const [scheduleInterval, setScheduleInterval] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // Table filters
-  const [filterEndpoint, setFilterEndpoint] = useState('all');
+  // Table filters — initialise from URL params so diagram node clicks pre-filter
+  const [filterEndpoint, setFilterEndpoint] = useState(() => new URLSearchParams(location.search).get('endpoint') ?? 'all');
   const [filterLocation, setFilterLocation] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterStatus, setFilterStatus] = useState(() => new URLSearchParams(location.search).get('status') ?? 'all');
+
+  // Re-apply URL params when navigating to same route with different params
+  useEffect(() => {
+    const p = new URLSearchParams(location.search);
+    setFilterEndpoint(p.get('endpoint') ?? 'all');
+    setFilterStatus(p.get('status') ?? 'all');
+  // Only re-run when the search string itself changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   useEffect(() => {
     fetch('/api/services')
@@ -314,7 +323,13 @@ export default function History() {
     return files.filter(f => {
       if (filterEndpoint !== 'all' && endpointLabel(f) !== filterEndpoint) return false;
       if (filterLocation !== 'all' && (f.city ?? '—') !== filterLocation) return false;
-      if (filterStatus !== 'all' && String(f.overallStatus) !== filterStatus) return false;
+      if (filterStatus !== 'all') {
+        if (filterStatus === 'failed') {
+          if (f.overallStatus !== 500 && f.overallStatus !== 503) return false;
+        } else if (String(f.overallStatus) !== filterStatus) {
+          return false;
+        }
+      }
       return true;
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -637,13 +652,26 @@ export default function History() {
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <div className={`text-base sm:text-2xl font-bold ${failedCount > 0 ? 'text-red-500' : ''}`}>{failedCount}</div>
+              <button
+                className={`text-base sm:text-2xl font-bold hover:opacity-70 transition-opacity disabled:opacity-40 disabled:cursor-default ${failedCount > 0 ? 'text-red-500' : ''}`}
+                onClick={() => setFilterStatus('failed')}
+                disabled={failedCount === 0}
+                title={failedCount > 0 ? 'Show only FAIL / FAIL (always error)' : undefined}
+              >
+                {failedCount}
+              </button>
               <div className="text-xs text-muted-foreground mt-1">Failed Checks</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <div className="text-base sm:text-2xl font-bold">{files.length}</div>
+              <button
+                className="text-base sm:text-2xl font-bold hover:opacity-70 transition-opacity"
+                onClick={clearFilters}
+                title="Clear all filters"
+              >
+                {files.length}
+              </button>
               <div className="text-xs text-muted-foreground mt-1">Total Checks</div>
             </CardContent>
           </Card>
@@ -754,6 +782,7 @@ export default function History() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all" className="text-xs">All statuses</SelectItem>
+                      <SelectItem value="failed" className="text-xs">All failures</SelectItem>
                       <SelectItem value="200" className="text-xs">PASS</SelectItem>
                       <SelectItem value="203" className="text-xs">PASS (always ok)</SelectItem>
                       <SelectItem value="500" className="text-xs">FAIL</SelectItem>

@@ -28,7 +28,7 @@ A lightweight, file-backed status page and health checker for SAP BTP services. 
 
 4. **Evaluation mode override** (`Always OK` / `Always Error`) — per-service toggle to force a service to report healthy or failing regardless of actual check results; use **Always Error** to deliberately route traffic away during a known incident or planned failover; use **Always OK** to restore a service to rotation after maintenance without waiting for checks to pass; changes take effect immediately across all execution paths (scheduled checks, `/health/:name`, Run Test)
 
-5. **Landscape diagram with live status** — tabbed Mermaid flowchart diagrams on the Overview page showing service topology; diagram nodes are coloured by live health status and are clickable links to the service detail page; compose diagrams at [mermaid.live](https://mermaid.live/); active tab is persisted in the URL hash for easy sharing
+5. **Landscape diagram with live status** — tabbed Mermaid flowchart diagrams on the Overview page showing service topology; diagram nodes are coloured by live health status and are clickable links to the service detail page; nodes in `service.endpoint` format (e.g. `wz-us10.Workzone-Login`) show per-endpoint status and link directly to that endpoint's filtered view; compose diagrams at [mermaid.live](https://mermaid.live/); active tab is persisted in the URL hash for easy sharing
 
 6. **File-based storage — no database** — every check result is saved as a plain JSON file under `./response/`; no database, message broker, or external service required; XSUAA is optional and used only for authentication; the response directory is the only persistent state
 
@@ -145,7 +145,7 @@ Create `server/config.json` (copy `server/config-sample.json` and fill in real v
 | `variables` | object | Key→value map; `{{key}}` placeholders in endpoint fields are substituted at startup |
 | `landscapes` | array | List of landscape definitions for the Overview diagram tabs |
 | `landscapes[].name` | string | Landscape identifier (shown as tab label) |
-| `landscapes[].diagram` | string | Mermaid diagram source; nodes whose ID matches a service `name` are coloured by status |
+| `landscapes[].diagram` | string | Mermaid diagram source. Nodes whose ID matches a service `name` are coloured by status and link to the service detail page. Nodes in `service.endpoint` format (e.g. `wz-us10.Workzone-Login`) show the per-endpoint status and link directly to that endpoint's filtered view (`/service/wz-us10?endpoint=Workzone-Login`). |
 | `sites` | array | List of deployed instances for the site-switcher dropdown (optional; dropdown hidden when fewer than 2 entries) |
 | `sites[].name` | string | Display name for the site (e.g. `"Ashburn"`, `"Frankfurt"`) |
 | `sites[].url` | string | Base URL of that deployed instance (e.g. `"https://btp-status-ashburn.cfapps.us10.hana.ondemand.com"`); the current site is matched by comparing the browser's `window.location.origin` against the configured URL's origin |

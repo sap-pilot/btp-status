@@ -52,8 +52,19 @@ export default function LandscapeDiagram({
           lines.push(`style ${name} fill:${STATUS_FILL[status]},stroke:${STATUS_STROKE[status]},color:#fff`);
         }
         for (const name of serviceNames) {
-          const from = returnUrl ? `?from=${encodeURIComponent(returnUrl)}` : '';
-          lines.push(`click ${name} "/service/${name}${from}" "Drill down into service ${name} status"`);
+          const dotIdx = name.indexOf('.');
+          let href: string;
+          if (dotIdx !== -1) {
+            // service.endpoint node → navigate to service page with endpoint filter
+            const svc = name.slice(0, dotIdx);
+            const ep = name.slice(dotIdx + 1);
+            const fromPart = returnUrl ? `&from=${encodeURIComponent(returnUrl)}` : '';
+            href = `/service/${encodeURIComponent(svc)}?endpoint=${encodeURIComponent(ep)}${fromPart}`;
+          } else {
+            const fromPart = returnUrl ? `?from=${encodeURIComponent(returnUrl)}` : '';
+            href = `/service/${encodeURIComponent(name)}${fromPart}`;
+          }
+          lines.push(`click ${name} "${href}" "Drill down into ${name} status"`);
         }
         const augmented = lines.join('\n');
 
