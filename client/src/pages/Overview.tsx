@@ -322,11 +322,10 @@ export default function Overview() {
               <button
                 onClick={() => void runSync()}
                 disabled={syncing}
-                className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 text-xs"
+                className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
                 title="Sync response files from remote"
               >
                 <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin text-blue-400' : ''}`} />
-                {syncing ? 'Syncing…' : 'Sync'}
               </button>
             )}
             <Select

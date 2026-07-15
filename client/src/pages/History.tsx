@@ -28,7 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, AlertCircle, ChevronDown, ExternalLink, Menu, PlayCircle, Sun, Moon, X } from 'lucide-react';
+import { ArrowLeft, AlertCircle, ChevronDown, ExternalLink, Menu, PlayCircle, RefreshCw, Sun, Moon, X } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useWindowWidth } from '@/hooks/useWindowWidth';
 import { useAuth } from '@/hooks/useAuth';
@@ -103,6 +103,8 @@ export default function History() {
   const [testOpen, setTestOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [syncAvailable, setSyncAvailable] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   // Evaluation mode
   const [evalMode, setEvalMode] = useState<EvaluationMode>('condition');
@@ -124,8 +126,11 @@ export default function History() {
       .then(svcs => setService(svcs.find(s => s.name === name) ?? null))
       .catch(() => null);
     fetch('/api/info')
-      .then(r => r.json() as Promise<{ maxStorageDays?: number }>)
-      .then(d => { if (d.maxStorageDays !== undefined) setMaxStorageDays(d.maxStorageDays); })
+      .then(r => r.json() as Promise<{ maxStorageDays?: number; syncRemote?: boolean }>)
+      .then(d => {
+        if (d.maxStorageDays !== undefined) setMaxStorageDays(d.maxStorageDays);
+        setSyncAvailable(!!d.syncRemote);
+      })
       .catch(() => null);
   }, [name]);
 
@@ -235,6 +240,15 @@ export default function History() {
       });
       setScheduleInterval(intervalSeconds);
     } catch { /* ignore */ }
+  }
+
+  async function runSync() {
+    setSyncing(true);
+    try {
+      await fetch('/api/sync', { method: 'POST' });
+      fetchHistory();
+    } catch { /* ignore */ }
+    setSyncing(false);
   }
 
   const upCount = files.filter(f => f.overallStatus === 200 || f.overallStatus === 203).length;
@@ -461,6 +475,16 @@ export default function History() {
                 ))}
               </SelectContent>
             </Select>
+            {syncAvailable && (!auth.enabled || auth.loggedIn) && (
+              <button
+                onClick={() => void runSync()}
+                disabled={syncing}
+                className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Sync response files from remote"
+              >
+                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin text-blue-400' : ''}`} />
+              </button>
+            )}
             <button
               onClick={toggleTheme}
               className="text-muted-foreground hover:text-foreground"
@@ -549,6 +573,16 @@ export default function History() {
                     <PlayCircle className="h-3.5 w-3.5" />
                     Run Test
                   </Button>
+                )}
+                {syncAvailable && (!auth.enabled || auth.loggedIn) && (
+                  <button
+                    onClick={() => { void runSync(); setMenuOpen(false); }}
+                    disabled={syncing}
+                    className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Sync response files from remote"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin text-blue-400' : ''}`} />
+                  </button>
                 )}
                 <button
                   onClick={toggleTheme}
