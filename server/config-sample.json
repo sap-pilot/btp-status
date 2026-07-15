@@ -36,7 +36,8 @@
           "username": "{{MONITOR_USERNAME}}",
           "password": "{{MONITOR_PASSWORD}}",
           "waitForSelector": "#shellAppTitle",
-          "timeout": 15000
+          "timeout": 15000,
+          "region": "us10"
         }
       ]
     },
@@ -55,7 +56,8 @@
           "username": "{{MONITOR_USERNAME}}",
           "password": "{{MONITOR_PASSWORD}}",
           "waitForSelector": "#shellAppTitle",
-          "timeout": 15000
+          "timeout": 15000,
+          "region": "us20"
         }
       ]
     },

@@ -24,11 +24,11 @@ A lightweight, file-backed status page and health checker for SAP BTP services. 
 
 2. **Browser-based IAS login check** (`mode: browser-ias-login`) — headless Chromium fills the SAP IAS login form, waits for a CSS selector to confirm the post-login page loaded, and captures a screenshot; validates the full authentication flow end-to-end, not just HTTP reachability; screenshot is stored with the check record and visible in the history drill-down and Test popup
 
-3. **Status timeline, history, and drill-down** — color-coded dot timeline per service on the Overview page; per-service detail shows uptime %, avg response time, a response time chart per endpoint, and a full history table with filters (endpoint, location, status, date range); clicking any dot opens a modal with the complete request/response/condition result and screenshot; when XSUAA is enabled the detail endpoint requires authentication — unauthenticated users see a **Login** button in the modal and the full detail loads automatically after they log in
+3. **Status timeline, history, and drill-down** — color-coded dot timeline per service on the Overview page; per-service detail shows uptime %, avg response time, a response time chart per endpoint, and a full history table with filters (endpoint, location, status, date range); clicking any dot opens a modal with the complete request/response/condition result and screenshot; stat card interactions: **Failed Checks** sets `?status=failed` in the URL (filter survives page refresh), **Total Checks** clears all URL filter params; the **Avg Response Time** card lists each endpoint as two parts — the name filters the history table and updates the URL (`?endpoint={name}`), and a separate link icon opens the endpoint URL in a new tab; the same two-part format applies to endpoint dropdowns on the Overview service rows; when XSUAA is enabled the detail endpoint requires authentication — unauthenticated users see a **Login** button in the modal and the full detail loads automatically after they log in
 
 4. **Evaluation mode override** (`Always OK` / `Always Error`) — per-service toggle to force a service to report healthy or failing regardless of actual check results; use **Always Error** to deliberately route traffic away during a known incident or planned failover; use **Always OK** to restore a service to rotation after maintenance without waiting for checks to pass; changes take effect immediately across all execution paths (scheduled checks, `/health/:name`, Run Test)
 
-5. **Landscape diagram with live status** — tabbed Mermaid flowchart diagrams on the Overview page showing service topology; diagram nodes are coloured by live health status and are clickable links to the service detail page; compose diagrams at [mermaid.live](https://mermaid.live/); active tab is persisted in the URL hash for easy sharing
+5. **Landscape diagram with live status** — tabbed Mermaid flowchart diagrams on the Overview page showing service topology; diagram nodes are coloured by live health status and are clickable links to the service detail page; nodes in `service.endpoint` format (e.g. `wz-us10.Workzone-Login`) show per-endpoint status and link directly to that endpoint's filtered view; compose diagrams at [mermaid.live](https://mermaid.live/); active tab is persisted in the URL hash for easy sharing
 
 6. **File-based storage — no database** — every check result is saved as a plain JSON file under `./response/`; no database, message broker, or external service required; XSUAA is optional and used only for authentication; the response directory is the only persistent state
 
@@ -145,7 +145,7 @@ Create `server/config.json` (copy `server/config-sample.json` and fill in real v
 | `variables` | object | Key→value map; `{{key}}` placeholders in endpoint fields are substituted at startup |
 | `landscapes` | array | List of landscape definitions for the Overview diagram tabs |
 | `landscapes[].name` | string | Landscape identifier (shown as tab label) |
-| `landscapes[].diagram` | string | Mermaid diagram source; nodes whose ID matches a service `name` are coloured by status |
+| `landscapes[].diagram` | string | Mermaid diagram source. Nodes whose ID matches a service `name` are coloured by status and link to the service detail page. Nodes in `service.endpoint` format (e.g. `wz-us10.Workzone-Login`) show the per-endpoint status and link directly to that endpoint's filtered view (`/service/wz-us10?endpoint=Workzone-Login`). |
 | `sites` | array | List of deployed instances for the site-switcher dropdown (optional; dropdown hidden when fewer than 2 entries) |
 | `sites[].name` | string | Display name for the site (e.g. `"Ashburn"`, `"Frankfurt"`) |
 | `sites[].url` | string | Base URL of that deployed instance (e.g. `"https://btp-status-ashburn.cfapps.us10.hana.ondemand.com"`); the current site is matched by comparing the browser's `window.location.origin` against the configured URL's origin |
@@ -174,6 +174,7 @@ Create `server/config.json` (copy `server/config-sample.json` and fill in real v
 | `endpoints[].password` | string | IAS password; `{{variable}}` substitution supported |
 | `endpoints[].waitForSelector` | string | CSS selector to wait for after login (browser-ias-login only) |
 | `endpoints[].timeout` | number | Request timeout in ms. For standard HTTP checks, overrides `REQUEST_TIMEOUT_MS` for this endpoint; a timed-out check is recorded as `504`. For `browser-ias-login` mode, sets the overall browser session timeout (default `30000`). |
+| `endpoints[].region` | string | Optional. BTP region code (e.g. `"us10"`, `"us20"`, `"eu10"`). When set, this endpoint is only checked when the request hostname matches `cfapps.<region>.hana` (extracted from `x-forwarded-host` or `Host`). Used for multi-region deployments where each btp-status instance should only probe its local endpoints. Scheduler and manual "Run Test" always run all endpoints regardless of region. |
 
 ### Condition Syntax
 
@@ -436,7 +437,7 @@ The server uses [pino](https://getpino.io) with colorized pretty-print output.
 | `SYNC_REMOTE` | — | Base URL of another BTP Status instance (e.g. `https://btp-status-prod.cfapps.eu10.hana.ondemand.com`). On startup, missing response files are downloaded from the remote and saved to the local `RESPONSE_DIR`. Periodic sync runs every `SYNC_INTERVAL` seconds. |
 | `SYNC_INTERVAL` | `900` | Seconds between periodic remote sync runs (minimum 60). Only effective when `SYNC_REMOTE` is set. |
 | `SYNC_REMOTE_BATCH_SIZE` | `100` | Number of files requested per `POST /api/batch-download` call during sync. The sync job tries the batch endpoint first; if the remote does not support it, it falls back to individual `GET /api/download` requests with concurrency 10. |
-| `MAX_RESPONSE_STORAGE_DAYS` | `7` | Response files (JSON + PNG) older than this many days are automatically deleted. Housekeeping runs once on startup then every 24 hours. Set to `0` to disable. Also controls the furthest date selectable in the UI's Date Range picker. |
+| `MAX_RESPONSE_STORAGE_DAYS` | `3` | Response files (JSON + PNG) older than this many days are automatically deleted. Housekeeping runs once on startup then every 24 hours. Set to `0` to disable. Also controls the furthest date selectable in the UI's Date Range picker. |
 | `REQUEST_TIMEOUT_MS` | `30000` | Default HTTP request timeout in milliseconds for standard endpoint checks. A check that exceeds this limit is recorded with status `504` and the response filename ends in `_504.json`. Per-endpoint `timeout` in `config.json` overrides this value for that endpoint only. |
 | `LOG_LEVEL` | `debug` | Pino log level: `trace`, `debug`, `info`, `warn`, `error` |
 

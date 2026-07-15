@@ -6,7 +6,9 @@ const timers = new Map<string, ReturnType<typeof setInterval>>();
 const running = new Set<string>();
 
 export function startScheduler(): void {
-  const scheduled = getAllServices().filter(s => (s.interval ?? 0) > 0);
+  const all = getAllServices();
+  const scheduled = all.filter(s => (s.interval ?? 0) > 0);
+  const manual = all.filter(s => (s.interval ?? 0) === 0);
   for (const svc of scheduled) {
     register(svc.name, svc.interval!);
   }
@@ -14,6 +16,12 @@ export function startScheduler(): void {
     logger.info(
       { count: scheduled.length, services: scheduled.map(s => `${s.name}(${s.interval}s)`) },
       'Scheduler started',
+    );
+  }
+  if (manual.length > 0) {
+    logger.info(
+      { count: manual.length, services: manual.map(s => s.name) },
+      'Services with no interval — manual trigger only (Run Test / /health/:name)',
     );
   }
 }

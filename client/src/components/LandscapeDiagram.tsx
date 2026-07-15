@@ -46,14 +46,29 @@ export default function LandscapeDiagram({
 
     void (async () => {
       try {
-        // Inject style + click directives at the end of the diagram string
+        // Inject style + click directives at the end of the diagram string.
+        // Only emit directives for node IDs that actually appear in the diagram source
+        // so we don't pass unknown IDs to Mermaid (dots in IDs can trip up its CSS selector logic).
         const lines = [diagramText.trimEnd()];
         for (const [name, status] of Object.entries(serviceStatuses)) {
+          if (!diagramText.includes(name)) continue;
           lines.push(`style ${name} fill:${STATUS_FILL[status]},stroke:${STATUS_STROKE[status]},color:#fff`);
         }
         for (const name of serviceNames) {
-          const from = returnUrl ? `?from=${encodeURIComponent(returnUrl)}` : '';
-          lines.push(`click ${name} "/service/${name}${from}" "Drill down into service ${name} status"`);
+          if (!diagramText.includes(name)) continue;
+          const dotIdx = name.indexOf('.');
+          let href: string;
+          if (dotIdx !== -1) {
+            // service.endpoint node → navigate to service page with endpoint filter
+            const svc = name.slice(0, dotIdx);
+            const ep = name.slice(dotIdx + 1);
+            const fromPart = returnUrl ? `&from=${encodeURIComponent(returnUrl)}` : '';
+            href = `/service/${encodeURIComponent(svc)}?endpoint=${encodeURIComponent(ep)}${fromPart}`;
+          } else {
+            const fromPart = returnUrl ? `?from=${encodeURIComponent(returnUrl)}` : '';
+            href = `/service/${encodeURIComponent(name)}${fromPart}`;
+          }
+          lines.push(`click ${name} "${href}" "Drill down into ${name} status"`);
         }
         const augmented = lines.join('\n');
 

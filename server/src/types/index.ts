@@ -10,6 +10,7 @@ export interface EndpointConfig {
   password?: string;
   waitForSelector?: string;
   timeout?: number;
+  region?: string;
 }
 
 export interface ServiceConfig {
@@ -93,6 +94,8 @@ export interface EndpointCheckResult {
   response: { status: number; headers: Record<string, string>; body: string };
   responseTime: number;
   screenshotUrl?: string;
+  consoleText?: string;
+  htmlText?: string;
 }
 
 export interface CheckResult {

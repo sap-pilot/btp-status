@@ -28,7 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, AlertCircle, ChevronDown, ExternalLink, Menu, PlayCircle, Sun, Moon, X } from 'lucide-react';
+import { ArrowLeft, AlertCircle, ChevronDown, ExternalLink, Menu, PlayCircle, RefreshCw, Sun, Moon, X } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useWindowWidth } from '@/hooks/useWindowWidth';
 import { useAuth } from '@/hooks/useAuth';
@@ -103,6 +103,8 @@ export default function History() {
   const [testOpen, setTestOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [syncAvailable, setSyncAvailable] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   // Evaluation mode
   const [evalMode, setEvalMode] = useState<EvaluationMode>('condition');
@@ -113,10 +115,19 @@ export default function History() {
   const [scheduleInterval, setScheduleInterval] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // Table filters
-  const [filterEndpoint, setFilterEndpoint] = useState('all');
+  // Table filters — initialise from URL params so diagram node clicks pre-filter
+  const [filterEndpoint, setFilterEndpoint] = useState(() => new URLSearchParams(location.search).get('endpoint') ?? 'all');
   const [filterLocation, setFilterLocation] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterStatus, setFilterStatus] = useState(() => new URLSearchParams(location.search).get('status') ?? 'all');
+
+  // Re-apply URL params when navigating to same route with different params
+  useEffect(() => {
+    const p = new URLSearchParams(location.search);
+    setFilterEndpoint(p.get('endpoint') ?? 'all');
+    setFilterStatus(p.get('status') ?? 'all');
+  // Only re-run when the search string itself changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   useEffect(() => {
     fetch('/api/services')
@@ -124,8 +135,11 @@ export default function History() {
       .then(svcs => setService(svcs.find(s => s.name === name) ?? null))
       .catch(() => null);
     fetch('/api/info')
-      .then(r => r.json() as Promise<{ maxStorageDays?: number }>)
-      .then(d => { if (d.maxStorageDays !== undefined) setMaxStorageDays(d.maxStorageDays); })
+      .then(r => r.json() as Promise<{ maxStorageDays?: number; syncRemote?: boolean }>)
+      .then(d => {
+        if (d.maxStorageDays !== undefined) setMaxStorageDays(d.maxStorageDays);
+        setSyncAvailable(!!d.syncRemote);
+      })
       .catch(() => null);
   }, [name]);
 
@@ -237,6 +251,15 @@ export default function History() {
     } catch { /* ignore */ }
   }
 
+  async function runSync() {
+    setSyncing(true);
+    try {
+      await fetch('/api/sync', { method: 'POST' });
+      fetchHistory();
+    } catch { /* ignore */ }
+    setSyncing(false);
+  }
+
   const upCount = files.filter(f => f.overallStatus === 200 || f.overallStatus === 203).length;
   const failedCount = files.filter(f => f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504).length;
   const uptime = files.length > 0 ? (upCount / files.length) * 100 : 100;
@@ -250,6 +273,18 @@ export default function History() {
     timedFiles.length > 0
       ? Math.round(timedFiles.reduce((s, f) => s + (f.responseTime ?? 0), 0) / timedFiles.length)
       : 0;
+
+  const epStats = useMemo(() => {
+    const eps = service?.endpoints ?? [];
+    return eps.map(ep => {
+      const slug = (ep.name ?? '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'endpoint';
+      const epFiles = timedFiles.filter(f => f.endpointSlug === slug);
+      const avg = epFiles.length > 0
+        ? Math.round(epFiles.reduce((s, f) => s + (f.responseTime ?? 0), 0) / epFiles.length)
+        : null;
+      return { name: ep.name ?? 'endpoint', url: ep.url, avg };
+    });
+  }, [service, timedFiles]);
 
   const endpointLabel = (f: HistoryFile): string => {
     if (f.endpointSlug !== undefined) {
@@ -288,16 +323,33 @@ export default function History() {
     return files.filter(f => {
       if (filterEndpoint !== 'all' && endpointLabel(f) !== filterEndpoint) return false;
       if (filterLocation !== 'all' && (f.city ?? '—') !== filterLocation) return false;
-      if (filterStatus !== 'all' && String(f.overallStatus) !== filterStatus) return false;
+      if (filterStatus !== 'all') {
+        if (filterStatus === 'failed') {
+          if (f.overallStatus !== 500 && f.overallStatus !== 503) return false;
+        } else if (String(f.overallStatus) !== filterStatus) {
+          return false;
+        }
+      }
       return true;
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files, service, filterEndpoint, filterLocation, filterStatus, hasFilter]);
 
+  function setSearchParam(updates: Record<string, string | null>) {
+    const p = new URLSearchParams(location.search);
+    for (const [k, v] of Object.entries(updates)) {
+      if (v === null) p.delete(k);
+      else p.set(k, v);
+    }
+    const qs = p.toString();
+    navigate(qs ? `?${qs}` : location.pathname, { replace: true });
+  }
+
   function clearFilters() {
     setFilterEndpoint('all');
     setFilterLocation('all');
     setFilterStatus('all');
+    setSearchParam({ endpoint: null, status: null });
   }
 
   // Build schedule select value — may not match a preset if config uses a custom interval
@@ -461,6 +513,16 @@ export default function History() {
                 ))}
               </SelectContent>
             </Select>
+            {syncAvailable && (!auth.enabled || auth.loggedIn) && (
+              <button
+                onClick={() => void runSync()}
+                disabled={syncing}
+                className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Sync response files from remote"
+              >
+                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin text-blue-400' : ''}`} />
+              </button>
+            )}
             <button
               onClick={toggleTheme}
               className="text-muted-foreground hover:text-foreground"
@@ -550,6 +612,16 @@ export default function History() {
                     Run Test
                   </Button>
                 )}
+                {syncAvailable && (!auth.enabled || auth.loggedIn) && (
+                  <button
+                    onClick={() => { void runSync(); setMenuOpen(false); }}
+                    disabled={syncing}
+                    className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Sync response files from remote"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin text-blue-400' : ''}`} />
+                  </button>
+                )}
                 <button
                   onClick={toggleTheme}
                   className="text-muted-foreground hover:text-foreground"
@@ -591,20 +663,73 @@ export default function History() {
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <div className={`text-base sm:text-2xl font-bold ${failedCount > 0 ? 'text-red-500' : ''}`}>{failedCount}</div>
+              <button
+                className={`text-base sm:text-2xl font-bold hover:opacity-70 transition-opacity disabled:opacity-40 disabled:cursor-default ${failedCount > 0 ? 'text-red-500' : ''}`}
+                onClick={() => { setFilterStatus('failed'); setSearchParam({ status: 'failed' }); }}
+                disabled={failedCount === 0}
+                title={failedCount > 0 ? 'Show only FAIL / FAIL (always error)' : undefined}
+              >
+                {failedCount}
+              </button>
               <div className="text-xs text-muted-foreground mt-1">Failed Checks</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <div className="text-base sm:text-2xl font-bold">{files.length}</div>
+              <button
+                className="text-base sm:text-2xl font-bold hover:opacity-70 transition-opacity"
+                onClick={clearFilters}
+                title="Clear all filters"
+              >
+                {files.length}
+              </button>
               <div className="text-xs text-muted-foreground mt-1">Total Checks</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <div className="text-base sm:text-2xl font-bold">{avgMs > 0 ? `${avgMs}ms` : '—'}</div>
-              <div className="text-xs text-muted-foreground mt-1">Avg Response Time</div>
+              {epStats.length > 0 ? (
+                <>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="text-xs text-muted-foreground">Endpoints</div>
+                    <div className="text-xs text-muted-foreground">Avg Response Time</div>
+                  </div>
+                  <div className="space-y-1 max-h-20 overflow-y-auto">
+                    {epStats.map((ep, i) => (
+                      <div key={i} className="flex items-center justify-between gap-1 min-w-0">
+                        <div className="flex items-center gap-0.5 min-w-0 flex-1">
+                          <button
+                            className={`text-xs hover:underline truncate text-left ${filterEndpoint === ep.name ? 'font-bold text-foreground' : 'text-foreground'}`}
+                            title={`Filter by ${ep.name}`}
+                            onClick={() => { setFilterEndpoint(ep.name); setSearchParam({ endpoint: ep.name }); }}
+                          >
+                            {ep.name}
+                          </button>
+                          {ep.url.startsWith('http') && (
+                            <a
+                              href={ep.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-shrink-0 text-muted-foreground hover:text-foreground"
+                              title={ep.url}
+                            >
+                              <ExternalLink className="h-2.5 w-2.5" />
+                            </a>
+                          )}
+                        </div>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0 ml-1">
+                          {ep.avg != null ? `${ep.avg}ms` : '—'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-base sm:text-2xl font-bold">{avgMs > 0 ? `${avgMs}ms` : '—'}</div>
+                  <div className="text-xs text-muted-foreground mt-1">Avg Response Time</div>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -683,6 +808,7 @@ export default function History() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all" className="text-xs">All statuses</SelectItem>
+                      <SelectItem value="failed" className="text-xs">All failures</SelectItem>
                       <SelectItem value="200" className="text-xs">PASS</SelectItem>
                       <SelectItem value="203" className="text-xs">PASS (always ok)</SelectItem>
                       <SelectItem value="500" className="text-xs">FAIL</SelectItem>

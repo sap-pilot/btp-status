@@ -129,8 +129,8 @@ export default function ResponseDetailModal({ file, serviceName, onClose, auth }
             <TabsList className="flex-shrink-0">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               {isBrowser && screenshotUrl && <TabsTrigger value="screenshot">Screenshot</TabsTrigger>}
-              {isBrowser && consoleText !== null && <TabsTrigger value="console">Console</TabsTrigger>}
               {isBrowser && htmlText !== null && <TabsTrigger value="pagesource">Page Source</TabsTrigger>}
+              {isBrowser && consoleText !== null && <TabsTrigger value="console">Console</TabsTrigger>}
               {!isBrowser && <TabsTrigger value="request">Request</TabsTrigger>}
               {!isBrowser && <TabsTrigger value="response">Response</TabsTrigger>}
             </TabsList>

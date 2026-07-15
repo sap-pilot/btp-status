@@ -28,6 +28,8 @@ interface EndpointCheckResult {
   response: { status: number; headers: Record<string, string>; body: string };
   responseTime: number;
   screenshotUrl?: string;
+  consoleText?: string;
+  htmlText?: string;
 }
 
 interface CheckResult {
@@ -222,18 +224,6 @@ export default function TestModal({ serviceName, open, onClose, onComplete }: Pr
                     </Badge>
                   </div>
 
-                  {/* Screenshot (browser checks) */}
-                  {!collapsed.has(epIdx) && ep.screenshotUrl && (
-                    <div className="mb-3">
-                      <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1.5">Screenshot</div>
-                      <img
-                        src={ep.screenshotUrl}
-                        alt="Login screenshot"
-                        className="w-full rounded border border-border"
-                      />
-                    </div>
-                  )}
-
                   {/* Per-endpoint tabs — hidden when collapsed */}
                   {!collapsed.has(epIdx) && <Tabs defaultValue="conditions">
                     <TabsList className="h-8">
@@ -245,6 +235,15 @@ export default function TestModal({ serviceName, open, onClose, onComplete }: Pr
                           </span>
                         )}
                       </TabsTrigger>
+                      {ep.request.method === 'BROWSER' && ep.screenshotUrl && (
+                        <TabsTrigger value="screenshot" className="text-xs h-7">Screenshot</TabsTrigger>
+                      )}
+                      {ep.request.method === 'BROWSER' && ep.htmlText && (
+                        <TabsTrigger value="pagesource" className="text-xs h-7">Page Source</TabsTrigger>
+                      )}
+                      {ep.request.method === 'BROWSER' && ep.consoleText && (
+                        <TabsTrigger value="console" className="text-xs h-7">Console</TabsTrigger>
+                      )}
                       {ep.request.method !== 'BROWSER' && (
                         <TabsTrigger value="request" className="text-xs h-7">Request</TabsTrigger>
                       )}
@@ -335,6 +334,35 @@ export default function TestModal({ serviceName, open, onClose, onComplete }: Pr
                         </pre>
                       </Section>
                     </TabsContent>
+
+                    {/* Screenshot tab (browser checks) */}
+                    {ep.screenshotUrl && (
+                      <TabsContent value="screenshot" className="mt-2">
+                        <img
+                          src={ep.screenshotUrl}
+                          alt="Login screenshot"
+                          className="w-full rounded border border-border"
+                        />
+                      </TabsContent>
+                    )}
+
+                    {/* Page Source tab (browser checks) */}
+                    {ep.htmlText && (
+                      <TabsContent value="pagesource" className="mt-2">
+                        <pre className="text-xs font-mono bg-muted rounded p-2 whitespace-pre-wrap break-all max-h-96 overflow-auto">
+                          {ep.htmlText}
+                        </pre>
+                      </TabsContent>
+                    )}
+
+                    {/* Console tab (browser checks) */}
+                    {ep.consoleText && (
+                      <TabsContent value="console" className="mt-2">
+                        <pre className="text-xs font-mono bg-muted rounded p-2 whitespace-pre-wrap break-all max-h-96 overflow-auto">
+                          {ep.consoleText}
+                        </pre>
+                      </TabsContent>
+                    )}
                   </Tabs>}
                 </div>
               ))}

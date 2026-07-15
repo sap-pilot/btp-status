@@ -8,7 +8,7 @@ const LandscapeDiagram = lazy(() => import('@/components/LandscapeDiagram'));
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { AlertCircle, ChevronDown, Menu, RefreshCw, Sun, Moon, ExternalLink, X, Zap } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
@@ -34,6 +34,22 @@ function tsOf(f: HistoryFile): number {
 
 function rtOf(f: HistoryFile): number {
   return f.responseTime ?? parseFilename(f.filename)?.responseTime ?? 0;
+}
+
+function slugify(s: string): string {
+  return s.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'endpoint';
+}
+
+function getEndpointNodeStatus(files: HistoryFile[]): NodeStatus | null {
+  if (files.length === 0) return null;
+  const sorted = [...files].sort((a, b) => tsOf(b) - tsOf(a));
+  const latestTs = tsOf(sorted[0]);
+  const latestPassed = sorted
+    .filter(f => Math.floor(tsOf(f) / 1000) === Math.floor(latestTs / 1000))
+    .every(f => f.overallStatus === 200 || f.overallStatus === 203);
+  if (!latestPassed) return 'error';
+  const anyFailed = sorted.some(f => f.overallStatus !== 200 && f.overallStatus !== 203);
+  return anyFailed ? 'warn' : 'ok';
 }
 
 type ParsedService = Omit<ServiceWithHistory, 'history'> & { history: HistoryFile[] };
@@ -197,10 +213,7 @@ export default function Overview() {
   const allFiles = data.flatMap(s => s.history);
   const totalChecks = allFiles.length;
   const failedChecks = allFiles.filter(f => f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504).length;
-  const timedFiles = allFiles.filter(f => f.overallStatus !== 504);
-  const avgResponseTime = timedFiles.length > 0
-    ? Math.round(timedFiles.reduce((s, f) => s + rtOf(f), 0) / timedFiles.length)
-    : 0;
+  const totalEndpoints = data.reduce((sum, s) => sum + s.endpoints.length, 0);
   // Use combined per-run history so multi-endpoint services don't dilute the uptime %
   const allCombinedRuns = data.flatMap(s => getServiceOverallHistory(s));
   const overallUptime = allCombinedRuns.length > 0
@@ -208,7 +221,7 @@ export default function Overview() {
     : 100;
   const overallUptimeColor = anyCurrentlyFailing ? 'text-red-500' : overallUptime < 100 ? 'text-yellow-500' : 'text-green-500';
 
-  // Per-service status for diagram coloring — derived from summaryMap (same source as table dots)
+  // Per-service + per-endpoint status for diagram coloring
   const serviceStatusMap = useMemo<Record<string, NodeStatus>>(() => {
     const map: Record<string, NodeStatus> = {};
     for (const [name, rs] of Object.entries(summaryMap)) {
@@ -216,8 +229,17 @@ export default function Overview() {
       else if (rs === 'warning') map[name] = 'warn';
       else if (rs === 'ok') map[name] = 'ok';
     }
+    // Endpoint-level nodes: keyed as "service.endpoint"
+    for (const svc of data) {
+      for (const ep of svc.endpoints) {
+        if (!ep.name) continue;
+        const epFiles = svc.history.filter(f => f.endpointSlug === slugify(ep.name!));
+        const st = getEndpointNodeStatus(epFiles);
+        if (st) map[`${svc.name}.${ep.name}`] = st;
+      }
+    }
     return map;
-  }, [summaryMap]);
+  }, [summaryMap, data]);
 
   // Per-landscape availability badge
   function landscapeBadgeProps(landscapeName: string) {
@@ -322,11 +344,10 @@ export default function Overview() {
               <button
                 onClick={() => void runSync()}
                 disabled={syncing}
-                className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 text-xs"
+                className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
                 title="Sync response files from remote"
               >
                 <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin text-blue-400' : ''}`} />
-                {syncing ? 'Syncing…' : 'Sync'}
               </button>
             )}
             <Select
@@ -483,8 +504,57 @@ export default function Overview() {
             </Card>
             <Card>
               <CardContent className="pt-4">
-                <div className="text-base sm:text-2xl font-bold">{avgResponseTime > 0 ? `${avgResponseTime}ms` : '—'}</div>
-                <div className="text-xs text-muted-foreground mt-1">Avg Response Time</div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="text-base sm:text-2xl font-bold flex items-center gap-0.5 hover:opacity-70 transition-opacity">
+                      {totalEndpoints}
+                      <ChevronDown className="h-4 w-4 sm:h-5 sm:w-5 mt-0.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto min-w-[14rem]">
+                    {data.map((svc, si) => (
+                      <div key={si}>
+                        {si > 0 && <DropdownMenuSeparator />}
+                        <DropdownMenuLabel className="text-xs text-muted-foreground px-2 py-1">
+                          {svc.name}
+                        </DropdownMenuLabel>
+                        {svc.endpoints.map((ep, ei) => {
+                          const slug = slugify(ep.name ?? '');
+                          const epFiles = svc.history.filter(f => f.endpointSlug === slug && f.overallStatus !== 504);
+                          const avg = epFiles.length > 0
+                            ? Math.round(epFiles.reduce((sum, f) => sum + rtOf(f), 0) / epFiles.length)
+                            : null;
+                          return (
+                            <DropdownMenuItem
+                              key={ei}
+                              className="flex items-center justify-between gap-2 pr-1 cursor-pointer"
+                              onSelect={() => navigate(`/service/${encodeURIComponent(svc.name)}?endpoint=${encodeURIComponent(ep.name ?? ep.url)}`)}
+                            >
+                              <span className="truncate flex-1">{ep.name ?? ep.url}</span>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <span className="text-xs text-muted-foreground">{avg != null ? `${avg}ms` : '—'}</span>
+                                {ep.url.startsWith('http') && (
+                                  <a
+                                    href={ep.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-muted-foreground hover:text-foreground"
+                                    onClick={e => e.stopPropagation()}
+                                    onPointerDown={e => e.stopPropagation()}
+                                    onPointerUp={e => e.stopPropagation()}
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                )}
+                              </div>
+                            </DropdownMenuItem>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <div className="text-xs text-muted-foreground mt-1">Endpoints</div>
               </CardContent>
             </Card>
           </div>
@@ -519,6 +589,14 @@ export default function Overview() {
                     lsNames.add(svc.name);
                     const st = serviceStatusMap[svc.name];
                     if (st) lsStatuses[svc.name] = st;
+                    // Add per-endpoint nodes (service.endpoint format)
+                    for (const ep of svc.endpoints) {
+                      if (!ep.name) continue;
+                      const nodeKey = `${svc.name}.${ep.name}`;
+                      lsNames.add(nodeKey);
+                      const epSt = serviceStatusMap[nodeKey];
+                      if (epSt) lsStatuses[nodeKey] = epSt;
+                    }
                   }
                   return (
                     <TabsContent key={ls.name} value={ls.name}>
@@ -602,9 +680,38 @@ export default function Overview() {
                               </a>
                             )}
                           </div>
-                          <div className="text-xs text-muted-foreground pl-4 mt-0.5">
-                            {svc.endpoints.length} endpoint{svc.endpoints.length !== 1 ? 's' : ''}
-                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button className="text-xs text-muted-foreground pl-4 mt-0.5 flex items-center gap-0.5 hover:text-foreground transition-colors">
+                                {svc.endpoints.length} endpoint{svc.endpoints.length !== 1 ? 's' : ''}
+                                <ChevronDown className="h-3 w-3" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                              {svc.endpoints.map((ep, ei) => (
+                                <DropdownMenuItem
+                                  key={ei}
+                                  className="flex items-center justify-between gap-2 pr-1 cursor-pointer"
+                                  onSelect={() => navigate(`/service/${encodeURIComponent(svc.name)}?endpoint=${encodeURIComponent(ep.name ?? ep.url)}`)}
+                                >
+                                  <span className="truncate">{ep.name ?? ep.url}</span>
+                                  {ep.url.startsWith('http') && (
+                                    <a
+                                      href={ep.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex-shrink-0 text-muted-foreground hover:text-foreground"
+                                      onClick={e => e.stopPropagation()}
+                                      onPointerDown={e => e.stopPropagation()}
+                                      onPointerUp={e => e.stopPropagation()}
+                                    >
+                                      <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                  )}
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </td>
 
                         {/* Timeline — hidden on mobile */}

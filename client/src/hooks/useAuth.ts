@@ -42,7 +42,8 @@ export function useAuth() {
       .catch(() => null);
 
     function onMessage(e: MessageEvent) {
-      if (e.origin !== window.location.origin) return;
+      // postMessage events: verify sender origin; BroadcastChannel events: same-origin by design
+      if (e.origin && e.origin !== window.location.origin) return;
       const msg = e.data as AuthMessage;
       if (msg.type === 'login' && msg.user) {
         setAuth(a => ({ ...a, loggedIn: true, firstName: msg.user!.firstName, initials: msg.user!.initials, isAdmin: msg.user!.isAdmin }));
@@ -56,7 +57,14 @@ export function useAuth() {
     }
 
     window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
+    // BroadcastChannel bypasses window.opener — works even when Chrome nullifies opener
+    // after cross-origin XSUAA navigation.
+    const bc = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('btpauth') : null;
+    if (bc) bc.onmessage = onMessage;
+    return () => {
+      window.removeEventListener('message', onMessage);
+      bc?.close();
+    };
   }, []);
 
   function login() {
