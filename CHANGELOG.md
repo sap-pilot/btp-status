@@ -1,6 +1,6 @@
 # Changelog
 
-## [v0.10.0] - 2026-07-13
+## [v0.11.0] - 2026-07-15
 
 ### Added
 - **Landscape diagram: `service.endpoint` node format** — Mermaid diagram nodes can now use the format `service.endpoint` (e.g. `wz-us10.Workzone-Login`) to show per-endpoint health status; if the node ID contains a `.`, the color reflects that endpoint's latest check result (ok/warn/error) rather than the service-level combined status; clicking the node navigates to the service detail page with the endpoint pre-selected as a filter (`/service/{service}?endpoint={endpoint}`); plain `service` nodes continue to work as before
@@ -11,22 +11,31 @@
 - **Overview: endpoint count card with dropdown** — the **Avg Response Time** stat card has been replaced with an **Endpoints** card showing the total number of configured endpoints across all services; a ChevronDown button opens a dropdown grouped by service, listing each endpoint by name with its average response time in the selected time range; clicking an endpoint URL opens it in a new tab
 - **Overview: endpoint dropdown on service rows** — the `x endpoint(s)` text on each service row is now a clickable dropdown button (with ChevronDown); clicking lists all endpoints for that service as clickable links (→ opens the endpoint URL in a new tab)
 - **History: endpoint avg response time card** — the **Avg Response Time** stat card on the service detail page now shows a compact per-endpoint list (endpoint name + avg ms) instead of a single overall average; each endpoint that has an HTTP URL is a clickable link opening the endpoint URL in a new tab; falls back to the overall average when endpoint config is not yet loaded
-- **Browser check: console log capture** — for `browser-ias-login` endpoints, all browser console messages (log, error, warning, etc.) are captured during the Playwright session and saved to a sidecar file named `yyyyMMdd-HHmmss_{endpoint}_{city}_{ms}_{status}_console.log` alongside the JSON result; if the file is present, a **Console** tab appears in the Response Detail modal showing the timestamped console output, which is useful for diagnosing JavaScript errors or blank-screen failures
-- **Browser check: page source dump** — after the Playwright session completes, the full HTML of the current page is saved to `yyyyMMdd-HHmmss_{endpoint}_{city}_{ms}_{status}_content.html`; if the file is present, a **Page Source** tab appears in the Response Detail modal displaying the raw HTML source, useful for inspecting what was actually rendered during a failed login check
-- **Response Detail modal tab reorder for browser checks** — tabs are now ordered **Overview → Screenshot → Page Source → Console** and the modal always opens on **Overview** by default (previously Screenshot was first and default when present); Page Source and Console tabs appear only when the respective sidecar files exist
 - **Run Test modal: Page Source and Console tabs for browser checks** — the Test popup now shows **Screenshot**, **Page Source**, and **Console** as tabs alongside **Conditions** for `browser-ias-login` endpoints; Screenshot moves from an inline block above the tabs into its own tab; Page Source and Console tabs appear only when the respective content is available; content is returned directly in the `/api/check/:name` response and requires no additional fetch
-- Console log and page source sidecar files are included in remote sync (`/api/browse`, `/api/download`, `/api/batch-download`) and are pruned by the housekeeping scheduler alongside their corresponding JSON and PNG files
+- **Response Detail modal tab reorder updated** — tab order changed to **Overview → Screenshot → Page Source → Console** (Page Source moved before Console); previously Console appeared first among the sidecar tabs
 
 ### Fixed
 - **Landscape diagram: Mermaid directives scoped to diagram nodes** — `style` and `click` directives are now only injected for node IDs that actually appear in the diagram source text; previously, endpoint-level node IDs (`service.endpoint` format) were always emitted even when the user's diagram did not define those nodes, which caused Mermaid to receive style directives for unknown IDs containing dots — in CSS selector context a dot is a class selector prefix, so Mermaid's internal D3 lookups could target the wrong elements and corrupt the diagram or suppress the login `postMessage` flow; the fix eliminates directives for any node (service or endpoint) not present in the diagram, so status colouring and click navigation for explicit `service.endpoint` nodes continue to work while accidental side-effects from auto-injected unknown IDs are removed
 - **Browser check `waitForSelector` uses `state: 'attached'`** — the post-login selector wait now uses `state: 'attached'` instead of the default `state: 'visible'`; this passes as soon as the target element is present in the DOM regardless of visibility, which is more reliable for apps that render the element hidden or off-screen before the page fully transitions
-- **Browser check response time accuracy** — the timer now starts after the browser process is launched (excluding Chromium startup overhead) and stops before the screenshot and page source are captured (excluding post-check I/O); the recorded `responseTime` reflects the actual login flow duration only
 - **`MAX_RESPONSE_STORAGE_DAYS` default lowered to `3`** — response files are now retained for 3 days by default (previously 7); set the env var to override
 - **Default time range changed to Last 1 hour** — the Overview and Service detail pages now default to the last 1 hour when no saved preference exists in `localStorage` (previously 24 hours)
 - **Overview Sync button — icon only** — the Sync button in the Overview toolbar now shows only the `RefreshCw` icon with no text label, consistent with the theme toggle and auth buttons; the spinning animation during sync is preserved
 - **Sync button added to Service detail toolbar** — the Service detail page now shows a Sync icon button (matching the Overview style) in both the desktop and mobile toolbars when `SYNC_REMOTE` is configured and the user is authenticated; clicking it triggers a sync and immediately refreshes the history list
 - **Scheduler: manual-only services logged at startup** — services with `interval: 0` or no `interval` defined are never auto-checked; a startup log entry now lists these services explicitly so operators can confirm which services are manual-trigger-only (`Run Test`, `Test all`, or `GET /health/:name`)
+
+### Performance
 - **Shared browser instance** — `browserCheckService` now maintains a single long-lived Chromium process shared across all `browser-ias-login` checks; each check run creates an isolated `BrowserContext` (separate cookies, storage, etc.) and closes it on completion regardless of outcome; this eliminates per-check browser launch overhead and reduces memory/CPU usage; the shared instance is closed cleanly on server shutdown (`SIGTERM`/`SIGINT`); if the browser process disconnects unexpectedly it is automatically re-launched on the next check
+
+## [v0.10.0] - 2026-07-13
+
+### Added
+- **Browser check: console log capture** — for `browser-ias-login` endpoints, all browser console messages (log, error, warning, etc.) are captured during the Playwright session and saved to a sidecar file named `yyyyMMdd-HHmmss_{endpoint}_{city}_{ms}_{status}_console.log` alongside the JSON result; if the file is present, a **Console** tab appears in the Response Detail modal showing the timestamped console output, which is useful for diagnosing JavaScript errors or blank-screen failures
+- **Browser check: page source dump** — after the Playwright session completes, the full HTML of the current page is saved to `yyyyMMdd-HHmmss_{endpoint}_{city}_{ms}_{status}_content.html`; if the file is present, a **Page Source** tab appears in the Response Detail modal displaying the raw HTML source, useful for inspecting what was actually rendered during a failed login check
+- **Response Detail modal tab reorder for browser checks** — tabs are now ordered **Overview → Screenshot → Console → Page Source** and the modal always opens on **Overview** by default (previously Screenshot was first and default when present); Console and Page Source tabs appear only when the respective sidecar files exist
+- Console log and page source sidecar files are included in remote sync (`/api/browse`, `/api/download`, `/api/batch-download`) and are pruned by the housekeeping scheduler alongside their corresponding JSON and PNG files
+
+### Fixed
+- **Browser check response time accuracy** — the timer now starts after the browser process is launched (excluding Chromium startup overhead) and stops before the screenshot and page source are captured (excluding post-check I/O); the recorded `responseTime` reflects the actual login flow duration only
 
 ## [v0.9.0] - 2026-06-24
 
