@@ -1,14 +1,14 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { getXsuaaConfig, getAppUrl, buildAuthUrl, exchangeCode, signSession, readSessionFromRequest, userAuditLog } from '../services/authService.js';
+import { getXsuaaConfig, buildAuthUrl, exchangeCode, signSession, readSessionFromRequest, userAuditLog } from '../services/authService.js';
 import { logger } from '../logger.js';
 
 const router = Router();
 
-/** Derive the app's base URL from the request when VCAP_APPLICATION is not set (local dev). */
+/** Derive the app's base URL from the actual request headers.
+ *  VCAP_APPLICATION.application_uris[0] is intentionally avoided — that URI may be
+ *  a stale default CF route that no longer exists; the real live route is in the headers. */
 function callbackBase(req: Request): string {
-  const appUrl = getAppUrl();
-  if (appUrl) return appUrl;
   const proto = (req.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0]?.trim() ?? req.protocol;
   const host = (req.headers['x-forwarded-host'] as string | undefined)?.split(',')[0]?.trim() ?? (req.headers.host ?? 'localhost');
   return `${proto}://${host}`;
