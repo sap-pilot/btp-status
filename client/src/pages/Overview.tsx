@@ -524,17 +524,29 @@ export default function Overview() {
                           const avg = epFiles.length > 0
                             ? Math.round(epFiles.reduce((sum, f) => sum + rtOf(f), 0) / epFiles.length)
                             : null;
-                          return ep.url.startsWith('http') ? (
-                            <DropdownMenuItem key={ei} asChild>
-                              <a href={ep.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between gap-4 cursor-pointer">
-                                <span className="truncate">{ep.name ?? ep.url}</span>
-                                <span className="text-xs text-muted-foreground flex-shrink-0">{avg != null ? `${avg}ms` : '—'}</span>
-                              </a>
-                            </DropdownMenuItem>
-                          ) : (
-                            <DropdownMenuItem key={ei} disabled className="flex items-center justify-between gap-4">
-                              <span className="truncate">{ep.name ?? ep.url}</span>
-                              <span className="text-xs text-muted-foreground flex-shrink-0">{avg != null ? `${avg}ms` : '—'}</span>
+                          return (
+                            <DropdownMenuItem
+                              key={ei}
+                              className="flex items-center justify-between gap-2 pr-1 cursor-pointer"
+                              onSelect={() => navigate(`/service/${encodeURIComponent(svc.name)}?endpoint=${encodeURIComponent(ep.name ?? ep.url)}`)}
+                            >
+                              <span className="truncate flex-1">{ep.name ?? ep.url}</span>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <span className="text-xs text-muted-foreground">{avg != null ? `${avg}ms` : '—'}</span>
+                                {ep.url.startsWith('http') && (
+                                  <a
+                                    href={ep.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-muted-foreground hover:text-foreground"
+                                    onClick={e => e.stopPropagation()}
+                                    onPointerDown={e => e.stopPropagation()}
+                                    onPointerUp={e => e.stopPropagation()}
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                )}
+                              </div>
                             </DropdownMenuItem>
                           );
                         })}
@@ -691,6 +703,7 @@ export default function Overview() {
                                       className="flex-shrink-0 text-muted-foreground hover:text-foreground"
                                       onClick={e => e.stopPropagation()}
                                       onPointerDown={e => e.stopPropagation()}
+                                      onPointerUp={e => e.stopPropagation()}
                                     >
                                       <ExternalLink className="h-3 w-3" />
                                     </a>

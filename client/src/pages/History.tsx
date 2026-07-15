@@ -688,14 +688,14 @@ export default function History() {
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <div className="text-xs text-muted-foreground mb-1.5">Avg Response Time</div>
+              <div className="text-xs text-muted-foreground mb-1.5">Endpoints / Avg Response Time</div>
               {epStats.length > 0 ? (
                 <div className="space-y-1 max-h-20 overflow-y-auto">
                   {epStats.map((ep, i) => (
                     <div key={i} className="flex items-center justify-between gap-1 min-w-0">
                       <div className="flex items-center gap-0.5 min-w-0 flex-1">
                         <button
-                          className="text-xs text-foreground hover:underline truncate text-left"
+                          className={`text-xs hover:underline truncate text-left ${filterEndpoint === ep.name ? 'font-bold text-foreground' : 'text-foreground'}`}
                           title={`Filter by ${ep.name}`}
                           onClick={() => { setFilterEndpoint(ep.name); setSearchParam({ endpoint: ep.name }); }}
                         >
