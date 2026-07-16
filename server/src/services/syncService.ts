@@ -6,9 +6,10 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
-import { browseResponseFiles, parseFilename } from './responseStore.js';
+import { browseResponseFiles, parseFilename, sanitizeName } from './responseStore.js';
 import { extractZip } from './zipBuilder.js';
-import { getSyncKey } from './configService.js';
+import { getSyncKey, getAllServices } from './configService.js';
+import { emit } from './liveEvents.js';
 
 const gunzipAsync = promisify(gunzip);
 const INDIVIDUAL_CONCURRENCY = 10;
@@ -253,6 +254,19 @@ export async function syncFromRemote(remoteBase: string): Promise<SyncStats> {
     };
 
     logger.info(stats, 'Remote sync complete');
+
+    // Notify live-update subscribers which services gained new files
+    const ts = Date.now();
+    const updatedFolders = new Set(missing.map(p => p.split('/')[0] as string));
+    const folderToService = Object.fromEntries(
+      getAllServices().map(s => [sanitizeName(s.name), s.name]),
+    );
+    emit('global', { ts });
+    for (const folder of updatedFolders) {
+      const svcName = folderToService[folder];
+      if (svcName) emit(`service:${svcName}`, { service: svcName, ts });
+    }
+
     return stats;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

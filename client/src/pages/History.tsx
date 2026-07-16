@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLiveEvents } from '@/hooks/useLiveEvents';
 
 function fmtUptime(n: number): string {
   return parseFloat(n.toFixed(2)) === 100 ? '100%' : `${n.toFixed(2)}%`;
@@ -116,6 +117,8 @@ export default function History() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Table filters — initialise from URL params so diagram node clicks pre-filter
+  const lastFetchTsRef = useRef<number>(Date.now());
+
   const [filterEndpoint, setFilterEndpoint] = useState(() => new URLSearchParams(location.search).get('endpoint') ?? 'all');
   const [filterLocation, setFilterLocation] = useState(() => new URLSearchParams(location.search).get('location') ?? 'all');
   const [filterStatus, setFilterStatus] = useState(() => new URLSearchParams(location.search).get('status') ?? 'all');
@@ -158,6 +161,7 @@ export default function History() {
   const fetchHistory = useCallback(() => {
     setLoading(true);
     setError(null);
+    lastFetchTsRef.current = Date.now();
     fetch(`/api/history/${encodeURIComponent(name)}?${queryString}`)
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -169,6 +173,27 @@ export default function History() {
   }, [name, queryString]);
 
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
+
+  const fetchDelta = useCallback(() => {
+    const since = lastFetchTsRef.current - 5_000;
+    lastFetchTsRef.current = Date.now();
+    fetch(`/api/history/${encodeURIComponent(name)}?since=${since}`)
+      .then(r => r.ok ? r.json() as Promise<string[]> : null)
+      .then(d => {
+        if (!d || d.length === 0) return;
+        const newFiles = d.map(fn => parseFilename(fn) ?? { filename: fn + '.json', overallStatus: 200 as const });
+        setFiles(prev => {
+          const known = new Set(prev.map(f => f.filename));
+          const unique = newFiles.filter(f => !known.has(f.filename));
+          if (unique.length === 0) return prev;
+          return [...unique, ...prev];
+        });
+      })
+      .catch(() => null);
+  }, [name]);
+
+  // Disable live updates when viewing a fixed date range (new files would be outside the range)
+  useLiveEvents(range.mode === 'dateRange' ? null : name, fetchDelta);
 
   useEffect(() => {
     fetch(`/api/service-summary?${queryString}`)

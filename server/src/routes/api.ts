@@ -14,13 +14,22 @@ import { getXsuaaConfig, readSessionFromRequest, userLabel } from '../services/a
 import { requireAuth, requireAdmin, requireSyncAuth } from '../middleware/requireAuth.js';
 import type { AuthRequest } from '../middleware/requireAuth.js';
 import type { EvaluationMode, ServiceWithHistory, ServiceSummary } from '../types/index.js';
+import { subscribe } from '../services/liveEvents.js';
 
 const VALID_EVAL_MODES = new Set<string>(['condition', 'alwaysok', 'alwayserror']);
 
-/** Parse ?hours=N or ?fromMs=N&untilMs=N into a listResponseFiles range. */
+/** Parse ?since=N or ?hours=N or ?fromMs=N&untilMs=N into a listResponseFiles range. */
 function parseTimeRangeQuery(
   query: Record<string, unknown>,
 ): { hours: number } | { fromMs: number; untilMs: number } {
+  // since=<ms> — delta fetch; highest priority
+  const rawSince = query['since'];
+  if (typeof rawSince === 'string') {
+    const since = parseInt(rawSince, 10);
+    if (!isNaN(since) && since > 0) {
+      return { fromMs: since, untilMs: Date.now() + 10_000 };
+    }
+  }
   const rawFrom = query['fromMs'];
   const rawUntil = query['untilMs'];
   if (typeof rawFrom === 'string' && typeof rawUntil === 'string') {
@@ -36,6 +45,23 @@ function parseTimeRangeQuery(
 }
 
 const router = Router();
+
+router.get('/events', (req, res) => {
+  const svc = typeof req.query['service'] === 'string' ? req.query['service'] : null;
+  const topics: string[] = ['global'];
+  if (svc) topics.push(`service:${svc}`);
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('X-Accel-Buffering', 'no'); // disable nginx/CF router buffering
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  res.write('event: connected\ndata: {}\n\n');
+
+  const unsubscribe = subscribe(res, topics);
+  req.on('close', unsubscribe);
+});
 
 router.get('/services', (_req, res) => {
   const services = getAllServices().map(s => ({

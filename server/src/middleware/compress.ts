@@ -19,6 +19,7 @@ export function compress(req: Request, res: Response, next: NextFunction): void 
   function init(): boolean {
     if (decided) return gz !== null;
     decided = true;
+    if (res.headersSent) return false; // headers already flushed (e.g. SSE); can't add Content-Encoding
     const status = res.statusCode;
     if (status < 200 || status === 204 || status === 304) return false;
     const ct = (res.getHeader('content-type') as string | undefined) ?? '';
