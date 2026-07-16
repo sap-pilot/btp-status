@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLiveEvents } from '@/hooks/useLiveEvents';
 
 function fmtUptime(n: number): string {
   return parseFloat(n.toFixed(2)) === 100 ? '100%' : `${n.toFixed(2)}%`;
@@ -89,7 +90,7 @@ export default function History() {
     ? 'Condition and schedule change are available for BTP_Status_Admin only; Contact security to get this role collection assigned to enable them'
     : undefined;
   const windowWidth = useWindowWidth();
-  const dotAreaWidth = Math.min(windowWidth, 1024) - 140;
+  const dotAreaWidth = Math.min(windowWidth, 1024) - 140 - 90;
   const maxDots = Math.max(8, Math.floor(dotAreaWidth / 12));
   const isMobile = windowWidth < 640;
 
@@ -114,16 +115,20 @@ export default function History() {
   // Schedule
   const [scheduleInterval, setScheduleInterval] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [lastChecked, setLastChecked] = useState<Date>(new Date());
 
   // Table filters — initialise from URL params so diagram node clicks pre-filter
+  const lastFetchTsRef = useRef<number>(Date.now());
+
   const [filterEndpoint, setFilterEndpoint] = useState(() => new URLSearchParams(location.search).get('endpoint') ?? 'all');
-  const [filterLocation, setFilterLocation] = useState('all');
+  const [filterLocation, setFilterLocation] = useState(() => new URLSearchParams(location.search).get('location') ?? 'all');
   const [filterStatus, setFilterStatus] = useState(() => new URLSearchParams(location.search).get('status') ?? 'all');
 
   // Re-apply URL params when navigating to same route with different params
   useEffect(() => {
     const p = new URLSearchParams(location.search);
     setFilterEndpoint(p.get('endpoint') ?? 'all');
+    setFilterLocation(p.get('location') ?? 'all');
     setFilterStatus(p.get('status') ?? 'all');
   // Only re-run when the search string itself changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -157,17 +162,40 @@ export default function History() {
   const fetchHistory = useCallback(() => {
     setLoading(true);
     setError(null);
+    lastFetchTsRef.current = Date.now();
     fetch(`/api/history/${encodeURIComponent(name)}?${queryString}`)
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json() as Promise<string[]>;
       })
-      .then(d => setFiles(d.map(fn => parseFilename(fn) ?? { filename: fn + '.json', overallStatus: 200 as const })))
+      .then(d => { setFiles(d.map(fn => parseFilename(fn) ?? { filename: fn + '.json', overallStatus: 200 as const })); setLastChecked(new Date()); })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false));
   }, [name, queryString]);
 
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
+
+  const fetchDelta = useCallback(() => {
+    const since = lastFetchTsRef.current - 5_000;
+    lastFetchTsRef.current = Date.now();
+    fetch(`/api/history/${encodeURIComponent(name)}?since=${since}`)
+      .then(r => r.ok ? r.json() as Promise<string[]> : null)
+      .then(d => {
+        setLastChecked(new Date());
+        if (!d || d.length === 0) return;
+        const newFiles = d.map(fn => parseFilename(fn) ?? { filename: fn + '.json', overallStatus: 200 as const });
+        setFiles(prev => {
+          const known = new Set(prev.map(f => f.filename));
+          const unique = newFiles.filter(f => !known.has(f.filename));
+          if (unique.length === 0) return prev;
+          return [...unique, ...prev];
+        });
+      })
+      .catch(() => null);
+  }, [name]);
+
+  // Disable live updates when viewing a fixed date range (new files would be outside the range)
+  useLiveEvents(range.mode === 'dateRange' ? null : name, fetchDelta);
 
   useEffect(() => {
     fetch(`/api/service-summary?${queryString}`)
@@ -183,11 +211,12 @@ export default function History() {
   function openFile(file: HistoryFile | null) {
     setSelected(file);
     const base = `/service/${encodeURIComponent(name)}`;
+    const search = window.location.search;
     if (file) {
       const hash = file.filename.replace(/\.(json|png)$/, '');
-      window.history.replaceState(null, '', `${base}#${hash}`);
+      window.history.replaceState(null, '', `${base}${search}#${hash}`);
     } else {
-      window.history.replaceState(null, '', base);
+      window.history.replaceState(null, '', `${base}${search}`);
     }
   }
 
@@ -262,29 +291,13 @@ export default function History() {
 
   const upCount = files.filter(f => f.overallStatus === 200 || f.overallStatus === 203).length;
   const failedCount = files.filter(f => f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504).length;
+  const partiallyFailedCount = files.filter(f => f.overallStatus === 400).length;
   const uptime = files.length > 0 ? (upCount / files.length) * 100 : 100;
   const latestTs = files.reduce((max, f) => Math.max(max, f.timestamp ?? 0), 0);
   const latestFailed = files.some(
     f => Math.floor((f.timestamp ?? 0) / 1000) === Math.floor(latestTs / 1000) && (f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504),
   );
   const uptimeColor = files.length === 0 ? 'text-muted-foreground' : latestFailed ? 'text-red-500' : uptime < 100 ? 'text-yellow-500' : 'text-green-500';
-  const timedFiles = files.filter(f => f.overallStatus !== 504);
-  const avgMs =
-    timedFiles.length > 0
-      ? Math.round(timedFiles.reduce((s, f) => s + (f.responseTime ?? 0), 0) / timedFiles.length)
-      : 0;
-
-  const epStats = useMemo(() => {
-    const eps = service?.endpoints ?? [];
-    return eps.map(ep => {
-      const slug = (ep.name ?? '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'endpoint';
-      const epFiles = timedFiles.filter(f => f.endpointSlug === slug);
-      const avg = epFiles.length > 0
-        ? Math.round(epFiles.reduce((s, f) => s + (f.responseTime ?? 0), 0) / epFiles.length)
-        : null;
-      return { name: ep.name ?? 'endpoint', url: ep.url, avg };
-    });
-  }, [service, timedFiles]);
 
   const endpointLabel = (f: HistoryFile): string => {
     if (f.endpointSlug !== undefined) {
@@ -325,7 +338,9 @@ export default function History() {
       if (filterLocation !== 'all' && (f.city ?? '—') !== filterLocation) return false;
       if (filterStatus !== 'all') {
         if (filterStatus === 'failed') {
-          if (f.overallStatus !== 500 && f.overallStatus !== 503) return false;
+          if (f.overallStatus !== 500 && f.overallStatus !== 503 && f.overallStatus !== 504) return false;
+        } else if (filterStatus === 'partial') {
+          if (f.overallStatus !== 400) return false;
         } else if (String(f.overallStatus) !== filterStatus) {
           return false;
         }
@@ -334,6 +349,18 @@ export default function History() {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files, service, filterEndpoint, filterLocation, filterStatus, hasFilter]);
+
+  // Files for the response time chart: filtered by endpoint + location only (status does not affect the chart)
+  const chartFiles = useMemo(() => {
+    if (filterEndpoint === 'all' && filterLocation === 'all') return files;
+    return files.filter(f => {
+      if (filterEndpoint !== 'all' && endpointLabel(f) !== filterEndpoint) return false;
+      if (filterLocation !== 'all' && (f.city ?? '—') !== filterLocation) return false;
+      return true;
+    });
+  // endpointLabel depends on service
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files, service, filterEndpoint, filterLocation]);
 
   function setSearchParam(updates: Record<string, string | null>) {
     const p = new URLSearchParams(location.search);
@@ -349,7 +376,7 @@ export default function History() {
     setFilterEndpoint('all');
     setFilterLocation('all');
     setFilterStatus('all');
-    setSearchParam({ endpoint: null, status: null });
+    setSearchParam({ endpoint: null, location: null, status: null });
   }
 
   // Build schedule select value — may not match a preset if config uses a custom interval
@@ -481,17 +508,6 @@ export default function History() {
               </span>
             )}
 
-            {(!auth.enabled || auth.loggedIn) && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 gap-1.5 text-xs"
-                onClick={() => setTestOpen(true)}
-              >
-                <PlayCircle className="h-3.5 w-3.5" />
-                Run Test
-              </Button>
-            )}
             <Select
               value={range.mode === 'dateRange' ? '' : String(range.hours)}
               onValueChange={v => {
@@ -513,6 +529,17 @@ export default function History() {
                 ))}
               </SelectContent>
             </Select>
+            {(!auth.enabled || auth.loggedIn) && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5 text-xs"
+                onClick={() => setTestOpen(true)}
+              >
+                <PlayCircle className="h-3.5 w-3.5" />
+                Run Test
+              </Button>
+            )}
             {syncAvailable && (!auth.enabled || auth.loggedIn) && (
               <button
                 onClick={() => void runSync()}
@@ -654,87 +681,58 @@ export default function History() {
         )}
 
         {/* Stats */}
-        <div className="stat-grid grid grid-cols-4 gap-3 sm:gap-4">
+        <div className="stat-grid grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
           <Card>
             <CardContent className="pt-4">
               <div className={`text-base sm:text-2xl font-bold ${uptimeColor}`}>{fmtUptime(uptime)}</div>
               <div className="text-xs text-muted-foreground mt-1">Uptime</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card
+            className={`transition-colors${failedCount > 0 ? ' cursor-pointer hover:bg-muted/50' : ''}${filterStatus === 'failed' ? ' ring-1 ring-red-500/60' : ''}`}
+            onClick={failedCount > 0 ? () => { const next = filterStatus === 'failed' ? 'all' : 'failed'; setFilterStatus(next); setSearchParam({ status: next === 'all' ? null : next }); } : undefined}
+            title={failedCount > 0 ? (filterStatus === 'failed' ? 'Clear filter' : 'Show completely failed checks') : undefined}
+          >
             <CardContent className="pt-4">
-              <button
-                className={`text-base sm:text-2xl font-bold hover:opacity-70 transition-opacity disabled:opacity-40 disabled:cursor-default ${failedCount > 0 ? 'text-red-500' : ''}`}
-                onClick={() => { setFilterStatus('failed'); setSearchParam({ status: 'failed' }); }}
-                disabled={failedCount === 0}
-                title={failedCount > 0 ? 'Show only FAIL / FAIL (always error)' : undefined}
-              >
-                {failedCount}
-              </button>
-              <div className="text-xs text-muted-foreground mt-1">Failed Checks</div>
+              <div className={`text-base sm:text-2xl font-bold ${failedCount > 0 ? 'text-red-500' : ''}`}>{failedCount}</div>
+              <div className="text-xs text-muted-foreground mt-1">Completely Failed</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card
+            className={`transition-colors${partiallyFailedCount > 0 ? ' cursor-pointer hover:bg-muted/50' : ''}${filterStatus === 'partial' ? ' ring-1 ring-orange-500/60' : ''}`}
+            onClick={partiallyFailedCount > 0 ? () => { const next = filterStatus === 'partial' ? 'all' : 'partial'; setFilterStatus(next); setSearchParam({ status: next === 'all' ? null : next }); } : undefined}
+            title={partiallyFailedCount > 0 ? (filterStatus === 'partial' ? 'Clear filter' : 'Show partially failed checks (initial failed, retry succeeded)') : undefined}
+          >
             <CardContent className="pt-4">
-              <button
-                className="text-base sm:text-2xl font-bold hover:opacity-70 transition-opacity"
-                onClick={clearFilters}
-                title="Clear all filters"
-              >
-                {files.length}
-              </button>
+              <div className={`text-base sm:text-2xl font-bold ${partiallyFailedCount > 0 ? 'text-orange-400' : ''}`}>{partiallyFailedCount}</div>
+              <div className="text-xs text-muted-foreground mt-1">Partially Failed</div>
+            </CardContent>
+          </Card>
+          <Card
+            className="cursor-pointer hover:bg-muted/50 transition-colors"
+            onClick={clearFilters}
+            title="Clear all filters"
+          >
+            <CardContent className="pt-4">
+              <div className="text-base sm:text-2xl font-bold">{files.length}</div>
               <div className="text-xs text-muted-foreground mt-1">Total Checks</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card
+            className={`col-span-2 sm:col-span-1${(!auth.enabled || auth.loggedIn) ? ' cursor-pointer hover:bg-muted/50 transition-colors' : ''}`}
+            onClick={(!auth.enabled || auth.loggedIn) ? () => void runSync() : undefined}
+            title={(!auth.enabled || auth.loggedIn) ? 'Click to sync' : undefined}
+          >
             <CardContent className="pt-4">
-              {epStats.length > 0 ? (
-                <>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="text-xs text-muted-foreground">Endpoints</div>
-                    <div className="text-xs text-muted-foreground">Avg Response Time</div>
-                  </div>
-                  <div className="space-y-1 max-h-20 overflow-y-auto">
-                    {epStats.map((ep, i) => (
-                      <div key={i} className="flex items-center justify-between gap-1 min-w-0">
-                        <div className="flex items-center gap-0.5 min-w-0 flex-1">
-                          <button
-                            className={`text-xs hover:underline truncate text-left ${filterEndpoint === ep.name ? 'font-bold text-foreground' : 'text-foreground'}`}
-                            title={`Filter by ${ep.name}`}
-                            onClick={() => { setFilterEndpoint(ep.name); setSearchParam({ endpoint: ep.name }); }}
-                          >
-                            {ep.name}
-                          </button>
-                          {ep.url.startsWith('http') && (
-                            <a
-                              href={ep.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex-shrink-0 text-muted-foreground hover:text-foreground"
-                              title={ep.url}
-                            >
-                              <ExternalLink className="h-2.5 w-2.5" />
-                            </a>
-                          )}
-                        </div>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0 ml-1">
-                          {ep.avg != null ? `${ep.avg}ms` : '—'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="text-base sm:text-2xl font-bold">{avgMs > 0 ? `${avgMs}ms` : '—'}</div>
-                  <div className="text-xs text-muted-foreground mt-1">Avg Response Time</div>
-                </>
-              )}
+              <div className={`text-base sm:text-2xl font-bold tabular-nums${syncing ? ' opacity-50' : ''}`}>
+                {lastChecked.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">{syncing ? 'Syncing…' : 'Last Checked'}</div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Timeline card */}
+        {/* Timeline card — per-endpoint rows */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -742,7 +740,74 @@ export default function History() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <StatusDots history={files} maxDots={maxDots} showAvg={false} onDotClick={f => openFile(f)} />
+            {service ? (
+              <table className="w-full table-fixed">
+                <colgroup>
+                  <col className="w-[170px]" />
+                  <col />
+                  <col className="w-[110px]" />
+                </colgroup>
+                <tbody>
+                  {service.endpoints.map((ep, ei) => {
+                    const slug = (ep.name ?? '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'endpoint';
+                    const epFiles = files.filter(f =>
+                      f.endpointSlug !== undefined ? f.endpointSlug === slug : f.endpointIndex === ei,
+                    );
+                    const upCount = epFiles.filter(f => f.overallStatus === 200 || f.overallStatus === 203).length;
+                    const epUptime = epFiles.length > 0 ? (upCount / epFiles.length) * 100 : 100;
+                    const lastEpTs = epFiles.reduce((max, f) => Math.max(max, f.timestamp ?? 0), 0);
+                    const lastEpFailed = epFiles.some(
+                      f => Math.floor((f.timestamp ?? 0) / 1000) === Math.floor(lastEpTs / 1000) &&
+                           (f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504),
+                    );
+                    const lastEpPartial = epFiles.some(
+                      f => Math.floor((f.timestamp ?? 0) / 1000) === Math.floor(lastEpTs / 1000) &&
+                           f.overallStatus === 400,
+                    );
+                    const epBadgeCls = epFiles.length === 0 ? 'text-muted-foreground border-border' :
+                      lastEpFailed ? 'border-red-600 text-red-400' :
+                      lastEpPartial || epUptime < 100 ? 'border-yellow-600 text-yellow-400' :
+                      'border-green-600 text-green-400';
+                    return (
+                      <tr key={ei} className="border-b border-border last:border-0">
+                        <td className="py-2 pr-3 align-middle">
+                          <div className="flex items-center gap-1 min-w-0">
+                            <button
+                              className="text-xs hover:underline truncate text-left flex-1 min-w-0"
+                              title={`Filter by ${ep.name}`}
+                              onClick={() => { setFilterEndpoint(ep.name ?? slug); setSearchParam({ endpoint: ep.name ?? slug }); }}
+                            >
+                              {ep.name ?? ep.url}
+                            </button>
+                            {ep.url.startsWith('http') && (
+                              <a
+                                href={ep.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-shrink-0 text-muted-foreground hover:text-foreground"
+                                title={ep.url}
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-2 px-0 align-middle">
+                          <StatusDots history={epFiles} maxDots={maxDots} showUptime={false} showAvg={false} onDotClick={f => openFile(f)} />
+                        </td>
+                        <td className="py-2 pl-2 align-middle text-right">
+                          <Badge variant="outline" className={`text-xs ${epBadgeCls}`}>
+                            {epFiles.length > 0 ? `${fmtUptime(epUptime)} up` : 'no data'}
+                          </Badge>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <StatusDots history={files} maxDots={maxDots} showUptime={false} showAvg={false} onDotClick={f => openFile(f)} />
+            )}
           </CardContent>
         </Card>
 
@@ -754,7 +819,7 @@ export default function History() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponseTimeChart files={files} service={service} />
+            <ResponseTimeChart files={chartFiles} service={service} />
           </CardContent>
         </Card>
 
@@ -791,7 +856,7 @@ export default function History() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Select value={filterLocation} onValueChange={setFilterLocation}>
+                  <Select value={filterLocation} onValueChange={v => { setFilterLocation(v); setSearchParam({ location: v === 'all' ? null : v }); }}>
                     <SelectTrigger className="h-7 text-xs w-auto min-w-[9rem] max-w-[14rem]">
                       <SelectValue />
                     </SelectTrigger>
@@ -802,13 +867,14 @@ export default function History() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <Select value={filterStatus} onValueChange={v => { setFilterStatus(v); setSearchParam({ status: v === 'all' ? null : v }); }}>
                     <SelectTrigger className="h-7 text-xs w-40">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all" className="text-xs">All statuses</SelectItem>
-                      <SelectItem value="failed" className="text-xs">All failures</SelectItem>
+                      <SelectItem value="failed" className="text-xs">Completely failed</SelectItem>
+                      <SelectItem value="partial" className="text-xs">Partially failed</SelectItem>
                       <SelectItem value="200" className="text-xs">PASS</SelectItem>
                       <SelectItem value="203" className="text-xs">PASS (always ok)</SelectItem>
                       <SelectItem value="500" className="text-xs">FAIL</SelectItem>
@@ -853,6 +919,7 @@ export default function History() {
                         f.overallStatus === 500 ? 'bg-red-950/20 hover:bg-red-950/30' :
                         f.overallStatus === 503 ? 'bg-red-950/30 hover:bg-red-950/40' :
                         f.overallStatus === 504 ? 'bg-orange-950/20 hover:bg-orange-950/30' :
+                        f.overallStatus === 400 ? 'bg-orange-950/10 hover:bg-orange-950/20' :
                         'hover:bg-muted/30'
                       }`}
                       onClick={() => openFile(f)}
@@ -876,6 +943,9 @@ export default function History() {
                         {f.overallStatus === 203 && (
                           <Badge variant="outline" className="text-xs border-emerald-700 text-emerald-400">PASS (always ok)</Badge>
                         )}
+                        {f.overallStatus === 400 && (
+                          <Badge variant="outline" className="text-xs border-orange-500 text-orange-400">PARTIAL</Badge>
+                        )}
                         {f.overallStatus === 500 && (
                           <Badge variant="destructive" className="text-xs">FAIL</Badge>
                         )}
@@ -883,7 +953,7 @@ export default function History() {
                           <Badge variant="destructive" className="text-xs bg-red-900 hover:bg-red-900">FAIL (always error)</Badge>
                         )}
                         {f.overallStatus === 504 && (
-                          <Badge variant="outline" className="text-xs border-orange-500 text-orange-400">TIMEOUT</Badge>
+                          <Badge variant="outline" className="text-xs border-orange-600 text-orange-500">TIMEOUT</Badge>
                         )}
                         {isMobile && (
                           <div className="text-xs text-muted-foreground mt-0.5">{f.responseTime ?? 0}ms</div>

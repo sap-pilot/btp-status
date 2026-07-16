@@ -6,15 +6,64 @@ import { runBrowserIasLogin } from './browserCheckService.js';
 import { getCity } from './geoService.js';
 import { logger } from '../logger.js';
 import { config } from '../config.js';
-import type { ConditionResult, ResponseRecord, CheckResult, EndpointCheckResult } from '../types/index.js';
+import { emit } from './liveEvents.js';
+import { notifyCallbacks } from './syncService.js';
+import type { ConditionResult, ResponseRecord, CheckResult, EndpointCheckResult, RetryAttempt, EndpointConfig } from '../types/index.js';
 
 export type { CheckResult, EndpointCheckResult };
+
+const delay = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
 
 function extractRegion(host: string): string | null {
   return host.match(/cfapps\.([^.]+)\.hana/)?.[1] ?? null;
 }
 
-export async function checkService(serviceName: string, requestHost?: string): Promise<CheckResult> {
+interface HttpAttemptResult {
+  respStatus: number;
+  respHeaders: Record<string, string>;
+  respBody: string;
+  responseTime: number;
+  fetchError: string | null;
+  didTimeout: boolean;
+}
+
+async function runHttpAttempt(
+  ep: EndpointConfig,
+  reqHeaders: Record<string, string>,
+  method: string,
+  timeoutMs: number,
+): Promise<HttpAttemptResult> {
+  const start = Date.now();
+  let respStatus = 0;
+  let respHeaders: Record<string, string> = {};
+  let respBody = '';
+  let responseTime = 0;
+  let fetchError: string | null = null;
+  let didTimeout = false;
+
+  try {
+    const resp = await fetch(ep.url, {
+      method,
+      headers: reqHeaders,
+      body: ep.body ?? undefined,
+      redirect: 'manual',
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    responseTime = Date.now() - start;
+    respStatus = resp.status;
+    resp.headers.forEach((v, k) => { respHeaders[k] = v; });
+    respBody = await resp.text();
+  } catch (err) {
+    responseTime = Date.now() - start;
+    didTimeout = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
+    fetchError = err instanceof Error ? err.message : String(err);
+    respBody = didTimeout ? `Request timed out after ${timeoutMs}ms` : fetchError;
+  }
+
+  return { respStatus, respHeaders, respBody, responseTime, fetchError, didTimeout };
+}
+
+export async function checkService(serviceName: string, requestHost?: string, onlyEpIdx?: number): Promise<CheckResult> {
   const service = getService(serviceName);
   if (!service) {
     throw Object.assign(new Error(`Service '${serviceName}' not found`), { status: 404 });
@@ -25,6 +74,7 @@ export async function checkService(serviceName: string, requestHost?: string): P
   const hostRegion = requestHost ? extractRegion(requestHost) : null;
 
   for (let i = 0; i < service.endpoints.length; i++) {
+    if (onlyEpIdx !== undefined && i !== onlyEpIdx) continue;
     const ep = service.endpoints[i];
     const epName = ep.name ?? `Endpoint ${i}`;
 
@@ -88,19 +138,66 @@ export async function checkService(serviceName: string, requestHost?: string): P
       }
 
       const conditionsPassed = conditions.every(c => c.passed);
-      const overallStatus: 200 | 203 | 500 | 503 =
-        evalMode === 'alwaysok' ? 203 :
-        evalMode === 'alwayserror' ? 503 :
-        (conditionsPassed ? 200 : 500);
 
       for (const c of conditions) {
         if (!c.passed) {
-          logger.warn(
-            { service: serviceName, endpoint: epName, condition: c.condition, actual: c.actual },
-            'Condition failed',
-          );
+          logger.warn({ service: serviceName, endpoint: epName, condition: c.condition, actual: c.actual }, 'Condition failed');
         }
       }
+
+      // ── Browser retry logic ─────────────────────────────────────────────
+      const retryFiles: string[] = [];
+      const retryAttempts: RetryAttempt[] = [];
+      let anyRetryPassed = false;
+      if (!conditionsPassed && evalMode === 'condition' && (ep.retry ?? 0) > 0) {
+        const retryDelayMs = (ep.retryDelay ?? 0) * 1000;
+        for (let r = 0; r < ep.retry!; r++) {
+          if (retryDelayMs > 0) await delay(retryDelayMs);
+          logger.debug({ service: serviceName, endpoint: epName, attempt: r + 1 }, 'Browser retry attempt');
+          const rr = await runBrowserIasLogin(ep, serviceName);
+          const retryStatus: 200 | 500 = rr.passed ? 200 : 500;
+          const retryConds: ConditionResult[] = [{
+            condition: `[SELECTOR] found ${ep.waitForSelector ?? '(waitForSelector not set)'}`,
+            passed: rr.passed,
+            actual: rr.message,
+            expected: ep.waitForSelector ?? '(not set)',
+          }];
+          const retryRecord: ResponseRecord = {
+            request: { url: ep.url, method: 'BROWSER', headers: {}, body: null },
+            response: { status: retryStatus, headers: {}, body: rr.message },
+            timestamp: new Date().toISOString(),
+            responseTime: rr.responseTime,
+            endpointIndex: i,
+            endpointName: epName,
+            conditions: retryConds,
+            overallStatus: retryStatus,
+            city: getCity(),
+          };
+          const retryFile = await saveResponse(serviceName, retryRecord, rr.screenshot, rr.consoleLogs, rr.htmlContent, true);
+          retryFiles.push(retryFile);
+          const hasRetryScreenshot = rr.screenshot.length > 0;
+          retryAttempts.push({
+            attempt: r + 1,
+            conditions: retryConds,
+            passed: rr.passed,
+            request: { url: ep.url, method: 'BROWSER', headers: {}, body: null },
+            response: { status: retryStatus, headers: {}, body: rr.message },
+            responseTime: rr.responseTime,
+            screenshotUrl: hasRetryScreenshot
+              ? `/api/download?path=${encodeURIComponent(serviceName)}/${encodeURIComponent(retryFile.replace(/\.json$/, '.screenshot.png'))}`
+              : undefined,
+            consoleText: rr.consoleLogs.length > 0 ? rr.consoleLogs.join('\n') : undefined,
+            htmlText: rr.htmlContent || undefined,
+          });
+          if (rr.passed) { anyRetryPassed = true; break; }
+        }
+      }
+
+      const overallStatus: 200 | 203 | 400 | 500 | 503 =
+        evalMode === 'alwaysok' ? 203 :
+        evalMode === 'alwayserror' ? 503 :
+        conditionsPassed ? 200 :
+        anyRetryPassed ? 400 : 500;
 
       const record: ResponseRecord = {
         request: { url: ep.url, method: 'BROWSER', headers: {}, body: null },
@@ -112,10 +209,11 @@ export async function checkService(serviceName: string, requestHost?: string): P
         conditions,
         overallStatus,
         city: getCity(),
+        retryFiles: retryFiles.length > 0 ? retryFiles : undefined,
       };
 
       const jsonFile = await saveResponse(serviceName, record, result.screenshot, result.consoleLogs, result.htmlContent);
-      const screenshotFile = jsonFile.replace(/\.json$/, '.png');
+      const screenshotFile = jsonFile.replace(/\.json$/, '.screenshot.png');
       const hasScreenshot = result.screenshot.length > 0;
 
       details.push({
@@ -123,6 +221,8 @@ export async function checkService(serviceName: string, requestHost?: string): P
         name: epName,
         conditions,
         passed: conditionsPassed,
+        partiallyFailed: anyRetryPassed,
+        retries: retryAttempts.length > 0 ? retryAttempts : undefined,
         request: { url: ep.url, method: 'BROWSER', headers: {}, body: null },
         response: { status: overallStatus, headers: {}, body: result.message },
         responseTime: result.responseTime,
@@ -138,61 +238,19 @@ export async function checkService(serviceName: string, requestHost?: string): P
     // ── Standard HTTP check ─────────────────────────────────────────────────
     const reqHeaders = normalizeHeaders(ep.headers);
     const method = ep.method ?? 'GET';
-    const timeoutMs = ep.timeout ?? config.REQUEST_TIMEOUT_MS;
+    const timeoutMs = ep.timeout != null ? ep.timeout * 1000 : config.REQUEST_TIMEOUT_MS;
 
-    logger.debug(
-      { service: serviceName, endpoint: epName, method, url: ep.url, timeoutMs },
-      'Sending request',
-    );
+    logger.debug({ service: serviceName, endpoint: epName, method, url: ep.url, timeoutMs }, 'Sending request');
 
-    const start = Date.now();
-    let respStatus = 0;
-    let respHeaders: Record<string, string> = {};
-    let respBody = '';
-    let responseTime = 0;
-    let fetchError: string | null = null;
-    let didTimeout = false;
+    const attempt = await runHttpAttempt(ep, reqHeaders, method, timeoutMs);
+    const { respStatus, respHeaders, respBody, responseTime, fetchError, didTimeout } = attempt;
 
-    try {
-      const resp = await fetch(ep.url, {
-        method,
-        headers: reqHeaders,
-        body: ep.body ?? undefined,
-        redirect: 'manual',
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      responseTime = Date.now() - start;
-      respStatus = resp.status;
-      resp.headers.forEach((v, k) => { respHeaders[k] = v; });
-      respBody = await resp.text();
-
-      logger.debug(
-        {
-          service: serviceName,
-          endpoint: epName,
-          status: respStatus,
-          responseTime,
-          bodyPreview: respBody.slice(0, 300),
-        },
-        'Response received',
-      );
-    } catch (err) {
-      responseTime = Date.now() - start;
-      didTimeout = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
-      fetchError = err instanceof Error ? err.message : String(err);
-      respBody = didTimeout ? `Request timed out after ${timeoutMs}ms` : fetchError;
-
-      if (didTimeout) {
-        logger.warn(
-          { service: serviceName, endpoint: epName, url: ep.url, timeoutMs, responseTime },
-          'Request timed out',
-        );
-      } else {
-        logger.error(
-          { service: serviceName, endpoint: epName, url: ep.url, responseTime, err },
-          'Request failed with network error',
-        );
-      }
+    if (!fetchError) {
+      logger.debug({ service: serviceName, endpoint: epName, status: respStatus, responseTime, bodyPreview: respBody.slice(0, 300) }, 'Response received');
+    } else if (didTimeout) {
+      logger.warn({ service: serviceName, endpoint: epName, url: ep.url, timeoutMs, responseTime }, 'Request timed out');
+    } else {
+      logger.error({ service: serviceName, endpoint: epName, url: ep.url, responseTime, err: fetchError }, 'Request failed with network error');
     }
 
     const ctx = { status: respStatus, responseTime, body: respBody, headers: respHeaders };
@@ -217,26 +275,61 @@ export async function checkService(serviceName: string, requestHost?: string): P
     }
 
     const conditionsPassed = fetchError === null && conditions.every(c => c.passed);
-    const overallStatus: 200 | 203 | 500 | 503 | 504 =
-      evalMode === 'alwaysok' ? 203 :
-      evalMode === 'alwayserror' ? 503 :
-      conditionsPassed ? 200 :
-      didTimeout ? 504 : 500;
 
     for (const c of conditions) {
       if (!c.passed) {
-        logger.warn(
-          {
-            service: serviceName,
-            endpoint: epName,
-            condition: c.condition,
-            actual: c.actual,
-            expected: c.expected,
-          },
-          'Condition failed',
-        );
+        logger.warn({ service: serviceName, endpoint: epName, condition: c.condition, actual: c.actual, expected: c.expected }, 'Condition failed');
       }
     }
+
+    // ── HTTP retry logic ────────────────────────────────────────────────────
+    const retryFiles: string[] = [];
+    const retryAttempts: RetryAttempt[] = [];
+    let anyRetryPassed = false;
+    if (!conditionsPassed && evalMode === 'condition' && (ep.retry ?? 0) > 0) {
+      const retryDelayMs = (ep.retryDelay ?? 0) * 1000;
+      for (let r = 0; r < ep.retry!; r++) {
+        if (retryDelayMs > 0) await delay(retryDelayMs);
+        logger.debug({ service: serviceName, endpoint: epName, attempt: r + 1 }, 'HTTP retry attempt');
+        const ra = await runHttpAttempt(ep, reqHeaders, method, timeoutMs);
+        const retryCtx = { status: ra.respStatus, responseTime: ra.responseTime, body: ra.respBody, headers: ra.respHeaders };
+        const retryConds: ConditionResult[] = (ep.conditions ?? []).map(c => evaluateCondition(c, retryCtx));
+        if (ra.didTimeout) {
+          retryConds.push({ condition: `[TIMEOUT] response within ${timeoutMs}ms`, passed: false, actual: `${ra.responseTime}ms`, expected: `< ${timeoutMs}ms` });
+        }
+        const retryPassed = ra.fetchError === null && retryConds.every(c => c.passed);
+        const retryStatus: 200 | 500 | 504 = retryPassed ? 200 : ra.didTimeout ? 504 : 500;
+        const retryRecord: ResponseRecord = {
+          request: { url: ep.url, method, headers: reqHeaders, body: ep.body ?? null },
+          response: { status: ra.respStatus, headers: ra.respHeaders, body: ra.respBody },
+          timestamp: new Date().toISOString(),
+          responseTime: ra.responseTime,
+          endpointIndex: i,
+          endpointName: epName,
+          conditions: retryConds,
+          overallStatus: retryStatus,
+          city: getCity(),
+        };
+        const retryFile = await saveResponse(serviceName, retryRecord, undefined, undefined, undefined, true);
+        retryFiles.push(retryFile);
+        retryAttempts.push({
+          attempt: r + 1,
+          conditions: retryConds,
+          passed: retryPassed,
+          request: { url: ep.url, method, headers: reqHeaders, body: ep.body ?? null },
+          response: { status: ra.respStatus, headers: ra.respHeaders, body: ra.respBody },
+          responseTime: ra.responseTime,
+        });
+        if (retryPassed) { anyRetryPassed = true; break; }
+      }
+    }
+
+    const overallStatus: 200 | 203 | 400 | 500 | 503 | 504 =
+      evalMode === 'alwaysok' ? 203 :
+      evalMode === 'alwayserror' ? 503 :
+      conditionsPassed ? 200 :
+      anyRetryPassed ? 400 :
+      didTimeout ? 504 : 500;
 
     const record: ResponseRecord = {
       request: { url: ep.url, method, headers: reqHeaders, body: ep.body ?? null },
@@ -248,6 +341,7 @@ export async function checkService(serviceName: string, requestHost?: string): P
       conditions,
       overallStatus,
       city: getCity(),
+      retryFiles: retryFiles.length > 0 ? retryFiles : undefined,
     };
 
     await saveResponse(serviceName, record);
@@ -256,6 +350,8 @@ export async function checkService(serviceName: string, requestHost?: string): P
       name: epName,
       conditions,
       passed: conditionsPassed,
+      partiallyFailed: anyRetryPassed,
+      retries: retryAttempts.length > 0 ? retryAttempts : undefined,
       request: { url: ep.url, method, headers: reqHeaders, body: ep.body ?? null },
       response: { status: respStatus, headers: respHeaders, body: respBody },
       responseTime,
@@ -268,6 +364,11 @@ export async function checkService(serviceName: string, requestHost?: string): P
       .filter(c => !c.passed)
       .map(c => `[${d.name}] ${c.condition}: expected ${c.expected}, got ${c.actual}`),
   );
+
+  const ts = Date.now();
+  emit('global', { service: serviceName, ts });
+  emit(`service:${serviceName}`, { service: serviceName, ts });
+  notifyCallbacks();
 
   return {
     success: allPassed,

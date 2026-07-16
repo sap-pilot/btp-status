@@ -1,67 +1,80 @@
-import { getAllServices } from './configService.js';
+import { getAllServices, getService } from './configService.js';
 import { checkService } from './healthCheckService.js';
 import { logger } from '../logger.js';
 
+// Timer key: "${serviceName}/${endpointIdx}"
 const timers = new Map<string, ReturnType<typeof setInterval>>();
 const running = new Set<string>();
 
 export function startScheduler(): void {
   const all = getAllServices();
-  const scheduled = all.filter(s => (s.interval ?? 0) > 0);
-  const manual = all.filter(s => (s.interval ?? 0) === 0);
-  for (const svc of scheduled) {
-    register(svc.name, svc.interval!);
+  let scheduledCount = 0;
+  const manualServices: string[] = [];
+
+  for (const svc of all) {
+    let svcHasSchedule = false;
+    for (let i = 0; i < svc.endpoints.length; i++) {
+      const ep = svc.endpoints[i];
+      const effectiveInterval = ep.interval ?? svc.interval ?? 0;
+      if (effectiveInterval > 0) {
+        register(`${svc.name}/${i}`, svc.name, i, effectiveInterval);
+        scheduledCount++;
+        svcHasSchedule = true;
+      }
+    }
+    if (!svcHasSchedule) manualServices.push(svc.name);
   }
-  if (scheduled.length > 0) {
-    logger.info(
-      { count: scheduled.length, services: scheduled.map(s => `${s.name}(${s.interval}s)`) },
-      'Scheduler started',
-    );
+
+  if (scheduledCount > 0) {
+    logger.info({ count: scheduledCount }, 'Scheduler started');
   }
-  if (manual.length > 0) {
-    logger.info(
-      { count: manual.length, services: manual.map(s => s.name) },
-      'Services with no interval — manual trigger only (Run Test / /health/:name)',
-    );
+  if (manualServices.length > 0) {
+    logger.info({ count: manualServices.length, services: manualServices }, 'Services with no interval — manual trigger only (Run Test / /health/:name)');
   }
 }
 
-function register(name: string, intervalSecs: number): void {
-  const timer = setInterval(() => { void tick(name, intervalSecs); }, intervalSecs * 1000);
-  timer.unref(); // don't block process exit
-  timers.set(name, timer);
-  logger.debug({ service: name, intervalSecs }, 'Auto-check registered');
+function register(key: string, serviceName: string, epIdx: number, intervalSecs: number): void {
+  const timer = setInterval(() => { void tick(key, serviceName, epIdx, intervalSecs); }, intervalSecs * 1000);
+  timer.unref();
+  timers.set(key, timer);
+  logger.debug({ key, intervalSecs }, 'Auto-check registered');
 }
 
-async function tick(name: string, intervalSecs: number): Promise<void> {
-  if (running.has(name)) {
-    logger.warn({ service: name }, 'Auto-check skipped: previous run still in progress');
+async function tick(key: string, serviceName: string, epIdx: number, intervalSecs: number): Promise<void> {
+  if (running.has(key)) {
+    logger.warn({ key }, 'Auto-check skipped: previous run still in progress');
     return;
   }
-  running.add(name);
+  running.add(key);
   try {
-    logger.debug({ service: name }, 'Auto-check triggered');
-    await checkService(name);
+    logger.debug({ key }, 'Auto-check triggered');
+    await checkService(serviceName, undefined, epIdx);
   } catch (err) {
-    logger.error({ service: name, err }, 'Auto-check error; will retry at next interval');
-    // setInterval fires regardless of errors; re-register only if timer was somehow lost
-    if (!timers.has(name)) {
-      logger.warn({ service: name }, 'Timer missing after error, re-registering');
-      register(name, intervalSecs);
+    logger.error({ key, err }, 'Auto-check error; will retry at next interval');
+    if (!timers.has(key)) {
+      logger.warn({ key }, 'Timer missing after error, re-registering');
+      register(key, serviceName, epIdx, intervalSecs);
     }
   } finally {
-    running.delete(name);
+    running.delete(key);
   }
 }
 
 export function rescheduleService(name: string, intervalSecs: number): void {
-  const existing = timers.get(name);
-  if (existing) {
-    clearInterval(existing);
-    timers.delete(name);
+  // Clear all timers for this service
+  for (const key of [...timers.keys()]) {
+    if (key.startsWith(`${name}/`)) {
+      clearInterval(timers.get(key)!);
+      timers.delete(key);
+    }
   }
   if (intervalSecs > 0) {
-    register(name, intervalSecs);
+    const svc = getService(name);
+    if (svc) {
+      for (let i = 0; i < svc.endpoints.length; i++) {
+        register(`${name}/${i}`, name, i, intervalSecs);
+      }
+    }
     logger.info({ service: name, intervalSecs }, 'Service rescheduled');
   } else {
     logger.info({ service: name }, 'Service auto-run disabled');
@@ -69,9 +82,9 @@ export function rescheduleService(name: string, intervalSecs: number): void {
 }
 
 export function stopScheduler(): void {
-  for (const [name, timer] of timers) {
+  for (const [key, timer] of timers) {
     clearInterval(timer);
-    logger.debug({ service: name }, 'Auto-check timer cleared');
+    logger.debug({ key }, 'Auto-check timer cleared');
   }
   timers.clear();
   running.clear();

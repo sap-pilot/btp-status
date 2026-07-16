@@ -3,7 +3,7 @@ import { getAllServices, getLandscapes, getSites } from '../services/configServi
 import { listResponseFiles, readResponseFile, readRawResponseFile, readScreenshotFile, readConsoleLogFile, readContentFile, browseResponseFiles } from '../services/responseStore.js';
 import { buildZip } from '../services/zipBuilder.js';
 import { checkService } from '../services/healthCheckService.js';
-import { syncFromRemote } from '../services/syncService.js';
+import { syncFromRemote, handleDownloadTrigger, registerCallback } from '../services/syncService.js';
 import { getEvaluationMode, setEvaluationMode, getIntervalOverride, setIntervalOverride } from '../services/overrideService.js';
 import { rescheduleService } from '../services/schedulerService.js';
 import { getService } from '../services/configService.js';
@@ -14,13 +14,22 @@ import { getXsuaaConfig, readSessionFromRequest, userLabel } from '../services/a
 import { requireAuth, requireAdmin, requireSyncAuth } from '../middleware/requireAuth.js';
 import type { AuthRequest } from '../middleware/requireAuth.js';
 import type { EvaluationMode, ServiceWithHistory, ServiceSummary } from '../types/index.js';
+import { subscribe } from '../services/liveEvents.js';
 
 const VALID_EVAL_MODES = new Set<string>(['condition', 'alwaysok', 'alwayserror']);
 
-/** Parse ?hours=N or ?fromMs=N&untilMs=N into a listResponseFiles range. */
+/** Parse ?since=N or ?hours=N or ?fromMs=N&untilMs=N into a listResponseFiles range. */
 function parseTimeRangeQuery(
   query: Record<string, unknown>,
 ): { hours: number } | { fromMs: number; untilMs: number } {
+  // since=<ms> — delta fetch; highest priority
+  const rawSince = query['since'];
+  if (typeof rawSince === 'string') {
+    const since = parseInt(rawSince, 10);
+    if (!isNaN(since) && since > 0) {
+      return { fromMs: since, untilMs: Date.now() + 10_000 };
+    }
+  }
   const rawFrom = query['fromMs'];
   const rawUntil = query['untilMs'];
   if (typeof rawFrom === 'string' && typeof rawUntil === 'string') {
@@ -37,6 +46,23 @@ function parseTimeRangeQuery(
 
 const router = Router();
 
+router.get('/events', (req, res) => {
+  const svc = typeof req.query['service'] === 'string' ? req.query['service'] : null;
+  const topics: string[] = ['global'];
+  if (svc) topics.push(`service:${svc}`);
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('X-Accel-Buffering', 'no'); // disable nginx/CF router buffering
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  res.write('event: connected\ndata: {}\n\n');
+
+  const unsubscribe = subscribe(res, topics);
+  req.on('close', unsubscribe);
+});
+
 router.get('/services', (_req, res) => {
   const services = getAllServices().map(s => ({
     ...s,
@@ -51,13 +77,12 @@ router.get('/services', (_req, res) => {
 
 router.get('/check/:name', requireAuth, async (req, res, next) => {
   const name = req.params['name'] as string;
-  const requestHost =
-    (req.headers['x-forwarded-host'] as string | undefined)?.split(',')[0]?.trim() ??
-    (req.headers['host'] as string | undefined) ?? '';
   const user = (req as AuthRequest).authSession ? userLabel((req as AuthRequest).authSession!) : 'anon';
   logger.info({ service: name, from: req.ip, user }, 'Manual test triggered');
   try {
-    const result = await checkService(name, requestHost);
+    // Pass no requestHost so checkService skips region filtering — manual tests always
+    // check all endpoints regardless of which region the browser request came from.
+    const result = await checkService(name);
     res.json(result);
   } catch (err) {
     next(err);
@@ -90,12 +115,8 @@ router.get('/overview', async (req, res, next) => {
     const result = await Promise.all(
       services.map(async s => {
         const history = await listResponseFiles(s.name, range);
-        // Strip credentials and browser-check config from endpoints
-        const safeEndpoints = s.endpoints.map(ep => {
-          const { username, password, waitForSelector, timeout, ...safe } = ep;
-          void username; void password; void waitForSelector; void timeout;
-          return safe;
-        });
+        // Overview only needs name + url for display and linking
+        const safeEndpoints = s.endpoints.map(ep => ({ name: ep.name, url: ep.url }));
         // Filenames without .json — all fields (timestamp, status, city, responseTime) are parsed client-side
         const safeHistory = history.map(f => f.filename.replace(/\.json$/, ''));
         return { ...s, endpoints: safeEndpoints, history: safeHistory };
@@ -124,6 +145,7 @@ router.get('/service-summary', async (req, res, next) => {
         // Compute combined status for every run, track latest and whether any failed
         let latestBucket = -Infinity;
         let latestPassed = false;
+        let latestPartial = false; // latest run had 400 but no full failures
         let anyFailed = false;
         let hasRuns = false;
         for (const [bucket, runFiles] of byBucket) {
@@ -131,14 +153,16 @@ router.get('/service-summary', async (req, res, next) => {
           const runPassed = override
             ? override.overallStatus === 203
             : runFiles.every(f => f.overallStatus === 200);
+          const runPartial = !override && !runPassed &&
+            runFiles.every(f => f.overallStatus === 200 || f.overallStatus === 400);
           hasRuns = true;
           if (!runPassed) anyFailed = true;
-          if (bucket > latestBucket) { latestBucket = bucket; latestPassed = runPassed; }
+          if (bucket > latestBucket) { latestBucket = bucket; latestPassed = runPassed; latestPartial = runPartial; }
         }
         const rangeStatus: ServiceSummary['rangeStatus'] = !hasRuns
           ? null
           : !latestPassed
-            ? 'error'
+            ? (latestPartial ? 'warning' : 'error')
             : anyFailed
               ? 'warning'
               : 'ok';
@@ -192,7 +216,8 @@ router.get('/schedule/:name', (req, res) => {
     return;
   }
   const svc = getService(name);
-  res.json({ intervalSeconds: svc?.interval ?? 0 });
+  const firstEp = svc?.endpoints[0];
+  res.json({ intervalSeconds: firstEp?.interval ?? svc?.interval ?? 0 });
 });
 
 router.post('/schedule/:name', requireAdmin, (req, res) => {
@@ -267,9 +292,29 @@ router.post('/batch-download', requireSyncAuth, async (req, res, next) => {
   }
 });
 
-router.get('/browse', async (_req, res, next) => {
+router.get('/download-trigger', requireSyncAuth, (req, res) => {
+  void req; // service is not scoped — always triggers a full delta sync
+  handleDownloadTrigger();
+  res.json({ ok: true });
+});
+
+router.get('/browse', requireSyncAuth, async (req, res, next) => {
   try {
-    const folders = await browseResponseFiles();
+    const rawSince = req.query['since'];
+    const since = typeof rawSince === 'string' ? parseInt(rawSince, 10) : undefined;
+
+    // Register callback URL if provided (consumer registers its webhook on the producer)
+    const rawCallback = req.query['callback'];
+    if (typeof rawCallback === 'string') {
+      try {
+        const parsed = new URL(rawCallback);
+        if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+          registerCallback(rawCallback);
+        }
+      } catch { /* invalid URL — ignore */ }
+    }
+
+    const folders = await browseResponseFiles(since && since > 0 ? since : undefined);
     res.json({ folders });
   } catch (err) {
     next(err);
@@ -292,10 +337,10 @@ router.get('/download', requireSyncAuth, async (req, res, next) => {
     if (filename.endsWith('.png')) {
       const buf = await readScreenshotFile(folder, filename);
       res.type('image/png').send(buf);
-    } else if (filename.endsWith('_console.log')) {
+    } else if (filename.endsWith('.log')) {
       const buf = await readConsoleLogFile(folder, filename);
       res.type('text/plain').send(buf);
-    } else if (filename.endsWith('_content.html')) {
+    } else if (filename.endsWith('.html')) {
       const buf = await readContentFile(folder, filename);
       res.type('text/plain').send(buf);
     } else {

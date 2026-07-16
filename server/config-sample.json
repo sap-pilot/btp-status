@@ -27,16 +27,18 @@
       "name": "wz-us10",
       "homepage": "https://your-launchpad.cfapps.us10.hana.ondemand.com/sites",
       "enabled": true,
-      "interval": 900,
       "endpoints": [
         {
           "mode": "browser-ias-login",
-          "name": "Workzone-Login",
+          "name": "workzone-login",
           "url": "https://your-launchpad.cfapps.us10.hana.ondemand.com/site/your-site?sap_idp=your-idp.accounts.ondemand.com",
           "username": "{{MONITOR_USERNAME}}",
           "password": "{{MONITOR_PASSWORD}}",
           "waitForSelector": "#shellAppTitle",
-          "timeout": 15000,
+          "timeout": 15,
+          "interval": 900,
+          "retry": 2,
+          "retryDelay": 30,
           "region": "us10"
         }
       ]
@@ -47,16 +49,18 @@
       "name": "wz-us20",
       "homepage": "https://your-launchpad.cfapps.us20.hana.ondemand.com/sites",
       "enabled": true,
-      "interval": 900,
       "endpoints": [
         {
           "mode": "browser-ias-login",
-          "name": "Workzone-Login",
+          "name": "workzone-login",
           "url": "https://your-launchpad.cfapps.us20.hana.ondemand.com/site/your-site?sap_idp=your-idp.accounts.ondemand.com",
           "username": "{{MONITOR_USERNAME}}",
           "password": "{{MONITOR_PASSWORD}}",
           "waitForSelector": "#shellAppTitle",
-          "timeout": 15000,
+          "timeout": 15,
+          "interval": 900,
+          "retry": 2,
+          "retryDelay": 30,
           "region": "us20"
         }
       ]
@@ -67,10 +71,9 @@
       "name": "int-us10",
       "homepage": "https://your-integration-suite.cfapps.us10.hana.ondemand.com/",
       "enabled": true,
-      "interval": 900,
       "endpoints": [
         {
-          "name": "API-Portal",
+          "name": "api-portal",
           "url": "https://your-integration-suite.cfapps.us10.hana.ondemand.com/",
           "method": "GET",
           "headers": {},
@@ -78,7 +81,11 @@
           "conditions": [
             "[STATUS] == 200",
             "[RESPONSE_TIME] < 20000"
-          ]
+          ],
+          "timeout": 30,
+          "interval": 900,
+          "retry": 1,
+          "retryDelay": 60
         }
       ]
     },
@@ -88,10 +95,9 @@
       "name": "btp-cockpit",
       "homepage": "https://cockpit.btp.cloud.sap/",
       "enabled": true,
-      "interval": 1800,
       "endpoints": [
         {
-          "name": "BTP AMER Cockpit",
+          "name": "btp-amer-cockpit",
           "url": "https://amer.cockpit.btp.cloud.sap/",
           "method": "GET",
           "headers": {},
@@ -99,10 +105,12 @@
           "conditions": [
             "[STATUS] == 200",
             "[RESPONSE_TIME] < 20000"
-          ]
+          ],
+          "timeout": 30,
+          "interval": 1800
         },
         {
-          "name": "BTP EMEA Cockpit",
+          "name": "btp-emea-cockpit",
           "url": "https://emea.cockpit.btp.cloud.sap/",
           "method": "GET",
           "headers": {},
@@ -110,7 +118,9 @@
           "conditions": [
             "[STATUS] == 200",
             "[RESPONSE_TIME] < 20000"
-          ]
+          ],
+          "timeout": 30,
+          "interval": 1800
         }
       ]
     }

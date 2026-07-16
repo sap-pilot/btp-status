@@ -39,7 +39,7 @@ export async function runBrowserIasLogin(
   ep: EndpointConfig,
   serviceName: string,
 ): Promise<BrowserCheckResult> {
-  const timeout = ep.timeout ?? 30_000;
+  const timeout = ep.timeout != null ? ep.timeout * 1000 : 30_000;
   let passed = false;
   let message = '';
   let context: BrowserContext | undefined;

@@ -4,27 +4,35 @@ A lightweight, file-backed status page and health checker for SAP BTP services. 
 
 ![BTP Status Dashboard](doc/img/btp-status-compare.png)
 
+## Workflow
+
+Each BTP Status instance is deployed in a different region. A `browser-ias-login` endpoint performs a full headless login to SAP Workzone every few minutes, with automatic retries on transient failures. The result is exposed via `GET /health/:service` — returning `200 OK`, `200 Partial OK`, or `500 Service down` depending on whether all, some, or none of the recent checks passed.
+
+Azure Traffic Manager polls these health endpoints from multiple PoPs. When all probes from a region consistently return `500`, Traffic Manager stops routing end-user traffic there and fails over to the healthy region. Once the degraded instance recovers and probes return `200`, Traffic Manager automatically restores it to rotation.
+
+![BTP Status Workflow](doc/img/btp-status-workflow.png)
+
 ## Screenshots
 
 **Overview** — landscape diagram with live service status and timeline dots
 
-![BTP Status Overview](doc/img/overview-v0.8.png)
+![BTP Status Overview](doc/img/overview-v0.12.png)
 
 **Service detail** — uptime stats, response time chart, and full check history
 
-![BTP Service History](doc/img/service-history-v0.8.png)
+![BTP Service History](doc/img/service-history-v0.12.png)
 
 **Drill-down** — full request/response detail and screenshot from a past check
 
-![BTP Service Screenshot](doc/img/service-screenshot-v0.8.png)
+![BTP Service Screenshot](doc/img/service-screenshot-v0.12.png)
 
 ## Features
 
-1. **Azure Traffic Manager probe endpoint** — `GET /health/{service}` returns `200 OK` when all conditions pass or `500` with failure details when any condition fails; designed as a drop-in health probe for Azure Traffic Manager so unhealthy BTP services are automatically taken out of rotation
+1. **Azure Traffic Manager probe endpoint** — `GET /health/{service}` returns a JSON summary of the latest check result per probe location, e.g. `{"status":"OK","locations":{"Ashburn":200,"Frankfurt":200}}`; evaluated from saved response files within `endpoint.interval × 2` seconds — no live network probe; returns `200 {"status":"OK"}` when all locations passed, `200 {"status":"Partial OK"}` when some are degraded, or `500 {"status":"Service down"}` when all failed; designed for Azure Traffic Manager probes running every 3–5 seconds from multiple PoPs; region is extracted from the request hostname (`cfapps.<region>.hana`) and matched against `endpoints[].region` so each deployed instance reports only its local endpoints
 
 2. **Browser-based IAS login check** (`mode: browser-ias-login`) — headless Chromium fills the SAP IAS login form, waits for a CSS selector to confirm the post-login page loaded, and captures a screenshot; validates the full authentication flow end-to-end, not just HTTP reachability; screenshot is stored with the check record and visible in the history drill-down and Test popup
 
-3. **Status timeline, history, and drill-down** — color-coded dot timeline per service on the Overview page; per-service detail shows uptime %, avg response time, a response time chart per endpoint, and a full history table with filters (endpoint, location, status, date range); clicking any dot opens a modal with the complete request/response/condition result and screenshot; stat card interactions: **Failed Checks** sets `?status=failed` in the URL (filter survives page refresh), **Total Checks** clears all URL filter params; the **Avg Response Time** card lists each endpoint as two parts — the name filters the history table and updates the URL (`?endpoint={name}`), and a separate link icon opens the endpoint URL in a new tab; the same two-part format applies to endpoint dropdowns on the Overview service rows; when XSUAA is enabled the detail endpoint requires authentication — unauthenticated users see a **Login** button in the modal and the full detail loads automatically after they log in
+3. **Status timeline, history, and drill-down** — one color-coded timeline row per endpoint on the Overview page; each service is its own card with endpoint rows; each endpoint label links to the service detail page filtered by that endpoint, and an external link icon opens the endpoint URL in a new tab; per-service detail shows uptime %, a response time chart and a full history table with filters (endpoint, location, status, date range); selecting an endpoint or location filter updates the response time chart to show only matching series (status filter does not affect the chart); endpoint, location, and status filters are all persisted in the URL so they survive page refresh; clicking any dot opens a modal with the complete request/response/condition result and screenshot; stat card interactions: the entire card surface is clickable for **Completely Failed**, **Partially Failed**, **Total Checks**, and **Last Checked** on both pages; on Overview, **Completely Failed** / **Partially Failed** filters the service/endpoint list and persists `?status=failed` / `?status=partial` in the URL; on Service detail the same cards filter the history table; clicking an already-active card clears the filter; **Total Checks** always clears the status filter on both pages; the active filter card shows a subtle ring highlight regardless of how the filter was applied (card click, URL param, or table dropdown); navigation from Overview to Service detail preserves the active status filter — clicking a service name, endpoint, or dot while a filter is active forwards `?status=` to the Service detail URL so the history table is pre-filtered on arrival; the **← Overview** back button always returns to the Overview page with the previous filter restored; when XSUAA is enabled the detail endpoint requires authentication — unauthenticated users see a **Login** button in the modal and the full detail loads automatically after they log in
 
 4. **Evaluation mode override** (`Always OK` / `Always Error`) — per-service toggle to force a service to report healthy or failing regardless of actual check results; use **Always Error** to deliberately route traffic away during a known incident or planned failover; use **Always OK** to restore a service to rotation after maintenance without waiting for checks to pass; changes take effect immediately across all execution paths (scheduled checks, `/health/:name`, Run Test)
 
@@ -32,11 +40,13 @@ A lightweight, file-backed status page and health checker for SAP BTP services. 
 
 6. **File-based storage — no database** — every check result is saved as a plain JSON file under `./response/`; no database, message broker, or external service required; XSUAA is optional and used only for authentication; the response directory is the only persistent state
 
-7. **Two-instance sync for CF file persistence** — Cloud Foundry containers are ephemeral and lose local files on restart; point one instance at another via `SYNC_REMOTE` and each instance will download missing response files from its peer on startup and periodically thereafter, forming a resilient pair; see [Remote Sync](#remote-sync)
+7. **Push-based two-instance sync for CF file persistence** — Cloud Foundry containers are ephemeral and lose local files on restart; the consumer instance sets `SYNC_REMOTE` + `SELF_URL` to point at the producer; on startup it downloads all existing files and registers itself as a webhook consumer; when the producer completes a health check it calls all registered `/api/download-trigger` webhooks; the consumer fetches only the delta (`GET /api/browse?since=<ms>`) and downloads new files via `POST /api/batch-download`; see [Remote Sync](#remote-sync)
 
 8. **Minimal server dependencies** — production runtime requires only Express (HTTP), Pino (logging), and Playwright (browser checks); all HTTP requests, crypto, gzip compression, and ZIP packaging use native Node.js APIs — no axios, no ORM, no utility libraries
 
-9. **Modern, fast React UI** — built with shadcn/ui + Tailwind CSS; initial JS bundle ~55 kB gzip (lazy-loaded pages, Mermaid deferred); dark theme; mobile-responsive with hamburger menu; shared date range picker with localStorage persistence across pages
+9. **Live updates via Server-Sent Events** — the Overview and service detail pages update automatically when new check results arrive; the server pushes SSE `update` events through `GET /api/events` after every scheduled check, manual Run Test, or remote sync; the browser fetches only the delta (`?since=<ms>`) and merges new files into the current view without a full reload; live updates are scoped per service on the detail page (`?service=<name>`) and disabled in Date Range mode; the **Last Checked** stat card on both pages shows the time of the most recent data refresh in `HH:mm:ss` (24-hour) format, updates on every full load and live delta merge, and doubles as a sync shortcut — clicking it when authenticated triggers an immediate sync
+
+10. **Modern, fast React UI** — built with shadcn/ui + Tailwind CSS; initial JS bundle ~55 kB gzip (lazy-loaded pages, Mermaid deferred); dark theme; mobile-responsive with hamburger menu; shared date range picker with localStorage persistence across pages
 
 > Also supports: HTTP health checks with [Gatus](https://github.com/TwiN/gatus#conditions)-style conditions (`[STATUS]`, `[BODY]`, `[HEADER.*]`, `[RESPONSE_TIME]`, `len()`, `pat()`); variable substitution in `config.json`; `/dummy` URL to skip checks; auto-run schedule selector; site switcher for multi-region deployments; SAP BTP Cloud Foundry MTA deployment
 
@@ -160,10 +170,15 @@ Create `server/config.json` (copy `server/config-sample.json` and fill in real v
 | `group` | string | Group name for dashboard grouping |
 | `name` | string | Unique service identifier (used in URLs and diagram node matching) |
 | `enabled` | boolean | Set `false` to exclude from checks |
-| `interval` | number | Auto-check interval in seconds; `0` or omitted disables automatic checks |
+| `interval` | number | Fallback auto-check interval in seconds (service-level); overridden per endpoint via `endpoints[].interval`; `0` or omitted disables automatic checks for endpoints that don't set their own |
 | `homepage` | string | Optional homepage URL shown as ↗ link on the dashboard |
 | `landscapes` | string[] | Landscape names this service belongs to (for tab filtering and availability badge) |
-| `endpoints[].name` | string | Display name for this endpoint |
+
+**Per endpoint**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `endpoints[].name` | string | Display name for this endpoint (use lowercase-dash names, e.g. `"api-portal"`) |
 | `endpoints[].url` | string | URL to probe; set to `/dummy` to skip the check and always record `200 OK` |
 | `endpoints[].method` | string | HTTP method (`GET`, `POST`, etc.) |
 | `endpoints[].headers` | object | Request headers; `{{variable}}` placeholders are substituted |
@@ -173,7 +188,10 @@ Create `server/config.json` (copy `server/config-sample.json` and fill in real v
 | `endpoints[].username` | string | IAS username; `{{variable}}` substitution supported |
 | `endpoints[].password` | string | IAS password; `{{variable}}` substitution supported |
 | `endpoints[].waitForSelector` | string | CSS selector to wait for after login (browser-ias-login only) |
-| `endpoints[].timeout` | number | Request timeout in ms. For standard HTTP checks, overrides `REQUEST_TIMEOUT_MS` for this endpoint; a timed-out check is recorded as `504`. For `browser-ias-login` mode, sets the overall browser session timeout (default `30000`). |
+| `endpoints[].timeout` | number | Request timeout in **seconds**. For HTTP checks, overrides `REQUEST_TIMEOUT_MS`; a timed-out check is recorded as `504`. For `browser-ias-login`, sets the overall browser session timeout (default `30`s). |
+| `endpoints[].interval` | number | Per-endpoint auto-check interval in seconds; takes precedence over the service-level `interval`. |
+| `endpoints[].retry` | number | Optional. Maximum number of retry attempts on failure. When set, a failed check is automatically re-attempted up to this many times before the final result is saved. |
+| `endpoints[].retryDelay` | number | Optional. Seconds to wait between retry attempts (default `0`). |
 | `endpoints[].region` | string | Optional. BTP region code (e.g. `"us10"`, `"us20"`, `"eu10"`). When set, this endpoint is only checked when the request hostname matches `cfapps.<region>.hana` (extracted from `x-forwarded-host` or `Host`). Used for multi-region deployments where each btp-status instance should only probe its local endpoints. Scheduler and manual "Run Test" always run all endpoints regardless of region. |
 
 ### Condition Syntax
@@ -199,12 +217,15 @@ Set `mode: "browser-ias-login"` on an endpoint to use a headless Chromium sessio
 ```json
 {
   "mode": "browser-ias-login",
-  "name": "Workzone Login",
+  "name": "workzone-login",
   "url": "https://<tenant>.launchpad.cfapps.<region>.hana.ondemand.com/site/<site>?sap_idp=<idp>",
   "username": "monitor@example.com",
   "password": "secret",
   "waitForSelector": "#shellAppTitle",
-  "timeout": 30000
+  "timeout": 30,
+  "interval": 900,
+  "retry": 2,
+  "retryDelay": 30
 }
 ```
 
@@ -236,18 +257,31 @@ All three sidecar files are included in remote sync and pruned by the housekeepi
 
 ### Automatic Checks
 
-When `interval` is set to a value greater than `0`, the server automatically runs a health check for that service every `interval` seconds — no external scheduler or cron job required.
+When `interval` is set on an endpoint (or at the service level as a fallback), the server runs a health check for that endpoint every `interval` seconds — no external scheduler or cron job required. Each endpoint is scheduled independently, so different endpoints in the same service can run at different frequencies.
 
 - If a check is already running when the next interval fires, that tick is **skipped** (no pile-up).
 - Errors inside a check are caught and logged; the timer continues unaffected.
 - All timers are released with `unref()` so they do not block graceful process shutdown.
 - On `SIGTERM` / `SIGINT` the scheduler stops cleanly before the HTTP server closes.
 
+### Retry Behavior
+
+When `retry` is set on an endpoint, a failed check is automatically re-attempted:
+
+1. Initial check runs normally; if it fails and `retry > 0`, retry attempts begin.
+2. Each retry waits `retryDelay` seconds, then re-runs the full check.
+3. Each retry result is saved as a sidecar file (e.g. `…_500.retry.json`, `…_500.retry.png`) linked from the main record's `retryFiles` field.
+4. If **any** retry succeeds, the main result file is saved with status `400` (**Partially Failed**) — the endpoint is up, but required retries.
+5. If **all** retries also fail, the main result is `500` / `504` (**Completely Failed**).
+6. Retry files are excluded from the history list and timeline dots. The **Response Detail** modal shows a **Retries** tab when `retryFiles` is non-empty, with an expandable condition table for each attempt.
+
+The Overview and Service detail pages show separate **Completely Failed** (500/503/504, red) and **Partially Failed** (400, orange) stat cards.
+
 ## API Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /health/:name` | Run health check; returns `200 OK` or `500 <failure details>` (Azure Traffic Manager) |
+| `GET /health/:name` | Returns latest saved check result (no live probe): `200 OK`, `200 Partially OK`, or `500 service down`; region-filtered by request hostname; designed for Azure Traffic Manager probes |
 | `GET /overview` | Overview dashboard UI |
 | `GET /service/:name` | Service detail UI — history timeline, drill-down, "Run Test" button |
 | `GET /api/services` | List all services (JSON) |
@@ -272,9 +306,9 @@ On any service's detail page (`/service/:name`), two selectors in the header con
 
 | Mode | `/health/:name` | Saved status | Timeline dot |
 |------|----------------|-------------|--------------|
-| **Condition Based** (green, default) | `200`/`500` based on actual conditions | `200` or `500` | Green / Red |
-| **Always OK** (dark green) | Always `200 OK` regardless of conditions | `203` | Dark green |
-| **Always Error** (dark red) | Always `500` regardless of conditions | `503` | Dark red |
+| **Condition Based** (green, default) | Latest file result: `200 OK` / `200 Partially OK` / `500` | `200` or `500` | Green / Red |
+| **Always OK** (dark green) | Always `200 OK` regardless of file results | `203` | Dark green |
+| **Always Error** (dark red) | Always `500` regardless of file results | `503` | Dark red |
 
 A confirmation dialog appears before applying Always OK or Always Error. Both modes honour the evaluation setting for all execution paths (scheduled checks, manual `/health/:name`, Run Test).
 
@@ -295,8 +329,26 @@ Point your Traffic Manager HTTP probe at:
 GET https://<your-app>/health/<service-name>
 ```
 
-- Returns `200 OK` (plain text) → endpoint is healthy
-- Returns `500` (plain text with failure details) → endpoint is unhealthy
+The probe reads saved response files and replies in milliseconds — no live network request is made. Safe to call at 3–5 s intervals from multiple Traffic Manager PoPs.
+
+**Time window**: for each endpoint, files within `[now − endpoint.interval × 2, now]` are considered. This ensures the probe reflects recent check results without stale data from much older runs.
+
+**Region filtering**: the incoming request hostname (`cfapps.<region>.hana`) is matched against `endpoints[].region`. Endpoints with no `region` are always included. Each deployed btp-status instance therefore reports only the health of its own region's endpoints.
+
+**Location grouping**: from the qualifying files, the latest check result per probe location (city stamped in the filename) is collected. The overall response is determined by aggregating across all locations.
+
+**Response body** is JSON:
+
+| HTTP | Body | Meaning |
+|------|------|---------|
+| `200` | `{"status":"OK","locations":{"Ashburn":200,…}}` | Latest result from every location is `200`/`203` |
+| `200` | `{"status":"Partial OK","locations":{"Ashburn":200,"Frankfurt":400,…}}` | At least one location is non-200 (e.g. `400` Partially Failed) but not all are down |
+| `500` | `{"status":"Service down","locations":{"Ashburn":500,…}}` | Every location's latest result is `500`/`503`/`504` |
+| `200` | `{"status":"OK","locations":{},"note":"no recent data"}` | No files in the time window — treated as healthy |
+
+**Evaluation mode** takes precedence: `alwaysok` → `200 {"status":"OK","locations":[]}`, `alwayserror` → `500 {"status":"Service down","locations":[]}`.
+
+**Run Test / Test All** always run a live probe against all endpoints regardless of region, so you can verify any endpoint from any location manually.
 
 ## Authentication and Authorization
 
@@ -339,6 +391,7 @@ The **BTP Status Admin** role collection grants write access to evaluation mode 
 |-------|-------|-------------|
 | `GET /api/check/:name` | Auth required | Run health check (used by Test All / Run Test) |
 | `POST /api/sync` | Auth required | Trigger on-demand remote sync |
+| `GET /api/download-trigger` | Sync auth | Webhook called by the producer; triggers delta download from `SYNC_REMOTE` |
 | `POST /api/eval-mode/:name` | Admin required | Change evaluation mode |
 | `POST /api/schedule/:name` | Admin required | Change schedule override |
 
@@ -381,14 +434,14 @@ When `VCAP_SERVICES` is not set (local dev), all auth middleware passes through 
 Each health check saves a file at:
 
 ```
-./response/{service-name}/yyyyMMdd-HHmmss_{endpointSlug}_{city}_{responseTimeMs}_{200|203|500|503}.json
+./response/{service-name}/yyyyMMdd-HHmmss_{endpointSlug}_{city}_{responseTimeMs}_{200|203|400|500|503|504}.json
 ```
 
 - **Timestamp**: UTC (`yyyyMMdd-HHmmss`)
 - **endpointSlug**: endpoint `name` from config with non-alphanumeric chars replaced by dashes
 - **city**: full city name from `ip-api.com` with spaces replaced by dashes (e.g. `Frankfurt-am-Main`); resolved once at startup; `unknown` if lookup fails or times out
 - **responseTimeMs**: integer milliseconds, no suffix
-- **Status codes**: `200` = genuine pass, `203` = pass under Always OK, `500` = genuine fail, `503` = fail under Always Error
+- **Status codes**: `200` = genuine pass, `203` = pass under Always OK, `400` = initial failure but retry succeeded (Partially Failed), `500` = genuine fail, `503` = fail under Always Error, `504` = timeout
 
 Old-format files (`yyyyMMdd-HHmmss_{index}_{ms}ms_{status}.json`, local-timezone timestamp) are still read and displayed correctly alongside new-format files.
 
@@ -434,37 +487,54 @@ The server uses [pino](https://getpino.io) with colorized pretty-print output.
 | `CONFIG_JSON` | — | Full config as a JSON string; takes priority over `CONFIG_FILE` (ideal for BTP env properties) |
 | `CONFIG_FILE` | `./config.json` | Path to config JSON file (relative to `server/` working dir; resolved as `server/config.json` from repo root) |
 | `RESPONSE_DIR` | `./response` | Directory for response file storage |
-| `SYNC_REMOTE` | — | Base URL of another BTP Status instance (e.g. `https://btp-status-prod.cfapps.eu10.hana.ondemand.com`). On startup, missing response files are downloaded from the remote and saved to the local `RESPONSE_DIR`. Periodic sync runs every `SYNC_INTERVAL` seconds. |
-| `SYNC_INTERVAL` | `900` | Seconds between periodic remote sync runs (minimum 60). Only effective when `SYNC_REMOTE` is set. |
+| `SYNC_REMOTE` | — | Base URL of the producer BTP Status instance (e.g. `https://btp-status-prod.cfapps.eu10.hana.ondemand.com`). On startup the consumer downloads all existing files and registers itself as a webhook consumer. Subsequent updates arrive via push (`/api/download-trigger`). |
+| `SELF_URL` | auto | Base URL of this (consumer) instance used when registering the `/api/download-trigger` webhook with the producer. Auto-detected from `VCAP_APPLICATION.application_uris[0]` in Cloud Foundry. Set explicitly if auto-detection is unavailable (e.g. local development). |
 | `SYNC_REMOTE_BATCH_SIZE` | `100` | Number of files requested per `POST /api/batch-download` call during sync. The sync job tries the batch endpoint first; if the remote does not support it, it falls back to individual `GET /api/download` requests with concurrency 10. |
+| `SYNC_INTERVAL` | `300` | Fallback sync interval in seconds. If no webhook-triggered download completes within this window (e.g. because the producer was restarted and lost its registered callbacks), the consumer triggers a delta sync automatically using `GET /api/browse?since=<lastBrowseTs>`. Set to `0` to disable the fallback. |
 | `MAX_RESPONSE_STORAGE_DAYS` | `3` | Response files (JSON + PNG) older than this many days are automatically deleted. Housekeeping runs once on startup then every 24 hours. Set to `0` to disable. Also controls the furthest date selectable in the UI's Date Range picker. |
 | `REQUEST_TIMEOUT_MS` | `30000` | Default HTTP request timeout in milliseconds for standard endpoint checks. A check that exceeds this limit is recorded with status `504` and the response filename ends in `_504.json`. Per-endpoint `timeout` in `config.json` overrides this value for that endpoint only. |
 | `LOG_LEVEL` | `debug` | Pino log level: `trace`, `debug`, `info`, `warn`, `error` |
 
 ## Remote Sync
 
-Cloud Foundry containers are ephemeral — local files are lost on restart. Remote Sync lets two BTP Status instances back each other up: each downloads missing response files from its peer on startup and on a configurable interval, so history is preserved across restarts as long as both instances are not restarted simultaneously.
+Cloud Foundry containers are ephemeral — local files are lost on restart. Remote Sync lets two BTP Status instances share history. The **producer** runs health checks; the **consumer** (replica) downloads and mirrors the producer's response files.
 
 > [!WARNING]
 > Do not restart both instances at the same time — they will each find nothing to sync from the other and all accumulated response files will be lost.
 
-Set `SYNC_REMOTE` to the base URL of another running BTP Status instance to seed the local response directory on startup:
+### How it works
+
+Sync is **push-based**. The consumer registers a webhook with the producer once, and the producer calls it after every health check.
+
+**Consumer setup** (set both env vars on the replica instance):
 
 ```bash
-SYNC_REMOTE=https://btp-status-prod.cfapps.eu10.hana.ondemand.com npm start
+SYNC_REMOTE=https://btp-status-prod.cfapps.eu10.hana.ondemand.com
+SELF_URL=https://btp-status-replica.cfapps.eu10.hana.ondemand.com
 ```
 
-On boot the server will:
-1. Call `GET /api/browse` on the remote to get its full file list
-2. Compare against the local `./response/` directory
-3. Download all missing files via `POST /api/batch-download` (ZIP batches of `SYNC_REMOTE_BATCH_SIZE`, default 100); falls back automatically to `GET /api/download?path=…` (concurrency 10) if the remote does not support the batch endpoint
-4. Log total files, transferred MB, decompressed MB, and elapsed seconds at `INFO`
+**Startup flow:**
+1. Consumer calls `GET /api/browse?callback=<SELF_URL>/api/download-trigger` on the producer  
+   — registers the consumer's webhook with the producer and gets the full file list
+2. Compares against local `./response/` directory
+3. Downloads all missing files via `POST /api/batch-download` (ZIP batches, `SYNC_REMOTE_BATCH_SIZE` files per request)  
+   — falls back to individual `GET /api/download?path=…` (concurrency 10) if the remote does not support batch
 
-After the initial sync, the same logic runs again every `SYNC_INTERVAL` seconds (default `900` / 15 minutes) as a background job — keeping the local instance in sync with the remote over time. Files already present locally are never re-downloaded. The timer uses `unref()` so it does not prevent graceful shutdown.
+**Push notification flow (after each health check on the producer):**
+1. Producer completes a check and calls all registered `callback` URLs (fire-and-forget)
+2. Consumer's `GET /api/download-trigger` is called (authenticated with the shared sync key)
+3. Consumer calls `GET /api/browse?since=<lastBrowseTs>&callback=<SELF_URL>/api/download-trigger` to get only new files and re-register (in case the producer restarted)
+4. Downloads new files via `POST /api/batch-download`
+
+Only one download runs at a time. A second trigger that arrives while a download is running is queued; further arrivals are dropped (the queued one will catch up on all new files).
+
+**Interval fallback:** if the producer is restarted, its in-memory callback registry is reset and push notifications stop. The consumer recovers automatically: if no webhook-triggered download completes within `SYNC_INTERVAL` seconds (default 300 s), the consumer fires a delta sync using `GET /api/browse?since=<lastBrowseTs>&callback=<SELF_URL>/api/download-trigger`, which both picks up missed files and re-registers the consumer's webhook with the restarted producer.
+
+**`SELF_URL`** is auto-detected from `VCAP_APPLICATION.application_uris[0]` in Cloud Foundry. Set it explicitly in other environments or if auto-detection is unavailable.
 
 ### Sync Key (optional)
 
-To prevent unauthenticated access to the `/api/download` and `/api/batch-download` endpoints, set a shared secret on both instances:
+To prevent unauthenticated access to the sync endpoints (`/api/browse`, `/api/download`, `/api/batch-download`, `/api/download-trigger`), set a shared secret on **both** instances:
 
 ```jsonc
 // config.json
@@ -482,12 +552,13 @@ SYNC_KEY=your-secret-sync-key npm start
 ```
 
 When a sync key is configured:
-- The download endpoints require either a matching `x-sync-key` request header **or** a valid XSUAA session cookie
-- The sync client automatically includes `x-sync-key` in all download requests to the remote
+- `GET /api/browse`, `GET /api/download`, `POST /api/batch-download`, and `GET /api/download-trigger` all require either a matching `x-sync-key` request header **or** a valid XSUAA session cookie
+- The sync client automatically includes `x-sync-key` in all requests to the remote (browse, download, and callback notifications)
 - If the remote rejects the key with `401`, the entire sync is aborted immediately with an explanatory error
 - Requests with neither a valid key nor a session receive `401 Unauthorized`
+- Requests from loopback (`127.0.0.1`, `::1`) are always allowed for local development
 
-Both instances must use the same key. If XSUAA is configured, authenticated browser users can also access the download endpoints without a key.
+Both instances must use the same key. If XSUAA is configured, authenticated browser users can also access the sync endpoints without a key.
 
 ## Gzip Compression
 
@@ -537,6 +608,8 @@ npm run deploy-bg   # blue-green
 ```
 
 **Blue-green strategy** (`--strategy blue-green --skip-testing-phase`) starts a parallel "green" instance, waits for it to be healthy, routes traffic to it, then removes the old "blue" instance — minimising downtime during deploys.
+
+> **When Azure Traffic Manager is connected, always use `npm run deploy-bg` (blue-green).** A standard deploy takes the app offline for 30–60 seconds during restaging; Traffic Manager will detect the `500` responses, exhaust its retries, and fail over to the other region. Blue-green avoids this by keeping the current instance live until the new one is healthy and traffic has been re-routed.
 
 `keep-existing: env: true` in `mta.yaml` instructs the MTA deployer to **preserve existing environment variables** (e.g. `CONFIG_JSON`, `SYNC_REMOTE`) on the app during deployment, so runtime config set via `cf set-env` is not wiped by a redeploy.
 
