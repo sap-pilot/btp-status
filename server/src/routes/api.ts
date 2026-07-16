@@ -123,6 +123,7 @@ router.get('/service-summary', async (req, res, next) => {
         // Compute combined status for every run, track latest and whether any failed
         let latestBucket = -Infinity;
         let latestPassed = false;
+        let latestPartial = false; // latest run had 400 but no full failures
         let anyFailed = false;
         let hasRuns = false;
         for (const [bucket, runFiles] of byBucket) {
@@ -130,14 +131,16 @@ router.get('/service-summary', async (req, res, next) => {
           const runPassed = override
             ? override.overallStatus === 203
             : runFiles.every(f => f.overallStatus === 200);
+          const runPartial = !override && !runPassed &&
+            runFiles.every(f => f.overallStatus === 200 || f.overallStatus === 400);
           hasRuns = true;
           if (!runPassed) anyFailed = true;
-          if (bucket > latestBucket) { latestBucket = bucket; latestPassed = runPassed; }
+          if (bucket > latestBucket) { latestBucket = bucket; latestPassed = runPassed; latestPartial = runPartial; }
         }
         const rangeStatus: ServiceSummary['rangeStatus'] = !hasRuns
           ? null
           : !latestPassed
-            ? 'error'
+            ? (latestPartial ? 'warning' : 'error')
             : anyFailed
               ? 'warning'
               : 'ok';

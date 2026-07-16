@@ -715,9 +715,13 @@ export default function History() {
                       f => Math.floor((f.timestamp ?? 0) / 1000) === Math.floor(lastEpTs / 1000) &&
                            (f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504),
                     );
+                    const lastEpPartial = epFiles.some(
+                      f => Math.floor((f.timestamp ?? 0) / 1000) === Math.floor(lastEpTs / 1000) &&
+                           f.overallStatus === 400,
+                    );
                     const epBadgeCls = epFiles.length === 0 ? 'text-muted-foreground border-border' :
                       lastEpFailed ? 'border-red-600 text-red-400' :
-                      epUptime < 100 ? 'border-yellow-600 text-yellow-400' :
+                      lastEpPartial || epUptime < 100 ? 'border-yellow-600 text-yellow-400' :
                       'border-green-600 text-green-400';
                     return (
                       <tr key={ei} className="border-b border-border last:border-0">
