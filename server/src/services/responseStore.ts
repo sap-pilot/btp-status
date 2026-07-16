@@ -184,7 +184,14 @@ export function sanitizeName(name: string): string {
   return name.replace(/[^a-zA-Z0-9\-_]/g, '_');
 }
 
-export async function browseResponseFiles(): Promise<Record<string, string[]>> {
+/** Extract the UTC timestamp from a response filename prefix (yyyyMMdd-HHmmss_). Returns 0 if unparseable. */
+function filenameTimestamp(filename: string): number {
+  const m = filename.match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})_/);
+  if (!m) return 0;
+  return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+}
+
+export async function browseResponseFiles(since?: number): Promise<Record<string, string[]>> {
   const result: Record<string, string[]> = {};
   try {
     const entries = await readdir(config.RESPONSE_DIR, { withFileTypes: true });
@@ -193,11 +200,18 @@ export async function browseResponseFiles(): Promise<Record<string, string[]>> {
         .filter(e => e.isDirectory())
         .map(async (dir) => {
           try {
-            const files = await readdir(join(config.RESPONSE_DIR, dir.name));
-            result[dir.name] = files.filter(f =>
+            let files = await readdir(join(config.RESPONSE_DIR, dir.name));
+            files = files.filter(f =>
               f.endsWith('.json') || f.endsWith('.png') ||
               f.endsWith('.log') || f.endsWith('.html'),
-            ).sort();
+            );
+            if (since && since > 0) {
+              files = files.filter(f => {
+                const ts = filenameTimestamp(f);
+                return ts === 0 || ts >= since; // include unparseable files conservatively
+              });
+            }
+            result[dir.name] = files.sort();
           } catch {
             result[dir.name] = [];
           }

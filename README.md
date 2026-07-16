@@ -32,7 +32,7 @@ A lightweight, file-backed status page and health checker for SAP BTP services. 
 
 6. **File-based storage — no database** — every check result is saved as a plain JSON file under `./response/`; no database, message broker, or external service required; XSUAA is optional and used only for authentication; the response directory is the only persistent state
 
-7. **Two-instance sync for CF file persistence** — Cloud Foundry containers are ephemeral and lose local files on restart; point one instance at another via `SYNC_REMOTE` and each instance will download missing response files from its peer on startup and periodically thereafter, forming a resilient pair; see [Remote Sync](#remote-sync)
+7. **Push-based two-instance sync for CF file persistence** — Cloud Foundry containers are ephemeral and lose local files on restart; the consumer instance sets `SYNC_REMOTE` + `SELF_URL` to point at the producer; on startup it downloads all existing files and registers itself as a webhook consumer; when the producer completes a health check it calls all registered `/api/download-trigger` webhooks; the consumer fetches only the delta (`GET /api/browse?since=<ms>`) and downloads new files via `POST /api/batch-download`; see [Remote Sync](#remote-sync)
 
 8. **Minimal server dependencies** — production runtime requires only Express (HTTP), Pino (logging), and Playwright (browser checks); all HTTP requests, crypto, gzip compression, and ZIP packaging use native Node.js APIs — no axios, no ORM, no utility libraries
 
@@ -383,6 +383,7 @@ The **BTP Status Admin** role collection grants write access to evaluation mode 
 |-------|-------|-------------|
 | `GET /api/check/:name` | Auth required | Run health check (used by Test All / Run Test) |
 | `POST /api/sync` | Auth required | Trigger on-demand remote sync |
+| `GET /api/download-trigger` | Sync auth | Webhook called by the producer; triggers delta download from `SYNC_REMOTE` |
 | `POST /api/eval-mode/:name` | Admin required | Change evaluation mode |
 | `POST /api/schedule/:name` | Admin required | Change schedule override |
 
@@ -478,37 +479,54 @@ The server uses [pino](https://getpino.io) with colorized pretty-print output.
 | `CONFIG_JSON` | — | Full config as a JSON string; takes priority over `CONFIG_FILE` (ideal for BTP env properties) |
 | `CONFIG_FILE` | `./config.json` | Path to config JSON file (relative to `server/` working dir; resolved as `server/config.json` from repo root) |
 | `RESPONSE_DIR` | `./response` | Directory for response file storage |
-| `SYNC_REMOTE` | — | Base URL of another BTP Status instance (e.g. `https://btp-status-prod.cfapps.eu10.hana.ondemand.com`). On startup, missing response files are downloaded from the remote and saved to the local `RESPONSE_DIR`. Periodic sync runs every `SYNC_INTERVAL` seconds. |
-| `SYNC_INTERVAL` | `300` | Seconds between periodic remote sync runs (minimum 60). Only effective when `SYNC_REMOTE` is set. |
+| `SYNC_REMOTE` | — | Base URL of the producer BTP Status instance (e.g. `https://btp-status-prod.cfapps.eu10.hana.ondemand.com`). On startup the consumer downloads all existing files and registers itself as a webhook consumer. Subsequent updates arrive via push (`/api/download-trigger`). |
+| `SELF_URL` | auto | Base URL of this (consumer) instance used when registering the `/api/download-trigger` webhook with the producer. Auto-detected from `VCAP_APPLICATION.application_uris[0]` in Cloud Foundry. Set explicitly if auto-detection is unavailable (e.g. local development). |
 | `SYNC_REMOTE_BATCH_SIZE` | `100` | Number of files requested per `POST /api/batch-download` call during sync. The sync job tries the batch endpoint first; if the remote does not support it, it falls back to individual `GET /api/download` requests with concurrency 10. |
+| `SYNC_INTERVAL` | `300` | Fallback sync interval in seconds. If no webhook-triggered download completes within this window (e.g. because the producer was restarted and lost its registered callbacks), the consumer triggers a delta sync automatically using `GET /api/browse?since=<lastBrowseTs>`. Set to `0` to disable the fallback. |
 | `MAX_RESPONSE_STORAGE_DAYS` | `3` | Response files (JSON + PNG) older than this many days are automatically deleted. Housekeeping runs once on startup then every 24 hours. Set to `0` to disable. Also controls the furthest date selectable in the UI's Date Range picker. |
 | `REQUEST_TIMEOUT_MS` | `30000` | Default HTTP request timeout in milliseconds for standard endpoint checks. A check that exceeds this limit is recorded with status `504` and the response filename ends in `_504.json`. Per-endpoint `timeout` in `config.json` overrides this value for that endpoint only. |
 | `LOG_LEVEL` | `debug` | Pino log level: `trace`, `debug`, `info`, `warn`, `error` |
 
 ## Remote Sync
 
-Cloud Foundry containers are ephemeral — local files are lost on restart. Remote Sync lets two BTP Status instances back each other up: each downloads missing response files from its peer on startup and on a configurable interval, so history is preserved across restarts as long as both instances are not restarted simultaneously.
+Cloud Foundry containers are ephemeral — local files are lost on restart. Remote Sync lets two BTP Status instances share history. The **producer** runs health checks; the **consumer** (replica) downloads and mirrors the producer's response files.
 
 > [!WARNING]
 > Do not restart both instances at the same time — they will each find nothing to sync from the other and all accumulated response files will be lost.
 
-Set `SYNC_REMOTE` to the base URL of another running BTP Status instance to seed the local response directory on startup:
+### How it works
+
+Sync is **push-based**. The consumer registers a webhook with the producer once, and the producer calls it after every health check.
+
+**Consumer setup** (set both env vars on the replica instance):
 
 ```bash
-SYNC_REMOTE=https://btp-status-prod.cfapps.eu10.hana.ondemand.com npm start
+SYNC_REMOTE=https://btp-status-prod.cfapps.eu10.hana.ondemand.com
+SELF_URL=https://btp-status-replica.cfapps.eu10.hana.ondemand.com
 ```
 
-On boot the server will:
-1. Call `GET /api/browse` on the remote to get its full file list
-2. Compare against the local `./response/` directory
-3. Download all missing files via `POST /api/batch-download` (ZIP batches of `SYNC_REMOTE_BATCH_SIZE`, default 100); falls back automatically to `GET /api/download?path=…` (concurrency 10) if the remote does not support the batch endpoint
-4. Log total files, transferred MB, decompressed MB, and elapsed seconds at `INFO`
+**Startup flow:**
+1. Consumer calls `GET /api/browse?callback=<SELF_URL>/api/download-trigger` on the producer  
+   — registers the consumer's webhook with the producer and gets the full file list
+2. Compares against local `./response/` directory
+3. Downloads all missing files via `POST /api/batch-download` (ZIP batches, `SYNC_REMOTE_BATCH_SIZE` files per request)  
+   — falls back to individual `GET /api/download?path=…` (concurrency 10) if the remote does not support batch
 
-After the initial sync, the same logic runs again every `SYNC_INTERVAL` seconds (default `900` / 15 minutes) as a background job — keeping the local instance in sync with the remote over time. Files already present locally are never re-downloaded. The timer uses `unref()` so it does not prevent graceful shutdown.
+**Push notification flow (after each health check on the producer):**
+1. Producer completes a check and calls all registered `callback` URLs (fire-and-forget)
+2. Consumer's `GET /api/download-trigger` is called (authenticated with the shared sync key)
+3. Consumer calls `GET /api/browse?since=<lastBrowseTs>&callback=<SELF_URL>/api/download-trigger` to get only new files and re-register (in case the producer restarted)
+4. Downloads new files via `POST /api/batch-download`
+
+Only one download runs at a time. A second trigger that arrives while a download is running is queued; further arrivals are dropped (the queued one will catch up on all new files).
+
+**Interval fallback:** if the producer is restarted, its in-memory callback registry is reset and push notifications stop. The consumer recovers automatically: if no webhook-triggered download completes within `SYNC_INTERVAL` seconds (default 300 s), the consumer fires a delta sync using `GET /api/browse?since=<lastBrowseTs>&callback=<SELF_URL>/api/download-trigger`, which both picks up missed files and re-registers the consumer's webhook with the restarted producer.
+
+**`SELF_URL`** is auto-detected from `VCAP_APPLICATION.application_uris[0]` in Cloud Foundry. Set it explicitly in other environments or if auto-detection is unavailable.
 
 ### Sync Key (optional)
 
-To prevent unauthenticated access to the `/api/download` and `/api/batch-download` endpoints, set a shared secret on both instances:
+To prevent unauthenticated access to the sync endpoints (`/api/browse`, `/api/download`, `/api/batch-download`, `/api/download-trigger`), set a shared secret on **both** instances:
 
 ```jsonc
 // config.json
@@ -526,12 +544,13 @@ SYNC_KEY=your-secret-sync-key npm start
 ```
 
 When a sync key is configured:
-- The download endpoints require either a matching `x-sync-key` request header **or** a valid XSUAA session cookie
-- The sync client automatically includes `x-sync-key` in all download requests to the remote
+- `GET /api/browse`, `GET /api/download`, `POST /api/batch-download`, and `GET /api/download-trigger` all require either a matching `x-sync-key` request header **or** a valid XSUAA session cookie
+- The sync client automatically includes `x-sync-key` in all requests to the remote (browse, download, and callback notifications)
 - If the remote rejects the key with `401`, the entire sync is aborted immediately with an explanatory error
 - Requests with neither a valid key nor a session receive `401 Unauthorized`
+- Requests from loopback (`127.0.0.1`, `::1`) are always allowed for local development
 
-Both instances must use the same key. If XSUAA is configured, authenticated browser users can also access the download endpoints without a key.
+Both instances must use the same key. If XSUAA is configured, authenticated browser users can also access the sync endpoints without a key.
 
 ## Gzip Compression
 
