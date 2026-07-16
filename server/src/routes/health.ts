@@ -56,7 +56,7 @@ router.get('/:name', async (req: Request, res: Response, next: NextFunction) => 
     (req.headers['x-forwarded-host'] as string | undefined)?.split(',')[0]?.trim() ??
     (req.headers['host'] as string | undefined) ?? '';
 
-  logger.info({ service: name, from: req.ip ?? 'unknown' }, 'Health check request received');
+  logger.debug({ service: name, from: req.ip ?? 'unknown' }, 'Health check request received');
 
   const evalMode = getEvaluationMode(name);
 
@@ -90,7 +90,7 @@ router.get('/:name', async (req: Request, res: Response, next: NextFunction) => 
       });
 
     if (epEntries.length === 0) {
-      logger.info({ service: name, hostRegion }, 'Health check: no endpoints match region — returning OK');
+      logger.debug({ service: name, hostRegion }, 'Health check: no endpoints match region — returning OK');
       replyJson(res, 200, { status: 'OK', locations: [] });
       return;
     }
@@ -117,7 +117,7 @@ router.get('/:name', async (req: Request, res: Response, next: NextFunction) => 
     }
 
     if (latestByCity.size === 0) {
-      logger.info({ service: name }, 'Health check: no recent data in window — returning OK');
+      logger.debug({ service: name }, 'Health check: no recent data in window — returning OK');
       replyJson(res, 200, { status: 'OK', locations: [], note: 'no recent data' });
       return;
     }
@@ -132,10 +132,10 @@ router.get('/:name', async (req: Request, res: Response, next: NextFunction) => 
       logger.warn({ service: name, locations }, 'Health check failed — all locations down');
       replyJson(res, 500, { status: 'Service down', locations });
     } else if (allOk) {
-      logger.info({ service: name, locations }, 'Health check passed');
+      logger.debug({ service: name, locations }, 'Health check passed');
       replyJson(res, 200, { status: 'OK', locations });
     } else {
-      logger.info({ service: name, locations }, 'Health check partial — some locations degraded');
+      logger.debug({ service: name, locations }, 'Health check partial — some locations degraded');
       replyJson(res, 200, { status: 'Partial OK', locations });
     }
   } catch (err) {
