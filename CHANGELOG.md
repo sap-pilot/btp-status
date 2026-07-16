@@ -2,10 +2,14 @@
 
 ## [v1.0.0] - 2026-07-16
 
+### Added
+- **Site-switcher on Service detail back button** — the `← Overview` back button is now two parts: a link showing the current site name (from `config.json → sites[].name`, or `BTP Status` when no site matches the current host) that navigates back to the Overview page with any active status filter restored; and a `⌄` dropdown (shown only when 2+ sites are configured) listing all sites — selecting one navigates the browser to `{site.url}/service/{service}?{current URL params}` so the same service and filters are preserved across regions; if the target site has no matching service, it redirects to `/overview` automatically; the current site is marked as `current` in the dropdown
+
 ### Changed
 - **Stat card layout simplified to 4 cards** — the **Overall Uptime** card has been removed from the Overview page and the **Uptime** card removed from the Service detail page; **Total Checks** is now the first card (before Completely Failed and Partially Failed); the grid changes from 5 to 4 columns (`sm:grid-cols-4`); on mobile, all 4 cards fit into a clean 2×2 grid without any card needing to span two columns
 - **Sync key transmitted as HMAC signature, not plaintext** — sync requests between instances no longer include the raw `SYNC_KEY` value; instead each request carries `x-sync-ts` (current Unix timestamp in seconds) and `x-sync-sig` (HMAC-SHA256 of the timestamp keyed with `SYNC_KEY`, hex-encoded); the server verifies the signature with `timingSafeEqual` and rejects requests whose timestamp is outside a ±5-minute window; an empty `SYNC_KEY` (env var or `config.json → variables`) is treated as absent — sync endpoints remain unprotected in that case; implemented with `node:crypto` (`createHmac`, `timingSafeEqual`), no new dependencies
 - **`MAX_RESPONSE_STORAGE_DAYS` default raised to 7** — response files are now retained for 7 days by default (previously 3)
+- **Time range selection persisted in URL** — changing the **Last X hours** selector on the Overview or Service detail page now updates a `?hours=N` URL parameter; on page load the URL param takes priority over `localStorage` so refreshing or sharing a link preserves the selected time window; date-range mode (`Date Range…`) continues to use `localStorage` only
 
 ## [v0.12.0] - 2026-07-16
 

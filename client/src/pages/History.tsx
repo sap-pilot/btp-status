@@ -5,7 +5,7 @@ function fmtUptime(n: number): string {
   return parseFloat(n.toFixed(2)) === 100 ? '100%' : `${n.toFixed(2)}%`;
 }
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import type { EvaluationMode, HistoryFile, ServiceConfig, ServiceSummary } from '@shared/types';
+import type { EvaluationMode, HistoryFile, ServiceConfig, ServiceSummary, SiteConfig } from '@shared/types';
 import StatusDots from '@/components/StatusDots';
 import ResponseTimeChart from '@/components/ResponseTimeChart';
 import ResponseDetailModal from '@/components/ResponseDetailModal';
@@ -94,9 +94,20 @@ export default function History() {
   const maxDots = Math.max(8, Math.floor(dotAreaWidth / 12));
   const isMobile = windowWidth < 640;
 
-  const { range, setRange, queryString } = useTimeRange();
+  const { range, setRange: setRangeBase, queryString } = useTimeRange(location.search);
+  function setRange(next: Parameters<typeof setRangeBase>[0]) {
+    setRangeBase(next);
+    const sp = new URLSearchParams(window.location.search);
+    if (next.mode === 'hours') {
+      sp.set('hours', String(next.hours));
+    } else {
+      sp.delete('hours');
+    }
+    navigate('?' + sp.toString(), { replace: true });
+  }
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [maxStorageDays, setMaxStorageDays] = useState(7);
+  const [sites, setSites] = useState<SiteConfig[]>([]);
   const [summaries, setSummaries] = useState<ServiceSummary[]>([]);
   const [files, setFiles] = useState<HistoryFile[]>([]);
   const [service, setService] = useState<ServiceConfig | null>(null);
@@ -137,16 +148,21 @@ export default function History() {
   useEffect(() => {
     fetch('/api/services')
       .then(r => r.json() as Promise<ServiceConfig[]>)
-      .then(svcs => setService(svcs.find(s => s.name === name) ?? null))
+      .then(svcs => {
+        const found = svcs.find(s => s.name === name);
+        if (!found) { navigate('/overview'); return; }
+        setService(found);
+      })
       .catch(() => null);
     fetch('/api/info')
-      .then(r => r.json() as Promise<{ maxStorageDays?: number; syncRemote?: boolean }>)
+      .then(r => r.json() as Promise<{ maxStorageDays?: number; syncRemote?: boolean; sites?: SiteConfig[] }>)
       .then(d => {
         if (d.maxStorageDays !== undefined) setMaxStorageDays(d.maxStorageDays);
         setSyncAvailable(!!d.syncRemote);
+        if (d.sites) setSites(d.sites);
       })
       .catch(() => null);
-  }, [name]);
+  }, [name, navigate]);
 
   useEffect(() => {
     fetch(`/api/eval-mode/${encodeURIComponent(name)}`)
@@ -372,6 +388,18 @@ export default function History() {
     setSearchParam({ endpoint: null, location: null, status: null });
   }
 
+  const currentSite = sites.find(s => {
+    try { return new URL(s.url).origin === window.location.origin; } catch { return false; }
+  }) ?? null;
+  const siteLabel = currentSite?.name ?? 'BTP Status';
+
+  function navigateToSite(siteUrl: string) {
+    const params = new URLSearchParams(window.location.search);
+    const path = `/service/${encodeURIComponent(name)}`;
+    const qs = params.toString();
+    window.location.href = siteUrl.replace(/\/$/, '') + path + (qs ? '?' + qs : '');
+  }
+
   // Build schedule select value — may not match a preset if config uses a custom interval
   const scheduleValue = scheduleInterval !== null ? String(scheduleInterval) : '';
   const scheduleOptions = [...SCHEDULE_OPTIONS];
@@ -394,8 +422,31 @@ export default function History() {
               className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors text-sm"
             >
               <ArrowLeft className="h-4 w-4" />
-              Overview
+              {siteLabel}
             </Link>
+            {sites.length >= 2 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="text-muted-foreground hover:text-foreground transition-colors -ml-1" title="Switch site">
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {sites.map(s => (
+                    <DropdownMenuItem
+                      key={s.url}
+                      className={`text-xs cursor-pointer${s.url === (currentSite?.url ?? '') ? ' font-semibold' : ''}`}
+                      onSelect={() => navigateToSite(s.url)}
+                    >
+                      {s.name}
+                      {s.url === (currentSite?.url ?? '') && (
+                        <span className="text-muted-foreground text-xs ml-auto pl-3">current</span>
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             <span className="text-muted-foreground">/</span>
             <h1 className="text-base font-semibold">{name}</h1>
             {summaries.length > 0 && (

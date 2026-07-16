@@ -19,8 +19,15 @@ function load(): TimeRange {
   return DEFAULT;
 }
 
-export function useTimeRange() {
-  const [range, setRangeState] = useState<TimeRange>(load);
+export function useTimeRange(initialSearch?: string) {
+  const [range, setRangeState] = useState<TimeRange>(() => {
+    if (initialSearch) {
+      const p = new URLSearchParams(initialSearch);
+      const h = p.get('hours');
+      if (h && !isNaN(Number(h)) && Number(h) > 0) return { mode: 'hours', hours: Number(h) };
+    }
+    return load();
+  });
 
   function setRange(next: TimeRange) {
     setRangeState(next);
