@@ -4,19 +4,27 @@ A lightweight, file-backed status page and health checker for SAP BTP services. 
 
 ![BTP Status Dashboard](doc/img/btp-status-compare.png)
 
+## Workflow
+
+Each BTP Status instance is deployed in a different region. A `browser-ias-login` endpoint performs a full headless login to SAP Workzone every few minutes, with automatic retries on transient failures. The result is exposed via `GET /health/:service` — returning `200 OK`, `200 Partial OK`, or `500 Service down` depending on whether all, some, or none of the recent checks passed.
+
+Azure Traffic Manager polls these health endpoints from multiple PoPs. When all probes from a region consistently return `500`, Traffic Manager stops routing end-user traffic there and fails over to the healthy region. Once the degraded instance recovers and probes return `200`, Traffic Manager automatically restores it to rotation.
+
+![BTP Status Workflow](doc/img/btp-status-workflow.png)
+
 ## Screenshots
 
 **Overview** — landscape diagram with live service status and timeline dots
 
-![BTP Status Overview](doc/img/overview-v0.8.png)
+![BTP Status Overview](doc/img/overview-v0.12.png)
 
 **Service detail** — uptime stats, response time chart, and full check history
 
-![BTP Service History](doc/img/service-history-v0.8.png)
+![BTP Service History](doc/img/service-history-v0.12.png)
 
 **Drill-down** — full request/response detail and screenshot from a past check
 
-![BTP Service Screenshot](doc/img/service-screenshot-v0.8.png)
+![BTP Service Screenshot](doc/img/service-screenshot-v0.12.png)
 
 ## Features
 
@@ -600,6 +608,8 @@ npm run deploy-bg   # blue-green
 ```
 
 **Blue-green strategy** (`--strategy blue-green --skip-testing-phase`) starts a parallel "green" instance, waits for it to be healthy, routes traffic to it, then removes the old "blue" instance — minimising downtime during deploys.
+
+> **When Azure Traffic Manager is connected, always use `npm run deploy-bg` (blue-green).** A standard deploy takes the app offline for 30–60 seconds during restaging; Traffic Manager will detect the `500` responses, exhaust its retries, and fail over to the other region. Blue-green avoids this by keeping the current instance live until the new one is healthy and traffic has been re-routed.
 
 `keep-existing: env: true` in `mta.yaml` instructs the MTA deployer to **preserve existing environment variables** (e.g. `CONFIG_JSON`, `SYNC_REMOTE`) on the app during deployment, so runtime config set via `cf set-env` is not wiped by a redeploy.
 
