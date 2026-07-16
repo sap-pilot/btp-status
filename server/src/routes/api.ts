@@ -51,13 +51,12 @@ router.get('/services', (_req, res) => {
 
 router.get('/check/:name', requireAuth, async (req, res, next) => {
   const name = req.params['name'] as string;
-  const requestHost =
-    (req.headers['x-forwarded-host'] as string | undefined)?.split(',')[0]?.trim() ??
-    (req.headers['host'] as string | undefined) ?? '';
   const user = (req as AuthRequest).authSession ? userLabel((req as AuthRequest).authSession!) : 'anon';
   logger.info({ service: name, from: req.ip, user }, 'Manual test triggered');
   try {
-    const result = await checkService(name, requestHost);
+    // Pass no requestHost so checkService skips region filtering — manual tests always
+    // check all endpoints regardless of which region the browser request came from.
+    const result = await checkService(name);
     res.json(result);
   } catch (err) {
     next(err);
