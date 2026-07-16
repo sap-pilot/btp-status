@@ -19,11 +19,25 @@ interface ConditionResult {
   expected: string;
 }
 
+interface RetryAttempt {
+  attempt: number;
+  conditions: ConditionResult[];
+  passed: boolean;
+  request: { url: string; method: string; headers: Record<string, string>; body: string | null };
+  response: { status: number; headers: Record<string, string>; body: string };
+  responseTime: number;
+  screenshotUrl?: string;
+  consoleText?: string;
+  htmlText?: string;
+}
+
 interface EndpointCheckResult {
   index: number;
   name: string;
   conditions: ConditionResult[];
   passed: boolean;
+  partiallyFailed?: boolean;
+  retries?: RetryAttempt[];
   request: { url: string; method: string; headers: Record<string, string>; body: string | null };
   response: { status: number; headers: Record<string, string>; body: string };
   responseTime: number;
@@ -83,11 +97,20 @@ export default function TestModal({ serviceName, open, onClose, onComplete }: Pr
   const [elapsed, setElapsed] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  const [collapsedRetries, setCollapsedRetries] = useState<Set<string>>(new Set());
 
   function toggleCollapse(idx: number) {
     setCollapsed(prev => {
       const next = new Set(prev);
       if (next.has(idx)) next.delete(idx); else next.add(idx);
+      return next;
+    });
+  }
+
+  function toggleRetry(key: string) {
+    setCollapsedRetries(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
   }
@@ -106,6 +129,7 @@ export default function TestModal({ serviceName, open, onClose, onComplete }: Pr
     setError(null);
     setElapsed(null);
     setCollapsed(new Set());
+    setCollapsedRetries(new Set());
     onClose();
   }
 
@@ -115,6 +139,7 @@ export default function TestModal({ serviceName, open, onClose, onComplete }: Pr
     setError(null);
     setElapsed(null);
     setCollapsed(new Set());
+    setCollapsedRetries(new Set());
     const start = Date.now();
     try {
       const resp = await fetch(`/api/check/${encodeURIComponent(serviceName)}`);
@@ -373,6 +398,170 @@ export default function TestModal({ serviceName, open, onClose, onComplete }: Pr
                       </TabsContent>
                     )}
                   </Tabs>}
+
+                  {/* Retry accordions — each displayed like a full endpoint */}
+                  {!collapsed.has(epIdx) && ep.retries && ep.retries.length > 0 && (
+                    <div className="mt-3 space-y-1.5">
+                      {ep.retries.map((retry, retryIdx) => {
+                        const key = `${epIdx}-${retryIdx}`;
+                        const isExpanded = collapsedRetries.has(key);
+                        const isBrowserRetry = retry.request.method === 'BROWSER';
+                        return (
+                          <div key={retryIdx} className="border border-border rounded">
+                            <button
+                              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted/30 text-left"
+                              onClick={() => toggleRetry(key)}
+                            >
+                              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${retry.passed ? 'bg-green-500' : 'bg-red-500'}`} />
+                              <span className="text-sm font-medium flex-1 truncate">{ep.name}</span>
+                              <Badge variant="outline" className="text-xs border-blue-500 text-blue-400 flex-shrink-0">
+                                retry #{retry.attempt}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground flex-shrink-0">{retry.responseTime}ms</span>
+                              <Badge
+                                variant={retry.passed ? 'outline' : 'destructive'}
+                                className={`text-xs flex-shrink-0 ${retry.passed ? 'border-green-600 text-green-400' : ''}`}
+                              >
+                                {retry.passed ? 'PASS' : 'FAIL'}
+                              </Badge>
+                              {isExpanded
+                                ? <ChevronDown className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+                                : <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />}
+                            </button>
+                            {isExpanded && (
+                              <div className="border-t border-border p-2">
+                                <Tabs defaultValue="conditions">
+                                  <TabsList className="h-8">
+                                    <TabsTrigger value="conditions" className="text-xs h-7">
+                                      Conditions
+                                      {retry.conditions.some(c => !c.passed) && (
+                                        <span className="ml-1.5 text-red-400">
+                                          ({retry.conditions.filter(c => !c.passed).length} failed)
+                                        </span>
+                                      )}
+                                    </TabsTrigger>
+                                    {isBrowserRetry && retry.screenshotUrl && (
+                                      <TabsTrigger value="screenshot" className="text-xs h-7">Screenshot</TabsTrigger>
+                                    )}
+                                    {isBrowserRetry && retry.htmlText && (
+                                      <TabsTrigger value="pagesource" className="text-xs h-7">Page Source</TabsTrigger>
+                                    )}
+                                    {isBrowserRetry && retry.consoleText && (
+                                      <TabsTrigger value="console" className="text-xs h-7">Console</TabsTrigger>
+                                    )}
+                                    {!isBrowserRetry && (
+                                      <TabsTrigger value="request" className="text-xs h-7">Request</TabsTrigger>
+                                    )}
+                                    {!isBrowserRetry && (
+                                      <TabsTrigger value="response" className="text-xs h-7">
+                                        Response
+                                        {retry.response.status > 0 && (
+                                          <span className={`ml-1.5 ${retry.response.status < 400 ? 'text-green-400' : 'text-red-400'}`}>
+                                            {retry.response.status}
+                                          </span>
+                                        )}
+                                      </TabsTrigger>
+                                    )}
+                                  </TabsList>
+
+                                  <TabsContent value="conditions" className="mt-2">
+                                    <Table>
+                                      <TableHeader>
+                                        <TableRow>
+                                          <TableHead className="h-8 text-xs">Condition</TableHead>
+                                          <TableHead className="h-8 text-xs w-10">Result</TableHead>
+                                          <TableHead className="h-8 text-xs">Actual</TableHead>
+                                          <TableHead className="h-8 text-xs">Expected</TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {retry.conditions.map((c, ci) => (
+                                          <TableRow key={ci} className={c.passed ? '' : 'bg-destructive/10'}>
+                                            <TableCell className="font-mono text-xs py-2">{c.condition}</TableCell>
+                                            <TableCell className="py-2">
+                                              <span className={c.passed ? 'text-green-500' : 'text-red-500'}>{c.passed ? '✓' : '✗'}</span>
+                                            </TableCell>
+                                            <TableCell className="font-mono text-xs py-2 max-w-[220px] truncate" title={c.actual}>{c.actual}</TableCell>
+                                            <TableCell className="font-mono text-xs py-2">{c.expected}</TableCell>
+                                          </TableRow>
+                                        ))}
+                                      </TableBody>
+                                    </Table>
+                                  </TabsContent>
+
+                                  <TabsContent value="request" className="mt-2 space-y-4">
+                                    <Section label="URL">
+                                      <div className="font-mono text-xs bg-muted rounded px-2 py-1.5 break-all">
+                                        <span className="text-muted-foreground mr-2">{retry.request.method}</span>
+                                        {retry.request.url}
+                                      </div>
+                                    </Section>
+                                    <Section label="Headers">
+                                      <div className="bg-muted rounded px-2 py-1.5">
+                                        <HeaderTable headers={retry.request.headers} />
+                                      </div>
+                                    </Section>
+                                    <Section label="Body">
+                                      <pre className="font-mono text-xs bg-muted rounded px-2 py-1.5 whitespace-pre-wrap break-all max-h-40 overflow-auto">
+                                        {retry.request.body ? prettify(retry.request.body) : <span className="text-muted-foreground italic">none</span>}
+                                      </pre>
+                                    </Section>
+                                  </TabsContent>
+
+                                  <TabsContent value="response" className="mt-2 space-y-4">
+                                    <Section label="Status">
+                                      <div className="flex items-center gap-3">
+                                        <span className={`font-mono text-sm font-bold ${
+                                          retry.response.status === 0 ? 'text-red-400' :
+                                          retry.response.status < 300 ? 'text-green-400' :
+                                          retry.response.status < 400 ? 'text-yellow-400' : 'text-red-400'
+                                        }`}>
+                                          {retry.response.status === 0 ? 'Connection error' : retry.response.status}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground">{retry.responseTime}ms</span>
+                                      </div>
+                                    </Section>
+                                    <Section label="Headers">
+                                      <div className="bg-muted rounded px-2 py-1.5">
+                                        <HeaderTable headers={retry.response.headers} />
+                                      </div>
+                                    </Section>
+                                    <Section label="Body">
+                                      <pre className="font-mono text-xs bg-muted rounded px-2 py-1.5 whitespace-pre-wrap break-all max-h-48 overflow-auto">
+                                        {retry.response.body ? prettify(retry.response.body) : <span className="text-muted-foreground italic">empty</span>}
+                                      </pre>
+                                    </Section>
+                                  </TabsContent>
+
+                                  {retry.screenshotUrl && (
+                                    <TabsContent value="screenshot" className="mt-2">
+                                      <img src={retry.screenshotUrl} alt="Retry screenshot" className="w-full rounded border border-border" />
+                                    </TabsContent>
+                                  )}
+
+                                  {retry.htmlText && (
+                                    <TabsContent value="pagesource" className="mt-2">
+                                      <pre className="text-xs font-mono bg-muted rounded p-2 whitespace-pre-wrap break-all max-h-96 overflow-auto">
+                                        {retry.htmlText}
+                                      </pre>
+                                    </TabsContent>
+                                  )}
+
+                                  {retry.consoleText && (
+                                    <TabsContent value="console" className="mt-2">
+                                      <pre className="text-xs font-mono bg-muted rounded p-2 whitespace-pre-wrap break-all max-h-96 overflow-auto">
+                                        {retry.consoleText}
+                                      </pre>
+                                    </TabsContent>
+                                  )}
+                                </Tabs>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

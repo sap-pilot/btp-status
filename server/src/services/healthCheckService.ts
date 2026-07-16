@@ -6,7 +6,7 @@ import { runBrowserIasLogin } from './browserCheckService.js';
 import { getCity } from './geoService.js';
 import { logger } from '../logger.js';
 import { config } from '../config.js';
-import type { ConditionResult, ResponseRecord, CheckResult, EndpointCheckResult, EndpointConfig } from '../types/index.js';
+import type { ConditionResult, ResponseRecord, CheckResult, EndpointCheckResult, RetryAttempt, EndpointConfig } from '../types/index.js';
 
 export type { CheckResult, EndpointCheckResult };
 
@@ -145,6 +145,7 @@ export async function checkService(serviceName: string, requestHost?: string, on
 
       // ── Browser retry logic ─────────────────────────────────────────────
       const retryFiles: string[] = [];
+      const retryAttempts: RetryAttempt[] = [];
       let anyRetryPassed = false;
       if (!conditionsPassed && evalMode === 'condition' && (ep.retry ?? 0) > 0) {
         const retryDelayMs = (ep.retryDelay ?? 0) * 1000;
@@ -153,6 +154,12 @@ export async function checkService(serviceName: string, requestHost?: string, on
           logger.debug({ service: serviceName, endpoint: epName, attempt: r + 1 }, 'Browser retry attempt');
           const rr = await runBrowserIasLogin(ep, serviceName);
           const retryStatus: 200 | 500 = rr.passed ? 200 : 500;
+          const retryConds: ConditionResult[] = [{
+            condition: `[SELECTOR] found ${ep.waitForSelector ?? '(waitForSelector not set)'}`,
+            passed: rr.passed,
+            actual: rr.message,
+            expected: ep.waitForSelector ?? '(not set)',
+          }];
           const retryRecord: ResponseRecord = {
             request: { url: ep.url, method: 'BROWSER', headers: {}, body: null },
             response: { status: retryStatus, headers: {}, body: rr.message },
@@ -160,17 +167,26 @@ export async function checkService(serviceName: string, requestHost?: string, on
             responseTime: rr.responseTime,
             endpointIndex: i,
             endpointName: epName,
-            conditions: [{
-              condition: `[SELECTOR] found ${ep.waitForSelector ?? '(waitForSelector not set)'}`,
-              passed: rr.passed,
-              actual: rr.message,
-              expected: ep.waitForSelector ?? '(not set)',
-            }],
+            conditions: retryConds,
             overallStatus: retryStatus,
             city: getCity(),
           };
           const retryFile = await saveResponse(serviceName, retryRecord, rr.screenshot, rr.consoleLogs, rr.htmlContent, true);
           retryFiles.push(retryFile);
+          const hasRetryScreenshot = rr.screenshot.length > 0;
+          retryAttempts.push({
+            attempt: r + 1,
+            conditions: retryConds,
+            passed: rr.passed,
+            request: { url: ep.url, method: 'BROWSER', headers: {}, body: null },
+            response: { status: retryStatus, headers: {}, body: rr.message },
+            responseTime: rr.responseTime,
+            screenshotUrl: hasRetryScreenshot
+              ? `/api/download?path=${encodeURIComponent(serviceName)}/${encodeURIComponent(retryFile.replace(/\.json$/, '.png'))}`
+              : undefined,
+            consoleText: rr.consoleLogs.length > 0 ? rr.consoleLogs.join('\n') : undefined,
+            htmlText: rr.htmlContent || undefined,
+          });
           if (rr.passed) { anyRetryPassed = true; break; }
         }
       }
@@ -204,6 +220,7 @@ export async function checkService(serviceName: string, requestHost?: string, on
         conditions,
         passed: conditionsPassed,
         partiallyFailed: anyRetryPassed,
+        retries: retryAttempts.length > 0 ? retryAttempts : undefined,
         request: { url: ep.url, method: 'BROWSER', headers: {}, body: null },
         response: { status: overallStatus, headers: {}, body: result.message },
         responseTime: result.responseTime,
@@ -265,6 +282,7 @@ export async function checkService(serviceName: string, requestHost?: string, on
 
     // ── HTTP retry logic ────────────────────────────────────────────────────
     const retryFiles: string[] = [];
+    const retryAttempts: RetryAttempt[] = [];
     let anyRetryPassed = false;
     if (!conditionsPassed && evalMode === 'condition' && (ep.retry ?? 0) > 0) {
       const retryDelayMs = (ep.retryDelay ?? 0) * 1000;
@@ -292,6 +310,14 @@ export async function checkService(serviceName: string, requestHost?: string, on
         };
         const retryFile = await saveResponse(serviceName, retryRecord, undefined, undefined, undefined, true);
         retryFiles.push(retryFile);
+        retryAttempts.push({
+          attempt: r + 1,
+          conditions: retryConds,
+          passed: retryPassed,
+          request: { url: ep.url, method, headers: reqHeaders, body: ep.body ?? null },
+          response: { status: ra.respStatus, headers: ra.respHeaders, body: ra.respBody },
+          responseTime: ra.responseTime,
+        });
         if (retryPassed) { anyRetryPassed = true; break; }
       }
     }
@@ -323,6 +349,7 @@ export async function checkService(serviceName: string, requestHost?: string, on
       conditions,
       passed: conditionsPassed,
       partiallyFailed: anyRetryPassed,
+      retries: retryAttempts.length > 0 ? retryAttempts : undefined,
       request: { url: ep.url, method, headers: reqHeaders, body: ep.body ?? null },
       response: { status: respStatus, headers: respHeaders, body: respBody },
       responseTime,

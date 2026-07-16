@@ -95,12 +95,28 @@ export interface ServiceWithHistory {
   history: HistoryFile[];
 }
 
+/** One retry attempt returned inline with a live check result (GET /api/check/:name). */
+export interface RetryAttempt {
+  /** 1-based retry attempt number */
+  attempt: number;
+  conditions: ConditionResult[];
+  passed: boolean;
+  request: { url: string; method: string; headers: Record<string, string>; body: string | null };
+  response: { status: number; headers: Record<string, string>; body: string };
+  responseTime: number;
+  screenshotUrl?: string;
+  consoleText?: string;
+  htmlText?: string;
+}
+
 export interface EndpointCheckResult {
   index: number;
   name: string;
   conditions: ConditionResult[];
   passed: boolean;
   partiallyFailed?: boolean;
+  /** Retry attempts made after the initial failure; populated only for live Run Test results. */
+  retries?: RetryAttempt[];
   request: { url: string; method: string; headers: Record<string, string>; body: string | null };
   response: { status: number; headers: Record<string, string>; body: string };
   responseTime: number;
