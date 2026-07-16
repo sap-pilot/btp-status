@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { getXsuaaConfig, readSessionFromRequest } from '../services/authService.js';
 import type { SessionPayload } from '../services/authService.js';
 import { getSyncKey } from '../services/configService.js';
@@ -23,11 +24,11 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 }
 
 /**
- * Guards /api/download and /api/batch-download when a sync key is configured.
+ * Guards sync endpoints when a sync key is configured.
  * Allows the request if:
- *   - No sync key is configured (open access, backwards-compatible)
+ *   - No sync key is configured (open access)
  *   - The request originates from loopback (127.0.0.1 / ::1) — local dev
- *   - The x-sync-key request header matches the configured key
+ *   - The request carries valid HMAC-signed headers (x-sync-ts + x-sync-sig) within a 5-minute window
  *   - The request carries a valid XSUAA session cookie
  * Otherwise responds 401.
  */
@@ -36,14 +37,25 @@ export function requireSyncAuth(req: Request, res: Response, next: NextFunction)
   if (!syncKey) { next(); return; }
   const ip = req.ip ?? req.socket.remoteAddress ?? '';
   if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') { next(); return; }
-  if (req.headers['x-sync-key'] === syncKey) { next(); return; }
+  const ts = req.headers['x-sync-ts'];
+  const sig = req.headers['x-sync-sig'];
+  if (typeof ts === 'string' && typeof sig === 'string') {
+    const tsNum = parseInt(ts, 10);
+    const now = Math.floor(Date.now() / 1000);
+    if (!isNaN(tsNum) && Math.abs(now - tsNum) <= 300) {
+      const expected = createHmac('sha256', syncKey).update(ts).digest('hex');
+      const expBuf = Buffer.from(expected);
+      const sigBuf = Buffer.from(sig);
+      if (expBuf.length === sigBuf.length && timingSafeEqual(expBuf, sigBuf)) { next(); return; }
+    }
+  }
   const x = getXsuaaConfig();
   if (x) {
     const session = readSessionFromRequest(req.headers.cookie ?? '', x.clientsecret);
     if (session) { next(); return; }
   }
   res.status(401).json({
-    error: 'Unauthorized: provide a valid x-sync-key header or authenticate via XSUAA',
+    error: 'Unauthorized: provide valid HMAC sync signature headers (x-sync-ts, x-sync-sig) or authenticate via XSUAA',
   });
 }
 

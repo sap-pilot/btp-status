@@ -4,6 +4,7 @@ import { gunzip } from 'node:zlib';
 import { promisify } from 'node:util';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { createHmac } from 'node:crypto';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { browseResponseFiles, parseFilename, sanitizeName } from './responseStore.js';
@@ -236,7 +237,10 @@ function fetchPost(url: string, body: string, extraHeaders: Record<string, strin
 
 function syncKeyHeader(): Record<string, string> {
   const key = getSyncKey();
-  return key ? { 'x-sync-key': key } : {};
+  if (!key) return {};
+  const ts = String(Math.floor(Date.now() / 1000));
+  const sig = createHmac('sha256', key).update(ts).digest('hex');
+  return { 'x-sync-ts': ts, 'x-sync-sig': sig };
 }
 
 async function downloadOne(
