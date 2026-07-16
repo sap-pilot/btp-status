@@ -289,15 +289,8 @@ export default function History() {
     setSyncing(false);
   }
 
-  const upCount = files.filter(f => f.overallStatus === 200 || f.overallStatus === 203).length;
   const failedCount = files.filter(f => f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504).length;
   const partiallyFailedCount = files.filter(f => f.overallStatus === 400).length;
-  const uptime = files.length > 0 ? (upCount / files.length) * 100 : 100;
-  const latestTs = files.reduce((max, f) => Math.max(max, f.timestamp ?? 0), 0);
-  const latestFailed = files.some(
-    f => Math.floor((f.timestamp ?? 0) / 1000) === Math.floor(latestTs / 1000) && (f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504),
-  );
-  const uptimeColor = files.length === 0 ? 'text-muted-foreground' : latestFailed ? 'text-red-500' : uptime < 100 ? 'text-yellow-500' : 'text-green-500';
 
   const endpointLabel = (f: HistoryFile): string => {
     if (f.endpointSlug !== undefined) {
@@ -681,11 +674,15 @@ export default function History() {
         )}
 
         {/* Stats */}
-        <div className="stat-grid grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
-          <Card>
+        <div className="stat-grid grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          <Card
+            className="cursor-pointer hover:bg-muted/50 transition-colors"
+            onClick={clearFilters}
+            title="Clear all filters"
+          >
             <CardContent className="pt-4">
-              <div className={`text-base sm:text-2xl font-bold ${uptimeColor}`}>{fmtUptime(uptime)}</div>
-              <div className="text-xs text-muted-foreground mt-1">Uptime</div>
+              <div className="text-base sm:text-2xl font-bold">{files.length}</div>
+              <div className="text-xs text-muted-foreground mt-1">Total Checks</div>
             </CardContent>
           </Card>
           <Card
@@ -709,17 +706,7 @@ export default function History() {
             </CardContent>
           </Card>
           <Card
-            className="cursor-pointer hover:bg-muted/50 transition-colors"
-            onClick={clearFilters}
-            title="Clear all filters"
-          >
-            <CardContent className="pt-4">
-              <div className="text-base sm:text-2xl font-bold">{files.length}</div>
-              <div className="text-xs text-muted-foreground mt-1">Total Checks</div>
-            </CardContent>
-          </Card>
-          <Card
-            className={`col-span-2 sm:col-span-1${(!auth.enabled || auth.loggedIn) ? ' cursor-pointer hover:bg-muted/50 transition-colors' : ''}`}
+            className={`transition-colors${(!auth.enabled || auth.loggedIn) ? ' cursor-pointer hover:bg-muted/50' : ''}`}
             onClick={(!auth.enabled || auth.loggedIn) ? () => void runSync() : undefined}
             title={(!auth.enabled || auth.loggedIn) ? 'Click to sync' : undefined}
           >
