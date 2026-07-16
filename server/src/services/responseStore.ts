@@ -100,8 +100,8 @@ export async function readScreenshotFile(
   serviceName: string,
   filename: string,
 ): Promise<Buffer> {
-  // Accept new (*.screenshot.png) and legacy (*.png) naming
-  if (!/^[\w-]+(?:\.screenshot)?\.png$/.test(filename)) throw new Error('Invalid filename');
+  // Accept new (*.screenshot.png / *.retry.screenshot.png) and legacy (*.png / *.retry.png) naming
+  if (!/^[\w-]+(?:\.retry)?(?:\.screenshot)?\.png$/.test(filename)) throw new Error('Invalid filename');
   const filepath = join(config.RESPONSE_DIR, sanitizeName(serviceName), filename);
   return readFile(filepath);
 }
