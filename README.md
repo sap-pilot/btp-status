@@ -36,7 +36,9 @@ A lightweight, file-backed status page and health checker for SAP BTP services. 
 
 8. **Minimal server dependencies** — production runtime requires only Express (HTTP), Pino (logging), and Playwright (browser checks); all HTTP requests, crypto, gzip compression, and ZIP packaging use native Node.js APIs — no axios, no ORM, no utility libraries
 
-9. **Modern, fast React UI** — built with shadcn/ui + Tailwind CSS; initial JS bundle ~55 kB gzip (lazy-loaded pages, Mermaid deferred); dark theme; mobile-responsive with hamburger menu; shared date range picker with localStorage persistence across pages
+9. **Live updates via Server-Sent Events** — the Overview and service detail pages update automatically when new check results arrive; the server pushes SSE `update` events through `GET /api/events` after every scheduled check, manual Run Test, or remote sync; the browser fetches only the delta (`?since=<ms>`) and merges new files into the current view without a full reload; live updates are scoped per service on the detail page (`?service=<name>`) and disabled in Date Range mode; the "Refreshed at" timestamp on the Overview page updates on each delta merge
+
+10. **Modern, fast React UI** — built with shadcn/ui + Tailwind CSS; initial JS bundle ~55 kB gzip (lazy-loaded pages, Mermaid deferred); dark theme; mobile-responsive with hamburger menu; shared date range picker with localStorage persistence across pages
 
 > Also supports: HTTP health checks with [Gatus](https://github.com/TwiN/gatus#conditions)-style conditions (`[STATUS]`, `[BODY]`, `[HEADER.*]`, `[RESPONSE_TIME]`, `len()`, `pat()`); variable substitution in `config.json`; `/dummy` URL to skip checks; auto-run schedule selector; site switcher for multi-region deployments; SAP BTP Cloud Foundry MTA deployment
 

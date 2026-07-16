@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { parseFilename } from '@/lib/parseFilename';
 import { Link, useNavigate } from 'react-router-dom';
 import type { ServiceWithHistory, HistoryFile, LandscapeConfig, ServiceSummary, SiteConfig } from '@shared/types';
@@ -17,6 +17,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTimeRange, fmtDateRange } from '@/hooks/useTimeRange';
 import AuthButton from '@/components/AuthButton';
 import DateRangePicker from '@/components/DateRangePicker';
+import { useLiveEvents } from '@/hooks/useLiveEvents';
 
 const HOUR_OPTIONS = [
   { value: '1', label: 'Last 1 hour' },
@@ -110,6 +111,7 @@ export default function Overview() {
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [refreshTick, setRefreshTick] = useState(0);
+  const lastFetchTsRef = useRef<number>(Date.now());
   const [testingAll, setTestingAll] = useState(false);
   const [syncAvailable, setSyncAvailable] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -147,6 +149,7 @@ export default function Overview() {
   useEffect(() => {
     setLoading(true);
     setError(null);
+    lastFetchTsRef.current = Date.now();
     fetch(`/api/overview?${queryString}`)
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -166,6 +169,35 @@ export default function Overview() {
       .then(d => setSummaries(d))
       .catch(() => null);
   }, [queryString, refreshTick]);
+
+  const handleLiveUpdate = useCallback(() => {
+    const since = lastFetchTsRef.current - 5_000;
+    lastFetchTsRef.current = Date.now();
+    fetch(`/api/overview?since=${since}`)
+      .then(r => r.json() as Promise<ServiceWithHistory[]>)
+      .then(delta => {
+        const deltaData = delta.map(svc => ({
+          ...svc,
+          history: svc.history.map(fn => parseFilename(fn) ?? { filename: fn + '.json', overallStatus: 200 as const }),
+        }));
+        setData(prev => prev.map(existing => {
+          const dSvc = deltaData.find(d => d.name === existing.name);
+          if (!dSvc || dSvc.history.length === 0) return existing;
+          const knownNames = new Set(existing.history.map(f => f.filename));
+          const newFiles = dSvc.history.filter(f => !knownNames.has(f.filename));
+          if (newFiles.length === 0) return existing;
+          return { ...existing, history: [...newFiles, ...existing.history] };
+        }));
+        setLastRefresh(new Date());
+      })
+      .catch(() => null);
+    fetch(`/api/service-summary?${queryString}`)
+      .then(r => r.json() as Promise<ServiceSummary[]>)
+      .then(d => setSummaries(d))
+      .catch(() => null);
+  }, [queryString]);
+
+  useLiveEvents(null, handleLiveUpdate);
 
   async function runSync() {
     setSyncing(true);
