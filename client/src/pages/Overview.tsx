@@ -117,6 +117,10 @@ export default function Overview() {
   const [syncing, setSyncing] = useState(false);
   const [serverCity, setServerCity] = useState<string>('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'failed' | 'partial' | null>(() => {
+    const s = new URLSearchParams(window.location.search).get('status');
+    return s === 'failed' ? 'failed' : s === 'partial' ? 'partial' : null;
+  });
   const [landscapes, setLandscapes] = useState<LandscapeConfig[]>([]);
   const [sites, setSites] = useState<SiteConfig[]>([]);
   const [activeLandscape, setActiveLandscape] = useState<string>(() => {
@@ -209,6 +213,15 @@ export default function Overview() {
     }
   }
 
+  function applyStatusFilter(next: 'failed' | 'partial' | null) {
+    setStatusFilter(next);
+    const sp = new URLSearchParams(window.location.search);
+    if (next) sp.set('status', next);
+    else sp.delete('status');
+    const qs = sp.toString();
+    navigate(window.location.pathname + (qs ? `?${qs}` : ''), { replace: true });
+  }
+
   async function runAllTests() {
     setTestingAll(true);
     try {
@@ -264,6 +277,22 @@ export default function Overview() {
     }
     return map;
   }, [summaryMap, data]);
+
+  const filteredData = useMemo(() => {
+    if (!statusFilter) return data;
+    const matchStatus = statusFilter === 'failed'
+      ? (s: number) => s === 500 || s === 503 || s === 504
+      : (s: number) => s === 400;
+    return data.filter(svc =>
+      svc.endpoints.some((ep, ei) => {
+        const epSlug = slugify(ep.name ?? '');
+        return svc.history.some(f =>
+          (f.endpointSlug !== undefined ? f.endpointSlug === epSlug : f.endpointIndex === ei) &&
+          matchStatus(f.overallStatus)
+        );
+      })
+    );
+  }, [data, statusFilter]);
 
   // Per-landscape availability badge
   function landscapeBadgeProps(landscapeName: string) {
@@ -351,27 +380,6 @@ export default function Overview() {
             >
               {healthyServices}/{totalServices} healthy
             </Badge>
-            {(!auth.enabled || auth.loggedIn) && (
-              <button
-                onClick={() => void runAllTests()}
-                disabled={testingAll || data.length === 0}
-                className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 text-xs"
-                title="Run health checks for all services"
-              >
-                <Zap className={`h-4 w-4 ${testingAll ? 'animate-pulse text-yellow-400' : ''}`} />
-                {testingAll ? 'Running…' : 'Test all'}
-              </button>
-            )}
-            {syncAvailable && (!auth.enabled || auth.loggedIn) && (
-              <button
-                onClick={() => void runSync()}
-                disabled={syncing}
-                className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
-                title="Sync response files from remote"
-              >
-                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin text-blue-400' : ''}`} />
-              </button>
-            )}
             <Select
               value={range.mode === 'dateRange' ? '' : String(range.hours)}
               onValueChange={v => {
@@ -393,6 +401,27 @@ export default function Overview() {
                 ))}
               </SelectContent>
             </Select>
+            {(!auth.enabled || auth.loggedIn) && (
+              <button
+                onClick={() => void runAllTests()}
+                disabled={testingAll || data.length === 0}
+                className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 text-xs"
+                title="Run health checks for all services"
+              >
+                <Zap className={`h-4 w-4 ${testingAll ? 'animate-pulse text-yellow-400' : ''}`} />
+                {testingAll ? 'Running…' : 'Test all'}
+              </button>
+            )}
+            {syncAvailable && (!auth.enabled || auth.loggedIn) && (
+              <button
+                onClick={() => void runSync()}
+                disabled={syncing}
+                className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Sync response files from remote"
+              >
+                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin text-blue-400' : ''}`} />
+              </button>
+            )}
             <button
               onClick={toggleTheme}
               className="text-muted-foreground hover:text-foreground"
@@ -511,30 +540,46 @@ export default function Overview() {
                 <div className="text-xs text-muted-foreground mt-1">Overall Uptime</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card
+              className={`transition-colors${failedChecks > 0 ? ' cursor-pointer hover:bg-muted/50' : ''}${statusFilter === 'failed' ? ' ring-1 ring-red-500/60' : ''}`}
+              onClick={failedChecks > 0 ? () => applyStatusFilter(statusFilter === 'failed' ? null : 'failed') : undefined}
+              title={failedChecks > 0 ? (statusFilter === 'failed' ? 'Clear filter' : 'Show completely failed only') : undefined}
+            >
               <CardContent className="pt-4">
                 <div className={`text-base sm:text-2xl font-bold ${failedChecks > 0 ? 'text-red-500' : ''}`}>{failedChecks}</div>
                 <div className="text-xs text-muted-foreground mt-1">Completely Failed</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card
+              className={`transition-colors${partiallyFailedChecks > 0 ? ' cursor-pointer hover:bg-muted/50' : ''}${statusFilter === 'partial' ? ' ring-1 ring-orange-500/60' : ''}`}
+              onClick={partiallyFailedChecks > 0 ? () => applyStatusFilter(statusFilter === 'partial' ? null : 'partial') : undefined}
+              title={partiallyFailedChecks > 0 ? (statusFilter === 'partial' ? 'Clear filter' : 'Show partially failed only') : undefined}
+            >
               <CardContent className="pt-4">
                 <div className={`text-base sm:text-2xl font-bold ${partiallyFailedChecks > 0 ? 'text-orange-400' : ''}`}>{partiallyFailedChecks}</div>
                 <div className="text-xs text-muted-foreground mt-1">Partially Failed</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card
+              className={`transition-colors${statusFilter ? ' cursor-pointer hover:bg-muted/50' : ''}`}
+              onClick={statusFilter ? () => applyStatusFilter(null) : undefined}
+              title={statusFilter ? 'Clear status filter' : undefined}
+            >
               <CardContent className="pt-4">
                 <div className="text-base sm:text-2xl font-bold">{totalChecks}</div>
                 <div className="text-xs text-muted-foreground mt-1">Total Checks</div>
               </CardContent>
             </Card>
-            <Card className="col-span-2 sm:col-span-1">
+            <Card
+              className={`col-span-2 sm:col-span-1${(!auth.enabled || auth.loggedIn) ? ' cursor-pointer hover:bg-muted/50 transition-colors' : ''}`}
+              onClick={(!auth.enabled || auth.loggedIn) ? () => void runSync() : undefined}
+              title={(!auth.enabled || auth.loggedIn) ? 'Click to sync' : undefined}
+            >
               <CardContent className="pt-4">
-                <div className="text-base sm:text-2xl font-bold tabular-nums">
+                <div className={`text-base sm:text-2xl font-bold tabular-nums${syncing ? ' opacity-50' : ''}`}>
                   {lastRefresh.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
                 </div>
-                <div className="text-xs text-muted-foreground mt-1">Last Checked</div>
+                <div className="text-xs text-muted-foreground mt-1">{syncing ? 'Syncing…' : 'Last Checked'}</div>
               </CardContent>
             </Card>
           </div>
@@ -598,7 +643,7 @@ export default function Overview() {
         )}
 
         {/* Per-service cards */}
-        {data.map(svc => {
+        {filteredData.map(svc => {
           const rs = summaryMap[svc.name] ?? null;
           return (
             <Card key={svc.name}>
@@ -648,6 +693,8 @@ export default function Overview() {
                       const epFiles = svc.history.filter(f =>
                         f.endpointSlug !== undefined ? f.endpointSlug === epSlug : f.endpointIndex === ei,
                       );
+                      if (statusFilter === 'failed' && !epFiles.some(f => f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504)) return null;
+                      if (statusFilter === 'partial' && !epFiles.some(f => f.overallStatus === 400)) return null;
                       const epUptime = getUptimePct(epFiles);
                       const epNodeSt = getEndpointNodeStatus(epFiles);
                       const badgeCls = epFiles.length === 0 ? 'text-muted-foreground border-border' :

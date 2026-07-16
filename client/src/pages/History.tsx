@@ -507,17 +507,6 @@ export default function History() {
               </span>
             )}
 
-            {(!auth.enabled || auth.loggedIn) && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 gap-1.5 text-xs"
-                onClick={() => setTestOpen(true)}
-              >
-                <PlayCircle className="h-3.5 w-3.5" />
-                Run Test
-              </Button>
-            )}
             <Select
               value={range.mode === 'dateRange' ? '' : String(range.hours)}
               onValueChange={v => {
@@ -539,6 +528,17 @@ export default function History() {
                 ))}
               </SelectContent>
             </Select>
+            {(!auth.enabled || auth.loggedIn) && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5 text-xs"
+                onClick={() => setTestOpen(true)}
+              >
+                <PlayCircle className="h-3.5 w-3.5" />
+                Run Test
+              </Button>
+            )}
             {syncAvailable && (!auth.enabled || auth.loggedIn) && (
               <button
                 onClick={() => void runSync()}
@@ -687,50 +687,46 @@ export default function History() {
               <div className="text-xs text-muted-foreground mt-1">Uptime</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card
+            className={`transition-colors${failedCount > 0 ? ' cursor-pointer hover:bg-muted/50' : ''}${filterStatus === 'failed' ? ' ring-1 ring-red-500/60' : ''}`}
+            onClick={failedCount > 0 ? () => { const next = filterStatus === 'failed' ? 'all' : 'failed'; setFilterStatus(next); setSearchParam({ status: next === 'all' ? null : next }); } : undefined}
+            title={failedCount > 0 ? (filterStatus === 'failed' ? 'Clear filter' : 'Show completely failed checks') : undefined}
+          >
             <CardContent className="pt-4">
-              <button
-                className={`text-base sm:text-2xl font-bold hover:opacity-70 transition-opacity disabled:opacity-40 disabled:cursor-default ${failedCount > 0 ? 'text-red-500' : ''}`}
-                onClick={() => { setFilterStatus('failed'); setSearchParam({ status: 'failed' }); }}
-                disabled={failedCount === 0}
-                title={failedCount > 0 ? 'Show completely failed checks' : undefined}
-              >
-                {failedCount}
-              </button>
+              <div className={`text-base sm:text-2xl font-bold ${failedCount > 0 ? 'text-red-500' : ''}`}>{failedCount}</div>
               <div className="text-xs text-muted-foreground mt-1">Completely Failed</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card
+            className={`transition-colors${partiallyFailedCount > 0 ? ' cursor-pointer hover:bg-muted/50' : ''}${filterStatus === 'partial' ? ' ring-1 ring-orange-500/60' : ''}`}
+            onClick={partiallyFailedCount > 0 ? () => { const next = filterStatus === 'partial' ? 'all' : 'partial'; setFilterStatus(next); setSearchParam({ status: next === 'all' ? null : next }); } : undefined}
+            title={partiallyFailedCount > 0 ? (filterStatus === 'partial' ? 'Clear filter' : 'Show partially failed checks (initial failed, retry succeeded)') : undefined}
+          >
             <CardContent className="pt-4">
-              <button
-                className={`text-base sm:text-2xl font-bold hover:opacity-70 transition-opacity disabled:opacity-40 disabled:cursor-default ${partiallyFailedCount > 0 ? 'text-orange-400' : ''}`}
-                onClick={() => { setFilterStatus('partial'); setSearchParam({ status: 'partial' }); }}
-                disabled={partiallyFailedCount === 0}
-                title={partiallyFailedCount > 0 ? 'Show partially failed checks (initial failed, retry succeeded)' : undefined}
-              >
-                {partiallyFailedCount}
-              </button>
+              <div className={`text-base sm:text-2xl font-bold ${partiallyFailedCount > 0 ? 'text-orange-400' : ''}`}>{partiallyFailedCount}</div>
               <div className="text-xs text-muted-foreground mt-1">Partially Failed</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card
+            className="cursor-pointer hover:bg-muted/50 transition-colors"
+            onClick={clearFilters}
+            title="Clear all filters"
+          >
             <CardContent className="pt-4">
-              <button
-                className="text-base sm:text-2xl font-bold hover:opacity-70 transition-opacity"
-                onClick={clearFilters}
-                title="Clear all filters"
-              >
-                {files.length}
-              </button>
+              <div className="text-base sm:text-2xl font-bold">{files.length}</div>
               <div className="text-xs text-muted-foreground mt-1">Total Checks</div>
             </CardContent>
           </Card>
-          <Card className="col-span-2 sm:col-span-1">
+          <Card
+            className={`col-span-2 sm:col-span-1${(!auth.enabled || auth.loggedIn) ? ' cursor-pointer hover:bg-muted/50 transition-colors' : ''}`}
+            onClick={(!auth.enabled || auth.loggedIn) ? () => void runSync() : undefined}
+            title={(!auth.enabled || auth.loggedIn) ? 'Click to sync' : undefined}
+          >
             <CardContent className="pt-4">
-              <div className="text-base sm:text-2xl font-bold tabular-nums">
+              <div className={`text-base sm:text-2xl font-bold tabular-nums${syncing ? ' opacity-50' : ''}`}>
                 {lastChecked.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
               </div>
-              <div className="text-xs text-muted-foreground mt-1">Last Checked</div>
+              <div className="text-xs text-muted-foreground mt-1">{syncing ? 'Syncing…' : 'Last Checked'}</div>
             </CardContent>
           </Card>
         </div>
