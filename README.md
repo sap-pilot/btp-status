@@ -534,7 +534,10 @@ Only one download runs at a time. A second trigger that arrives while a download
 
 ### Sync Key (optional)
 
-To prevent unauthenticated access to the sync endpoints (`/api/browse`, `/api/download`, `/api/batch-download`, `/api/download-trigger`), set a shared secret on **both** instances:
+> [!WARNING]
+> Configuring `SYNC_KEY` is strongly recommended whenever two instances are deployed. Without it, `/api/browse`, `/api/download`, `/api/batch-download`, and `/api/download-trigger` are open to any caller who can reach the app. If `SYNC_KEY` is set to an empty string (either in the `SYNC_KEY` environment variable or in `config.json → variables`), the key is treated as absent and the endpoints remain unprotected.
+
+To authenticate sync requests between instances, set a shared secret on **both** the producer and consumer:
 
 ```jsonc
 // config.json
@@ -551,11 +554,17 @@ Or via environment variable (takes precedence over `config.json`):
 SYNC_KEY=your-secret-sync-key npm start
 ```
 
+The key is **never transmitted in plaintext**. Instead, every sync request carries two headers:
+- `x-sync-ts` — the sender's current Unix timestamp in seconds
+- `x-sync-sig` — `HMAC-SHA256(timestamp, SYNC_KEY)` as a hex digest
+
+The server verifies the signature with `timingSafeEqual` and rejects requests whose timestamp falls outside a ±5-minute window, preventing replay attacks.
+
 When a sync key is configured:
-- `GET /api/browse`, `GET /api/download`, `POST /api/batch-download`, and `GET /api/download-trigger` all require either a matching `x-sync-key` request header **or** a valid XSUAA session cookie
-- The sync client automatically includes `x-sync-key` in all requests to the remote (browse, download, and callback notifications)
-- If the remote rejects the key with `401`, the entire sync is aborted immediately with an explanatory error
-- Requests with neither a valid key nor a session receive `401 Unauthorized`
+- `GET /api/browse`, `GET /api/download`, `POST /api/batch-download`, and `GET /api/download-trigger` all require either valid HMAC signature headers **or** a valid XSUAA session cookie
+- The sync client automatically signs all requests to the remote (browse, download, and callback notifications)
+- If the remote rejects the signature with `401`, the entire sync is aborted immediately with an explanatory error
+- Requests with neither a valid signature nor a session receive `401 Unauthorized`
 - Requests from loopback (`127.0.0.1`, `::1`) are always allowed for local development
 
 Both instances must use the same key. If XSUAA is configured, authenticated browser users can also access the sync endpoints without a key.
