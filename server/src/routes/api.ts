@@ -89,12 +89,8 @@ router.get('/overview', async (req, res, next) => {
     const result = await Promise.all(
       services.map(async s => {
         const history = await listResponseFiles(s.name, range);
-        // Strip credentials and browser-check config from endpoints
-        const safeEndpoints = s.endpoints.map(ep => {
-          const { username, password, waitForSelector, timeout, ...safe } = ep;
-          void username; void password; void waitForSelector; void timeout;
-          return safe;
-        });
+        // Overview only needs name + url for display and linking
+        const safeEndpoints = s.endpoints.map(ep => ({ name: ep.name, url: ep.url }));
         // Filenames without .json — all fields (timestamp, status, city, responseTime) are parsed client-side
         const safeHistory = history.map(f => f.filename.replace(/\.json$/, ''));
         return { ...s, endpoints: safeEndpoints, history: safeHistory };
