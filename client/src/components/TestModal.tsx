@@ -168,24 +168,33 @@ export default function TestModal({ serviceName, open, onClose, onComplete }: Pr
           </DialogTitle>
         </DialogHeader>
 
-        {/* URL + action buttons */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="font-mono text-xs text-muted-foreground bg-muted rounded px-2 py-1.5 truncate flex-1 min-w-0">
-            {healthUrl}
-          </span>
-          <Button size="sm" variant="outline" onClick={copyUrl} className="gap-1.5 flex-shrink-0">
-            {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
-            {copied ? 'Copied!' : 'Copy URL'}
-          </Button>
-          <Button size="sm" onClick={runTest} disabled={running} className="gap-1.5 flex-shrink-0">
-            {running ? (
-              <><RotateCw className="h-3.5 w-3.5 animate-spin" />Running…</>
-            ) : result ? (
-              <><RotateCw className="h-3.5 w-3.5" />Run Again</>
-            ) : (
-              <><PlayCircle className="h-3.5 w-3.5" />Run Test</>
-            )}
-          </Button>
+        {/* Latest check URL + action buttons */}
+        <div className="flex-shrink-0 space-y-1">
+          <div className="flex items-center gap-1">
+            <span className="text-xs font-medium text-muted-foreground">Latest check</span>
+            <span
+              className="text-xs text-muted-foreground cursor-help"
+              title="Call this URL to see the latest endpoint check result from the same region. Returns 200 OK, 200 Partially OK (initial failed but retry succeeded), or 500 service down. Designed for Traffic Manager probes — fast response, no live check."
+            >ⓘ</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs text-muted-foreground bg-muted rounded px-2 py-1.5 truncate flex-1 min-w-0">
+              {healthUrl}
+            </span>
+            <Button size="sm" variant="outline" onClick={copyUrl} className="gap-1.5 flex-shrink-0">
+              {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? 'Copied!' : 'Copy URL'}
+            </Button>
+            <Button size="sm" onClick={runTest} disabled={running} className="gap-1.5 flex-shrink-0">
+              {running ? (
+                <><RotateCw className="h-3.5 w-3.5 animate-spin" />Running…</>
+              ) : result ? (
+                <><RotateCw className="h-3.5 w-3.5" />Run Again</>
+              ) : (
+                <><PlayCircle className="h-3.5 w-3.5" />Run Test</>
+              )}
+            </Button>
+          </div>
         </div>
 
         {error && (
