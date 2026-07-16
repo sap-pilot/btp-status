@@ -341,9 +341,6 @@ export default function Overview() {
           </div>
           {/* Desktop controls */}
           <div className="hidden sm:flex items-center gap-3">
-            <span className="text-xs text-muted-foreground">
-              Refreshed {lastRefresh.toLocaleTimeString()}
-            </span>
             <Badge
               variant={anyCurrentlyFailing ? 'destructive' : 'outline'}
               className={
@@ -419,7 +416,6 @@ export default function Overview() {
           <div className="sm:hidden border-t border-border bg-background">
             <div className="max-w-7xl mx-auto px-4 py-3 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Refreshed {lastRefresh.toLocaleTimeString()}</span>
                 <Badge
                   variant={anyCurrentlyFailing ? 'destructive' : 'outline'}
                   className={
@@ -508,7 +504,7 @@ export default function Overview() {
 
         {/* Aggregate stats */}
         {data.length > 0 && (
-          <div className="stat-grid grid grid-cols-4 gap-3 sm:gap-4">
+          <div className="stat-grid grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
             <Card>
               <CardContent className="pt-4">
                 <div className={`text-base sm:text-2xl font-bold ${overallUptimeColor}`}>{fmtUptime(overallUptime)}</div>
@@ -531,6 +527,14 @@ export default function Overview() {
               <CardContent className="pt-4">
                 <div className="text-base sm:text-2xl font-bold">{totalChecks}</div>
                 <div className="text-xs text-muted-foreground mt-1">Total Checks</div>
+              </CardContent>
+            </Card>
+            <Card className="col-span-2 sm:col-span-1">
+              <CardContent className="pt-4">
+                <div className="text-base sm:text-2xl font-bold tabular-nums">
+                  {lastRefresh.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">Last Checked</div>
               </CardContent>
             </Card>
           </div>
