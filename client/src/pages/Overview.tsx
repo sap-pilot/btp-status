@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { Fragment, lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { parseFilename } from '@/lib/parseFilename';
 import { Link, useNavigate } from 'react-router-dom';
 import type { ServiceWithHistory, HistoryFile, LandscapeConfig, ServiceSummary, SiteConfig } from '@shared/types';
@@ -8,7 +8,7 @@ const LandscapeDiagram = lazy(() => import('@/components/LandscapeDiagram'));
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { AlertCircle, ChevronDown, Menu, RefreshCw, Sun, Moon, ExternalLink, X, Zap } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
@@ -30,10 +30,6 @@ const HOUR_OPTIONS = [
 
 function tsOf(f: HistoryFile): number {
   return f.timestamp ?? parseFilename(f.filename)?.timestamp ?? 0;
-}
-
-function rtOf(f: HistoryFile): number {
-  return f.responseTime ?? parseFilename(f.filename)?.responseTime ?? 0;
 }
 
 function slugify(s: string): string {
@@ -214,7 +210,6 @@ export default function Overview() {
   const totalChecks = allFiles.length;
   const failedChecks = allFiles.filter(f => f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504).length;
   const partiallyFailedChecks = allFiles.filter(f => f.overallStatus === 400).length;
-  const totalEndpoints = data.reduce((sum, s) => sum + s.endpoints.length, 0);
   // Use combined per-run history so multi-endpoint services don't dilute the uptime %
   const allCombinedRuns = data.flatMap(s => getServiceOverallHistory(s));
   const overallUptime = allCombinedRuns.length > 0
@@ -485,7 +480,7 @@ export default function Overview() {
 
         {/* Aggregate stats */}
         {data.length > 0 && (
-          <div className="stat-grid grid grid-cols-5 gap-3 sm:gap-4">
+          <div className="stat-grid grid grid-cols-4 gap-3 sm:gap-4">
             <Card>
               <CardContent className="pt-4">
                 <div className={`text-base sm:text-2xl font-bold ${overallUptimeColor}`}>{fmtUptime(overallUptime)}</div>
@@ -508,61 +503,6 @@ export default function Overview() {
               <CardContent className="pt-4">
                 <div className="text-base sm:text-2xl font-bold">{totalChecks}</div>
                 <div className="text-xs text-muted-foreground mt-1">Total Checks</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-4">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button className="text-base sm:text-2xl font-bold flex items-center gap-0.5 hover:opacity-70 transition-opacity">
-                      {totalEndpoints}
-                      <ChevronDown className="h-4 w-4 sm:h-5 sm:w-5 mt-0.5" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto min-w-[14rem]">
-                    {data.map((svc, si) => (
-                      <div key={si}>
-                        {si > 0 && <DropdownMenuSeparator />}
-                        <DropdownMenuLabel className="text-xs text-muted-foreground px-2 py-1">
-                          {svc.name}
-                        </DropdownMenuLabel>
-                        {svc.endpoints.map((ep, ei) => {
-                          const slug = slugify(ep.name ?? '');
-                          const epFiles = svc.history.filter(f => f.endpointSlug === slug && f.overallStatus !== 504);
-                          const avg = epFiles.length > 0
-                            ? Math.round(epFiles.reduce((sum, f) => sum + rtOf(f), 0) / epFiles.length)
-                            : null;
-                          return (
-                            <DropdownMenuItem
-                              key={ei}
-                              className="flex items-center justify-between gap-2 pr-1 cursor-pointer"
-                              onSelect={() => navigate(`/service/${encodeURIComponent(svc.name)}?endpoint=${encodeURIComponent(ep.name ?? ep.url)}`)}
-                            >
-                              <span className="truncate flex-1">{ep.name ?? ep.url}</span>
-                              <div className="flex items-center gap-1.5 flex-shrink-0">
-                                <span className="text-xs text-muted-foreground">{avg != null ? `${avg}ms` : '—'}</span>
-                                {ep.url.startsWith('http') && (
-                                  <a
-                                    href={ep.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-muted-foreground hover:text-foreground"
-                                    onClick={e => e.stopPropagation()}
-                                    onPointerDown={e => e.stopPropagation()}
-                                    onPointerUp={e => e.stopPropagation()}
-                                  >
-                                    <ExternalLink className="h-3 w-3" />
-                                  </a>
-                                )}
-                              </div>
-                            </DropdownMenuItem>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <div className="text-xs text-muted-foreground mt-1">Endpoints</div>
               </CardContent>
             </Card>
           </div>
@@ -644,125 +584,105 @@ export default function Overview() {
                 )}
                 <tbody>
                   {services.map(svc => {
-                    const combined = getServiceOverallHistory(svc);
-                    const uptime = getUptimePct(combined);
-                    const lastMs = combined[0] ? rtOf(combined[0]) : null;
-                    const timedCombined = combined.filter(h => h.overallStatus !== 504);
-                    const avgMs = timedCombined.length > 0
-                      ? Math.round(timedCombined.reduce((s, h) => s + rtOf(h), 0) / timedCombined.length)
-                      : null;
                     const rs = summaryMap[svc.name] ?? null;
-
                     return (
-                      <tr
-                        key={svc.name}
-                        className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
-                      >
-                        {/* Service name — fixed width so all timelines start at the same X */}
-                        <td className="px-4 py-3 align-middle">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                rs === 'ok' ? 'bg-green-500' :
-                                rs === 'warning' ? 'bg-amber-400' :
-                                rs === 'error' ? 'bg-red-500' :
-                                'bg-gray-500'
-                              }`}
-                            />
-                            <Link
-                              to={`/service/${encodeURIComponent(svc.name)}`}
-                              className="text-sm font-medium hover:text-primary transition-colors truncate"
-                            >
-                              {svc.name}
-                            </Link>
-                            {svc.homepage && (
-                              <a
-                                href={svc.homepage}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title={`Open ${svc.name} homepage`}
-                                className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-                                onClick={e => e.stopPropagation()}
+                      <Fragment key={svc.name}>
+                        {/* Service group header */}
+                        <tr className="bg-muted/30 border-b border-border">
+                          <td colSpan={99} className="px-4 py-2">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                  rs === 'ok' ? 'bg-green-500' :
+                                  rs === 'warning' ? 'bg-amber-400' :
+                                  rs === 'error' ? 'bg-red-500' :
+                                  'bg-gray-500'
+                                }`}
+                              />
+                              <Link
+                                to={`/service/${encodeURIComponent(svc.name)}`}
+                                className="text-sm font-medium hover:text-primary transition-colors truncate"
                               >
-                                <ExternalLink className="h-3.5 w-3.5" />
-                              </a>
-                            )}
-                          </div>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <button className="text-xs text-muted-foreground pl-4 mt-0.5 flex items-center gap-0.5 hover:text-foreground transition-colors">
-                                {svc.endpoints.length} endpoint{svc.endpoints.length !== 1 ? 's' : ''}
-                                <ChevronDown className="h-3 w-3" />
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                              {svc.endpoints.map((ep, ei) => (
-                                <DropdownMenuItem
-                                  key={ei}
-                                  className="flex items-center justify-between gap-2 pr-1 cursor-pointer"
-                                  onSelect={() => navigate(`/service/${encodeURIComponent(svc.name)}?endpoint=${encodeURIComponent(ep.name ?? ep.url)}`)}
+                                {svc.name}
+                              </Link>
+                              {svc.homepage && (
+                                <a
+                                  href={svc.homepage}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title={`Open ${svc.name} homepage`}
+                                  className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
                                 >
-                                  <span className="truncate">{ep.name ?? ep.url}</span>
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </a>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                        {/* One row per endpoint */}
+                        {svc.endpoints.map((ep, ei) => {
+                          const epSlug = slugify(ep.name ?? '');
+                          const epFiles = svc.history.filter(f =>
+                            f.endpointSlug !== undefined ? f.endpointSlug === epSlug : f.endpointIndex === ei,
+                          );
+                          const epUptime = getUptimePct(epFiles);
+                          const epNodeSt = getEndpointNodeStatus(epFiles);
+                          const badgeCls = epFiles.length === 0 ? 'text-muted-foreground border-border' :
+                            epNodeSt === 'error' ? 'border-red-600 text-red-400' :
+                            epUptime < 100 ? 'border-yellow-600 text-yellow-400' :
+                            'border-green-600 text-green-400';
+                          return (
+                            <tr
+                              key={ei}
+                              className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
+                            >
+                              <td className="pl-7 pr-2 py-2 align-middle">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <Link
+                                    to={`/service/${encodeURIComponent(svc.name)}?endpoint=${encodeURIComponent(ep.name ?? ep.url)}`}
+                                    className="text-xs hover:underline truncate"
+                                  >
+                                    {ep.name ?? ep.url}
+                                  </Link>
                                   {ep.url.startsWith('http') && (
                                     <a
                                       href={ep.url}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="flex-shrink-0 text-muted-foreground hover:text-foreground"
+                                      title={ep.url}
                                       onClick={e => e.stopPropagation()}
-                                      onPointerDown={e => e.stopPropagation()}
-                                      onPointerUp={e => e.stopPropagation()}
                                     >
                                       <ExternalLink className="h-3 w-3" />
                                     </a>
                                   )}
-                                </DropdownMenuItem>
-                              ))}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </td>
-
-                        {/* Timeline — hidden on mobile */}
-                        {!isMobile && (
-                          <td className="px-0 py-3 align-middle">
-                            <StatusDots
-                              history={combined}
-                              maxDots={maxDots}
-                              showUptime={false}
-                              showAvg={false}
-                              onDotClick={file => navigate(
-                                `/service/${encodeURIComponent(svc.name)}`,
-                                { state: { autoOpenFilename: file.filename } },
+                                </div>
+                              </td>
+                              {!isMobile && (
+                                <td className="px-0 py-2 align-middle">
+                                  <StatusDots
+                                    history={epFiles}
+                                    maxDots={maxDots}
+                                    showUptime={false}
+                                    showAvg={false}
+                                    onDotClick={file => navigate(
+                                      `/service/${encodeURIComponent(svc.name)}`,
+                                      { state: { autoOpenFilename: file.filename } },
+                                    )}
+                                  />
+                                </td>
                               )}
-                            />
-                          </td>
-                        )}
-
-                        {/* Stats — fixed width, badge + avg/latest stacked */}
-                        <td className="px-2 py-3 align-middle">
-                          <div className="flex flex-col items-end gap-1">
-                            <Badge
-                              variant="outline"
-                              className={`text-xs ${
-                                combined.length === 0
-                                  ? 'text-muted-foreground'
-                                  : rs === 'error'
-                                  ? 'border-red-600 text-red-400'
-                                  : uptime < 100
-                                  ? 'border-yellow-600 text-yellow-400'
-                                  : 'border-green-600 text-green-400'
-                              }`}
-                            >
-                              {combined.length > 0 ? `${fmtUptime(uptime)} up` : 'no data'}
-                            </Badge>
-                            {avgMs != null && lastMs != null && (
-                              <span className="text-xs text-muted-foreground whitespace-nowrap" title="average / latest response time (ms)">
-                                {avgMs}/{lastMs}ms
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
+                              <td className="px-2 py-2 align-middle">
+                                <div className="flex justify-end">
+                                  <Badge variant="outline" className={`text-xs ${badgeCls}`}>
+                                    {epFiles.length > 0 ? `${fmtUptime(epUptime)} up` : 'no data'}
+                                  </Badge>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </Fragment>
                     );
                   })}
                 </tbody>

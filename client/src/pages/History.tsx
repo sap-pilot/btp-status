@@ -89,7 +89,7 @@ export default function History() {
     ? 'Condition and schedule change are available for BTP_Status_Admin only; Contact security to get this role collection assigned to enable them'
     : undefined;
   const windowWidth = useWindowWidth();
-  const dotAreaWidth = Math.min(windowWidth, 1024) - 140;
+  const dotAreaWidth = Math.min(windowWidth, 1024) - 140 - 90;
   const maxDots = Math.max(8, Math.floor(dotAreaWidth / 12));
   const isMobile = windowWidth < 640;
 
@@ -269,23 +269,6 @@ export default function History() {
     f => Math.floor((f.timestamp ?? 0) / 1000) === Math.floor(latestTs / 1000) && (f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504),
   );
   const uptimeColor = files.length === 0 ? 'text-muted-foreground' : latestFailed ? 'text-red-500' : uptime < 100 ? 'text-yellow-500' : 'text-green-500';
-  const timedFiles = files.filter(f => f.overallStatus !== 504);
-  const avgMs =
-    timedFiles.length > 0
-      ? Math.round(timedFiles.reduce((s, f) => s + (f.responseTime ?? 0), 0) / timedFiles.length)
-      : 0;
-
-  const epStats = useMemo(() => {
-    const eps = service?.endpoints ?? [];
-    return eps.map(ep => {
-      const slug = (ep.name ?? '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'endpoint';
-      const epFiles = timedFiles.filter(f => f.endpointSlug === slug);
-      const avg = epFiles.length > 0
-        ? Math.round(epFiles.reduce((s, f) => s + (f.responseTime ?? 0), 0) / epFiles.length)
-        : null;
-      return { name: ep.name ?? 'endpoint', url: ep.url, avg };
-    });
-  }, [service, timedFiles]);
 
   const endpointLabel = (f: HistoryFile): string => {
     if (f.endpointSlug !== undefined) {
@@ -657,7 +640,7 @@ export default function History() {
         )}
 
         {/* Stats */}
-        <div className="stat-grid grid grid-cols-5 gap-3 sm:gap-4">
+        <div className="stat-grid grid grid-cols-4 gap-3 sm:gap-4">
           <Card>
             <CardContent className="pt-4">
               <div className={`text-base sm:text-2xl font-bold ${uptimeColor}`}>{fmtUptime(uptime)}</div>
@@ -702,55 +685,9 @@ export default function History() {
               <div className="text-xs text-muted-foreground mt-1">Total Checks</div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="pt-4">
-              {epStats.length > 0 ? (
-                <>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="text-xs text-muted-foreground">Endpoints</div>
-                    <div className="text-xs text-muted-foreground" title="Average Response Time">ART</div>
-                  </div>
-                  <div className="space-y-1 max-h-20 overflow-y-auto">
-                    {epStats.map((ep, i) => (
-                      <div key={i} className="flex items-center justify-between gap-1 min-w-0">
-                        <div className="flex items-center gap-0.5 min-w-0 flex-1">
-                          <button
-                            className={`text-xs hover:underline truncate text-left ${filterEndpoint === ep.name ? 'font-bold text-foreground' : 'text-foreground'}`}
-                            title={`Filter by ${ep.name}`}
-                            onClick={() => { setFilterEndpoint(ep.name); setSearchParam({ endpoint: ep.name }); }}
-                          >
-                            {ep.name}
-                          </button>
-                          {ep.url.startsWith('http') && (
-                            <a
-                              href={ep.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex-shrink-0 text-muted-foreground hover:text-foreground"
-                              title={ep.url}
-                            >
-                              <ExternalLink className="h-2.5 w-2.5" />
-                            </a>
-                          )}
-                        </div>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0 ml-1">
-                          {ep.avg != null ? `${ep.avg}ms` : '—'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="text-base sm:text-2xl font-bold">{avgMs > 0 ? `${avgMs}ms` : '—'}</div>
-                  <div className="text-xs text-muted-foreground mt-1" title="Average Response Time">ART</div>
-                </>
-              )}
-            </CardContent>
-          </Card>
         </div>
 
-        {/* Timeline card */}
+        {/* Timeline card — per-endpoint rows */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -758,7 +695,70 @@ export default function History() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <StatusDots history={files} maxDots={maxDots} showAvg={false} onDotClick={f => openFile(f)} />
+            {service ? (
+              <table className="w-full table-fixed">
+                <colgroup>
+                  <col className="w-[140px]" />
+                  <col />
+                  <col className="w-[90px]" />
+                </colgroup>
+                <tbody>
+                  {service.endpoints.map((ep, ei) => {
+                    const slug = (ep.name ?? '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'endpoint';
+                    const epFiles = files.filter(f =>
+                      f.endpointSlug !== undefined ? f.endpointSlug === slug : f.endpointIndex === ei,
+                    );
+                    const upCount = epFiles.filter(f => f.overallStatus === 200 || f.overallStatus === 203).length;
+                    const epUptime = epFiles.length > 0 ? (upCount / epFiles.length) * 100 : 100;
+                    const lastEpTs = epFiles.reduce((max, f) => Math.max(max, f.timestamp ?? 0), 0);
+                    const lastEpFailed = epFiles.some(
+                      f => Math.floor((f.timestamp ?? 0) / 1000) === Math.floor(lastEpTs / 1000) &&
+                           (f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504),
+                    );
+                    const epBadgeCls = epFiles.length === 0 ? 'text-muted-foreground border-border' :
+                      lastEpFailed ? 'border-red-600 text-red-400' :
+                      epUptime < 100 ? 'border-yellow-600 text-yellow-400' :
+                      'border-green-600 text-green-400';
+                    return (
+                      <tr key={ei} className="border-b border-border last:border-0">
+                        <td className="py-2 pr-3 align-middle">
+                          <div className="flex items-center gap-1 min-w-0">
+                            <button
+                              className="text-xs hover:underline truncate text-left flex-1 min-w-0"
+                              title={`Filter by ${ep.name}`}
+                              onClick={() => { setFilterEndpoint(ep.name ?? slug); setSearchParam({ endpoint: ep.name ?? slug }); }}
+                            >
+                              {ep.name ?? ep.url}
+                            </button>
+                            {ep.url.startsWith('http') && (
+                              <a
+                                href={ep.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-shrink-0 text-muted-foreground hover:text-foreground"
+                                title={ep.url}
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-2 px-0 align-middle">
+                          <StatusDots history={epFiles} maxDots={maxDots} showUptime={false} showAvg={false} onDotClick={f => openFile(f)} />
+                        </td>
+                        <td className="py-2 pl-2 align-middle text-right">
+                          <Badge variant="outline" className={`text-xs ${epBadgeCls}`}>
+                            {epFiles.length > 0 ? `${fmtUptime(epUptime)} up` : 'no data'}
+                          </Badge>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <StatusDots history={files} maxDots={maxDots} showUptime={false} showAvg={false} onDotClick={f => openFile(f)} />
+            )}
           </CardContent>
         </Card>
 
