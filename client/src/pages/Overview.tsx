@@ -112,6 +112,7 @@ export default function Overview() {
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [refreshTick, setRefreshTick] = useState(0);
   const lastFetchTsRef = useRef<number>(Date.now());
+  const silentRefreshRef = useRef(false);
   const [testingAll, setTestingAll] = useState(false);
   const [syncAvailable, setSyncAvailable] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -151,7 +152,9 @@ export default function Overview() {
   }, []);
 
   useEffect(() => {
-    setLoading(true);
+    const silent = silentRefreshRef.current;
+    silentRefreshRef.current = false;
+    if (!silent) setLoading(true);
     setError(null);
     lastFetchTsRef.current = Date.now();
     fetch(`/api/overview?${queryString}`)
@@ -209,6 +212,7 @@ export default function Overview() {
       await fetch('/api/sync', { method: 'POST' });
     } finally {
       setSyncing(false);
+      silentRefreshRef.current = true;
       setRefreshTick(t => t + 1);
     }
   }
@@ -328,6 +332,14 @@ export default function Overview() {
 
   function handleSiteSwitch(url: string) {
     if (url && url !== currentSiteUrl) window.location.replace(url);
+  }
+
+  function toServiceUrl(svcName: string, endpoint?: string): string {
+    const params = new URLSearchParams();
+    if (endpoint) params.set('endpoint', endpoint);
+    if (statusFilter) params.set('status', statusFilter);
+    params.set('from', statusFilter ? `/overview?status=${statusFilter}` : '/overview');
+    return `/service/${encodeURIComponent(svcName)}?${params.toString()}`;
   }
 
   return (
@@ -659,7 +671,7 @@ export default function Overview() {
                   />
                   <CardTitle className="text-sm font-medium">
                     <Link
-                      to={`/service/${encodeURIComponent(svc.name)}`}
+                      to={toServiceUrl(svc.name)}
                       className="hover:text-primary transition-colors"
                     >
                       {svc.name}
@@ -709,7 +721,7 @@ export default function Overview() {
                           <td className="px-4 pr-2 py-2 align-middle">
                             <div className="flex items-center gap-1.5 min-w-0">
                               <Link
-                                to={`/service/${encodeURIComponent(svc.name)}?endpoint=${encodeURIComponent(ep.name ?? ep.url)}`}
+                                to={toServiceUrl(svc.name, ep.name ?? ep.url)}
                                 className="text-xs hover:underline truncate"
                               >
                                 {ep.name ?? ep.url}
@@ -736,7 +748,7 @@ export default function Overview() {
                                 showUptime={false}
                                 showAvg={false}
                                 onDotClick={file => navigate(
-                                  `/service/${encodeURIComponent(svc.name)}`,
+                                  toServiceUrl(svc.name),
                                   { state: { autoOpenFilename: file.filename } },
                                 )}
                               />
