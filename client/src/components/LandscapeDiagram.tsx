@@ -28,6 +28,17 @@ interface LandscapeDiagramProps {
 
 let mermaidIdCounter = 0;
 
+/**
+ * Returns true only when nodeId appears in the diagram as a standalone token.
+ * diagramText.includes(name) is insufficient — a service named "us10" would
+ * match inside "wz-us10[...]" as a false positive.
+ * Node-ID characters: alphanumeric, underscore, hyphen, dot (service.endpoint format).
+ */
+function nodeExistsInDiagram(diagram: string, nodeId: string): boolean {
+  const esc = nodeId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![A-Za-z0-9_.\\-])${esc}(?![A-Za-z0-9_.\\-])`).test(diagram);
+}
+
 export default function LandscapeDiagram({
   diagramText,
   serviceStatuses,
@@ -51,11 +62,11 @@ export default function LandscapeDiagram({
         // so we don't pass unknown IDs to Mermaid (dots in IDs can trip up its CSS selector logic).
         const lines = [diagramText.trimEnd()];
         for (const [name, status] of Object.entries(serviceStatuses)) {
-          if (!diagramText.includes(name)) continue;
+          if (!nodeExistsInDiagram(diagramText, name)) continue;
           lines.push(`style ${name} fill:${STATUS_FILL[status]},stroke:${STATUS_STROKE[status]},color:#fff`);
         }
         for (const name of serviceNames) {
-          if (!diagramText.includes(name)) continue;
+          if (!nodeExistsInDiagram(diagramText, name)) continue;
           const dotIdx = name.indexOf('.');
           let href: string;
           if (dotIdx !== -1) {
