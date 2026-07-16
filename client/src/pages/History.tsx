@@ -262,6 +262,7 @@ export default function History() {
 
   const upCount = files.filter(f => f.overallStatus === 200 || f.overallStatus === 203).length;
   const failedCount = files.filter(f => f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504).length;
+  const partiallyFailedCount = files.filter(f => f.overallStatus === 400).length;
   const uptime = files.length > 0 ? (upCount / files.length) * 100 : 100;
   const latestTs = files.reduce((max, f) => Math.max(max, f.timestamp ?? 0), 0);
   const latestFailed = files.some(
@@ -325,7 +326,9 @@ export default function History() {
       if (filterLocation !== 'all' && (f.city ?? '—') !== filterLocation) return false;
       if (filterStatus !== 'all') {
         if (filterStatus === 'failed') {
-          if (f.overallStatus !== 500 && f.overallStatus !== 503) return false;
+          if (f.overallStatus !== 500 && f.overallStatus !== 503 && f.overallStatus !== 504) return false;
+        } else if (filterStatus === 'partial') {
+          if (f.overallStatus !== 400) return false;
         } else if (String(f.overallStatus) !== filterStatus) {
           return false;
         }
@@ -654,7 +657,7 @@ export default function History() {
         )}
 
         {/* Stats */}
-        <div className="stat-grid grid grid-cols-4 gap-3 sm:gap-4">
+        <div className="stat-grid grid grid-cols-5 gap-3 sm:gap-4">
           <Card>
             <CardContent className="pt-4">
               <div className={`text-base sm:text-2xl font-bold ${uptimeColor}`}>{fmtUptime(uptime)}</div>
@@ -667,11 +670,24 @@ export default function History() {
                 className={`text-base sm:text-2xl font-bold hover:opacity-70 transition-opacity disabled:opacity-40 disabled:cursor-default ${failedCount > 0 ? 'text-red-500' : ''}`}
                 onClick={() => { setFilterStatus('failed'); setSearchParam({ status: 'failed' }); }}
                 disabled={failedCount === 0}
-                title={failedCount > 0 ? 'Show only FAIL / FAIL (always error)' : undefined}
+                title={failedCount > 0 ? 'Show completely failed checks' : undefined}
               >
                 {failedCount}
               </button>
-              <div className="text-xs text-muted-foreground mt-1">Failed Checks</div>
+              <div className="text-xs text-muted-foreground mt-1">Completely Failed</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <button
+                className={`text-base sm:text-2xl font-bold hover:opacity-70 transition-opacity disabled:opacity-40 disabled:cursor-default ${partiallyFailedCount > 0 ? 'text-orange-400' : ''}`}
+                onClick={() => { setFilterStatus('partial'); setSearchParam({ status: 'partial' }); }}
+                disabled={partiallyFailedCount === 0}
+                title={partiallyFailedCount > 0 ? 'Show partially failed checks (initial failed, retry succeeded)' : undefined}
+              >
+                {partiallyFailedCount}
+              </button>
+              <div className="text-xs text-muted-foreground mt-1">Partially Failed</div>
             </CardContent>
           </Card>
           <Card>
@@ -808,7 +824,8 @@ export default function History() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all" className="text-xs">All statuses</SelectItem>
-                      <SelectItem value="failed" className="text-xs">All failures</SelectItem>
+                      <SelectItem value="failed" className="text-xs">Completely failed</SelectItem>
+                      <SelectItem value="partial" className="text-xs">Partially failed</SelectItem>
                       <SelectItem value="200" className="text-xs">PASS</SelectItem>
                       <SelectItem value="203" className="text-xs">PASS (always ok)</SelectItem>
                       <SelectItem value="500" className="text-xs">FAIL</SelectItem>
@@ -853,6 +870,7 @@ export default function History() {
                         f.overallStatus === 500 ? 'bg-red-950/20 hover:bg-red-950/30' :
                         f.overallStatus === 503 ? 'bg-red-950/30 hover:bg-red-950/40' :
                         f.overallStatus === 504 ? 'bg-orange-950/20 hover:bg-orange-950/30' :
+                        f.overallStatus === 400 ? 'bg-orange-950/10 hover:bg-orange-950/20' :
                         'hover:bg-muted/30'
                       }`}
                       onClick={() => openFile(f)}
@@ -876,6 +894,9 @@ export default function History() {
                         {f.overallStatus === 203 && (
                           <Badge variant="outline" className="text-xs border-emerald-700 text-emerald-400">PASS (always ok)</Badge>
                         )}
+                        {f.overallStatus === 400 && (
+                          <Badge variant="outline" className="text-xs border-orange-500 text-orange-400">PARTIAL</Badge>
+                        )}
                         {f.overallStatus === 500 && (
                           <Badge variant="destructive" className="text-xs">FAIL</Badge>
                         )}
@@ -883,7 +904,7 @@ export default function History() {
                           <Badge variant="destructive" className="text-xs bg-red-900 hover:bg-red-900">FAIL (always error)</Badge>
                         )}
                         {f.overallStatus === 504 && (
-                          <Badge variant="outline" className="text-xs border-orange-500 text-orange-400">TIMEOUT</Badge>
+                          <Badge variant="outline" className="text-xs border-orange-600 text-orange-500">TIMEOUT</Badge>
                         )}
                         {isMobile && (
                           <div className="text-xs text-muted-foreground mt-0.5">{f.responseTime ?? 0}ms</div>

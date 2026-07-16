@@ -213,6 +213,7 @@ export default function Overview() {
   const allFiles = data.flatMap(s => s.history);
   const totalChecks = allFiles.length;
   const failedChecks = allFiles.filter(f => f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504).length;
+  const partiallyFailedChecks = allFiles.filter(f => f.overallStatus === 400).length;
   const totalEndpoints = data.reduce((sum, s) => sum + s.endpoints.length, 0);
   // Use combined per-run history so multi-endpoint services don't dilute the uptime %
   const allCombinedRuns = data.flatMap(s => getServiceOverallHistory(s));
@@ -483,7 +484,7 @@ export default function Overview() {
 
         {/* Aggregate stats */}
         {data.length > 0 && (
-          <div className="stat-grid grid grid-cols-4 gap-3 sm:gap-4">
+          <div className="stat-grid grid grid-cols-5 gap-3 sm:gap-4">
             <Card>
               <CardContent className="pt-4">
                 <div className={`text-base sm:text-2xl font-bold ${overallUptimeColor}`}>{fmtUptime(overallUptime)}</div>
@@ -493,7 +494,13 @@ export default function Overview() {
             <Card>
               <CardContent className="pt-4">
                 <div className={`text-base sm:text-2xl font-bold ${failedChecks > 0 ? 'text-red-500' : ''}`}>{failedChecks}</div>
-                <div className="text-xs text-muted-foreground mt-1">Failed Checks</div>
+                <div className="text-xs text-muted-foreground mt-1">Completely Failed</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className={`text-base sm:text-2xl font-bold ${partiallyFailedChecks > 0 ? 'text-orange-400' : ''}`}>{partiallyFailedChecks}</div>
+                <div className="text-xs text-muted-foreground mt-1">Partially Failed</div>
               </CardContent>
             </Card>
             <Card>

@@ -160,10 +160,15 @@ Create `server/config.json` (copy `server/config-sample.json` and fill in real v
 | `group` | string | Group name for dashboard grouping |
 | `name` | string | Unique service identifier (used in URLs and diagram node matching) |
 | `enabled` | boolean | Set `false` to exclude from checks |
-| `interval` | number | Auto-check interval in seconds; `0` or omitted disables automatic checks |
+| `interval` | number | Fallback auto-check interval in seconds (service-level); overridden per endpoint via `endpoints[].interval`; `0` or omitted disables automatic checks for endpoints that don't set their own |
 | `homepage` | string | Optional homepage URL shown as ↗ link on the dashboard |
 | `landscapes` | string[] | Landscape names this service belongs to (for tab filtering and availability badge) |
-| `endpoints[].name` | string | Display name for this endpoint |
+
+**Per endpoint**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `endpoints[].name` | string | Display name for this endpoint (use lowercase-dash names, e.g. `"api-portal"`) |
 | `endpoints[].url` | string | URL to probe; set to `/dummy` to skip the check and always record `200 OK` |
 | `endpoints[].method` | string | HTTP method (`GET`, `POST`, etc.) |
 | `endpoints[].headers` | object | Request headers; `{{variable}}` placeholders are substituted |
@@ -173,7 +178,10 @@ Create `server/config.json` (copy `server/config-sample.json` and fill in real v
 | `endpoints[].username` | string | IAS username; `{{variable}}` substitution supported |
 | `endpoints[].password` | string | IAS password; `{{variable}}` substitution supported |
 | `endpoints[].waitForSelector` | string | CSS selector to wait for after login (browser-ias-login only) |
-| `endpoints[].timeout` | number | Request timeout in ms. For standard HTTP checks, overrides `REQUEST_TIMEOUT_MS` for this endpoint; a timed-out check is recorded as `504`. For `browser-ias-login` mode, sets the overall browser session timeout (default `30000`). |
+| `endpoints[].timeout` | number | Request timeout in **seconds**. For HTTP checks, overrides `REQUEST_TIMEOUT_MS`; a timed-out check is recorded as `504`. For `browser-ias-login`, sets the overall browser session timeout (default `30`s). |
+| `endpoints[].interval` | number | Per-endpoint auto-check interval in seconds; takes precedence over the service-level `interval`. |
+| `endpoints[].retry` | number | Optional. Maximum number of retry attempts on failure. When set, a failed check is automatically re-attempted up to this many times before the final result is saved. |
+| `endpoints[].retryDelay` | number | Optional. Seconds to wait between retry attempts (default `0`). |
 | `endpoints[].region` | string | Optional. BTP region code (e.g. `"us10"`, `"us20"`, `"eu10"`). When set, this endpoint is only checked when the request hostname matches `cfapps.<region>.hana` (extracted from `x-forwarded-host` or `Host`). Used for multi-region deployments where each btp-status instance should only probe its local endpoints. Scheduler and manual "Run Test" always run all endpoints regardless of region. |
 
 ### Condition Syntax
@@ -199,12 +207,15 @@ Set `mode: "browser-ias-login"` on an endpoint to use a headless Chromium sessio
 ```json
 {
   "mode": "browser-ias-login",
-  "name": "Workzone Login",
+  "name": "workzone-login",
   "url": "https://<tenant>.launchpad.cfapps.<region>.hana.ondemand.com/site/<site>?sap_idp=<idp>",
   "username": "monitor@example.com",
   "password": "secret",
   "waitForSelector": "#shellAppTitle",
-  "timeout": 30000
+  "timeout": 30,
+  "interval": 900,
+  "retry": 2,
+  "retryDelay": 30
 }
 ```
 
@@ -236,12 +247,25 @@ All three sidecar files are included in remote sync and pruned by the housekeepi
 
 ### Automatic Checks
 
-When `interval` is set to a value greater than `0`, the server automatically runs a health check for that service every `interval` seconds — no external scheduler or cron job required.
+When `interval` is set on an endpoint (or at the service level as a fallback), the server runs a health check for that endpoint every `interval` seconds — no external scheduler or cron job required. Each endpoint is scheduled independently, so different endpoints in the same service can run at different frequencies.
 
 - If a check is already running when the next interval fires, that tick is **skipped** (no pile-up).
 - Errors inside a check are caught and logged; the timer continues unaffected.
 - All timers are released with `unref()` so they do not block graceful process shutdown.
 - On `SIGTERM` / `SIGINT` the scheduler stops cleanly before the HTTP server closes.
+
+### Retry Behavior
+
+When `retry` is set on an endpoint, a failed check is automatically re-attempted:
+
+1. Initial check runs normally; if it fails and `retry > 0`, retry attempts begin.
+2. Each retry waits `retryDelay` seconds, then re-runs the full check.
+3. Each retry result is saved as a sidecar file (e.g. `…_500.retry.json`, `…_500.retry.png`) linked from the main record's `retryFiles` field.
+4. If **any** retry succeeds, the main result file is saved with status `400` (**Partially Failed**) — the endpoint is up, but required retries.
+5. If **all** retries also fail, the main result is `500` / `504` (**Completely Failed**).
+6. Retry files are excluded from the history list and timeline dots. The **Response Detail** modal shows a **Retries** tab when `retryFiles` is non-empty, with an expandable condition table for each attempt.
+
+The Overview and Service detail pages show separate **Completely Failed** (500/503/504, red) and **Partially Failed** (400, orange) stat cards.
 
 ## API Endpoints
 
