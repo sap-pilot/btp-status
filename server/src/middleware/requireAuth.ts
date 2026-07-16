@@ -26,6 +26,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
  * Guards /api/download and /api/batch-download when a sync key is configured.
  * Allows the request if:
  *   - No sync key is configured (open access, backwards-compatible)
+ *   - The request originates from loopback (127.0.0.1 / ::1) — local dev
  *   - The x-sync-key request header matches the configured key
  *   - The request carries a valid XSUAA session cookie
  * Otherwise responds 401.
@@ -33,6 +34,8 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 export function requireSyncAuth(req: Request, res: Response, next: NextFunction): void {
   const syncKey = getSyncKey();
   if (!syncKey) { next(); return; }
+  const ip = req.ip ?? req.socket.remoteAddress ?? '';
+  if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') { next(); return; }
   if (req.headers['x-sync-key'] === syncKey) { next(); return; }
   const x = getXsuaaConfig();
   if (x) {
