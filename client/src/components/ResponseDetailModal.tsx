@@ -172,8 +172,8 @@ export default function ResponseDetailModal({ file, serviceName, onClose, auth }
               <TabsList className="flex-shrink-0">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 {isBrowser && screenshotUrl && <TabsTrigger value="screenshot">Screenshot</TabsTrigger>}
-                {isBrowser && htmlText !== null && <TabsTrigger value="pagesource">Page Source</TabsTrigger>}
-                {isBrowser && consoleText !== null && <TabsTrigger value="console">Console</TabsTrigger>}
+                {isBrowser && !!record.contentFile && <TabsTrigger value="pagesource">Page Source</TabsTrigger>}
+                {isBrowser && !!record.consoleLogFile && <TabsTrigger value="console">Console</TabsTrigger>}
                 {!isBrowser && <TabsTrigger value="request">Request</TabsTrigger>}
                 {!isBrowser && <TabsTrigger value="response">Response</TabsTrigger>}
               </TabsList>
@@ -333,21 +333,21 @@ export default function ResponseDetailModal({ file, serviceName, onClose, auth }
                   </TabsContent>
                 )}
 
-                {isBrowser && consoleText !== null && (
+                {isBrowser && !!record.consoleLogFile && (
                   <TabsContent value="console" className="h-full">
                     <ScrollArea className="h-full">
                       <pre className="text-xs font-mono bg-muted rounded p-2 whitespace-pre-wrap break-all">
-                        {consoleText || '(no console output)'}
+                        {consoleText === null ? '(loading…)' : consoleText || '(no console output)'}
                       </pre>
                     </ScrollArea>
                   </TabsContent>
                 )}
 
-                {isBrowser && htmlText !== null && (
+                {isBrowser && !!record.contentFile && (
                   <TabsContent value="pagesource" className="h-full">
                     <ScrollArea className="h-full">
                       <pre className="text-xs font-mono bg-muted rounded p-2 whitespace-pre-wrap break-all">
-                        {htmlText}
+                        {htmlText === null ? '(loading…)' : htmlText}
                       </pre>
                     </ScrollArea>
                   </TabsContent>
@@ -399,10 +399,10 @@ export default function ResponseDetailModal({ file, serviceName, onClose, auth }
                               {isRetryBrowser && retryScreenshotUrl && (
                                 <TabsTrigger value="screenshot" className="text-xs h-7">Screenshot</TabsTrigger>
                               )}
-                              {isRetryBrowser && sidecar.consoleText !== null && (
+                              {isRetryBrowser && !!rr.consoleLogFile && (
                                 <TabsTrigger value="console" className="text-xs h-7">Console</TabsTrigger>
                               )}
-                              {isRetryBrowser && sidecar.htmlText !== null && (
+                              {isRetryBrowser && !!rr.contentFile && (
                                 <TabsTrigger value="pagesource" className="text-xs h-7">Page Source</TabsTrigger>
                               )}
                               {!isRetryBrowser && (
@@ -527,18 +527,18 @@ export default function ResponseDetailModal({ file, serviceName, onClose, auth }
                               </TabsContent>
                             )}
 
-                            {sidecar.consoleText !== null && (
+                            {!!rr.consoleLogFile && (
                               <TabsContent value="console" className="mt-2">
                                 <pre className="text-xs font-mono bg-muted rounded p-2 whitespace-pre-wrap break-all max-h-64 overflow-auto">
-                                  {sidecar.consoleText || '(no console output)'}
+                                  {sidecar.consoleText === null ? '(loading…)' : sidecar.consoleText || '(no console output)'}
                                 </pre>
                               </TabsContent>
                             )}
 
-                            {sidecar.htmlText !== null && (
+                            {!!rr.contentFile && (
                               <TabsContent value="pagesource" className="mt-2">
                                 <pre className="text-xs font-mono bg-muted rounded p-2 whitespace-pre-wrap break-all max-h-64 overflow-auto">
-                                  {sidecar.htmlText}
+                                  {sidecar.htmlText === null ? '(loading…)' : sidecar.htmlText}
                                 </pre>
                               </TabsContent>
                             )}
