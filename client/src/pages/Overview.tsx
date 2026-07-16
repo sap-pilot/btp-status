@@ -102,7 +102,17 @@ export default function Overview() {
   const maxDots = Math.max(8, Math.floor(timelineWidth / 12));
   const isMobile = windowWidth < 640;
 
-  const { range, setRange, queryString } = useTimeRange();
+  const { range, setRange: setRangeBase, queryString } = useTimeRange(window.location.search);
+  function setRange(next: Parameters<typeof setRangeBase>[0]) {
+    setRangeBase(next);
+    const sp = new URLSearchParams(window.location.search);
+    if (next.mode === 'hours') {
+      sp.set('hours', String(next.hours));
+    } else {
+      sp.delete('hours');
+    }
+    navigate('?' + sp.toString(), { replace: true });
+  }
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [maxStorageDays, setMaxStorageDays] = useState(7);
   const [data, setData] = useState<ParsedService[]>([]);
