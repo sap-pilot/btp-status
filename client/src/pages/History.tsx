@@ -115,6 +115,7 @@ export default function History() {
   // Schedule
   const [scheduleInterval, setScheduleInterval] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [lastChecked, setLastChecked] = useState<Date>(new Date());
 
   // Table filters — initialise from URL params so diagram node clicks pre-filter
   const lastFetchTsRef = useRef<number>(Date.now());
@@ -167,7 +168,7 @@ export default function History() {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json() as Promise<string[]>;
       })
-      .then(d => setFiles(d.map(fn => parseFilename(fn) ?? { filename: fn + '.json', overallStatus: 200 as const })))
+      .then(d => { setFiles(d.map(fn => parseFilename(fn) ?? { filename: fn + '.json', overallStatus: 200 as const })); setLastChecked(new Date()); })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false));
   }, [name, queryString]);
@@ -180,6 +181,7 @@ export default function History() {
     fetch(`/api/history/${encodeURIComponent(name)}?since=${since}`)
       .then(r => r.ok ? r.json() as Promise<string[]> : null)
       .then(d => {
+        setLastChecked(new Date());
         if (!d || d.length === 0) return;
         const newFiles = d.map(fn => parseFilename(fn) ?? { filename: fn + '.json', overallStatus: 200 as const });
         setFiles(prev => {
@@ -678,7 +680,7 @@ export default function History() {
         )}
 
         {/* Stats */}
-        <div className="stat-grid grid grid-cols-4 gap-3 sm:gap-4">
+        <div className="stat-grid grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
           <Card>
             <CardContent className="pt-4">
               <div className={`text-base sm:text-2xl font-bold ${uptimeColor}`}>{fmtUptime(uptime)}</div>
@@ -721,6 +723,14 @@ export default function History() {
                 {files.length}
               </button>
               <div className="text-xs text-muted-foreground mt-1">Total Checks</div>
+            </CardContent>
+          </Card>
+          <Card className="col-span-2 sm:col-span-1">
+            <CardContent className="pt-4">
+              <div className="text-base sm:text-2xl font-bold tabular-nums">
+                {lastChecked.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">Last Checked</div>
             </CardContent>
           </Card>
         </div>
