@@ -5,6 +5,7 @@
 ### Changed
 - **Stat card layout simplified to 4 cards** — the **Overall Uptime** card has been removed from the Overview page and the **Uptime** card removed from the Service detail page; **Total Checks** is now the first card (before Completely Failed and Partially Failed); the grid changes from 5 to 4 columns (`sm:grid-cols-4`); on mobile, all 4 cards fit into a clean 2×2 grid without any card needing to span two columns
 - **Sync key transmitted as HMAC signature, not plaintext** — sync requests between instances no longer include the raw `SYNC_KEY` value; instead each request carries `x-sync-ts` (current Unix timestamp in seconds) and `x-sync-sig` (HMAC-SHA256 of the timestamp keyed with `SYNC_KEY`, hex-encoded); the server verifies the signature with `timingSafeEqual` and rejects requests whose timestamp is outside a ±5-minute window; an empty `SYNC_KEY` (env var or `config.json → variables`) is treated as absent — sync endpoints remain unprotected in that case; implemented with `node:crypto` (`createHmac`, `timingSafeEqual`), no new dependencies
+- **`MAX_RESPONSE_STORAGE_DAYS` default raised to 7** — response files are now retained for 7 days by default (previously 3)
 
 ## [v0.12.0] - 2026-07-16
 
