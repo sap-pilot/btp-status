@@ -20,7 +20,7 @@ A lightweight, file-backed status page and health checker for SAP BTP services. 
 
 ## Features
 
-1. **Azure Traffic Manager probe endpoint** — `GET /health/{service}` returns a JSON summary of the latest check result per probe location, grouped by city, evaluated from saved response files within `endpoint.interval × 2` seconds — no live network probe; returns `200 {"status":"OK"}` when all locations passed, `200 {"status":"Partial OK"}` when some locations are degraded, or `500 {"status":"Service down"}` when all locations failed; designed for Azure Traffic Manager probes running every 3–5 seconds from multiple PoPs; region is extracted from the request hostname (`cfapps.<region>.hana`) and matched against `endpoints[].region` so each deployed instance reports only its local endpoints
+1. **Azure Traffic Manager probe endpoint** — `GET /health/{service}` returns a JSON summary of the latest check result per probe location, e.g. `{"status":"OK","locations":{"Ashburn":200,"Frankfurt":200}}`; evaluated from saved response files within `endpoint.interval × 2` seconds — no live network probe; returns `200 {"status":"OK"}` when all locations passed, `200 {"status":"Partial OK"}` when some are degraded, or `500 {"status":"Service down"}` when all failed; designed for Azure Traffic Manager probes running every 3–5 seconds from multiple PoPs; region is extracted from the request hostname (`cfapps.<region>.hana`) and matched against `endpoints[].region` so each deployed instance reports only its local endpoints
 
 2. **Browser-based IAS login check** (`mode: browser-ias-login`) — headless Chromium fills the SAP IAS login form, waits for a CSS selector to confirm the post-login page loaded, and captures a screenshot; validates the full authentication flow end-to-end, not just HTTP reachability; screenshot is stored with the check record and visible in the history drill-down and Test popup
 
@@ -331,10 +331,10 @@ The probe reads saved response files and replies in milliseconds — no live net
 
 | HTTP | Body | Meaning |
 |------|------|---------|
-| `200` | `{"status":"OK","locations":[{"Ashburn":200},…]}` | Latest result from every location is `200`/`203` |
-| `200` | `{"status":"Partial OK","locations":[{"Ashburn":200},{"Frankfurt":400},…]}` | At least one location is non-200 (e.g. `400` Partially Failed) but not all are down |
-| `500` | `{"status":"Service down","locations":[{"Ashburn":500},…]}` | Every location's latest result is `500`/`503`/`504` |
-| `200` | `{"status":"OK","locations":[],"note":"no recent data"}` | No files in the time window — treated as healthy |
+| `200` | `{"status":"OK","locations":{"Ashburn":200,…}}` | Latest result from every location is `200`/`203` |
+| `200` | `{"status":"Partial OK","locations":{"Ashburn":200,"Frankfurt":400,…}}` | At least one location is non-200 (e.g. `400` Partially Failed) but not all are down |
+| `500` | `{"status":"Service down","locations":{"Ashburn":500,…}}` | Every location's latest result is `500`/`503`/`504` |
+| `200` | `{"status":"OK","locations":{},"note":"no recent data"}` | No files in the time window — treated as healthy |
 
 **Evaluation mode** takes precedence: `alwaysok` → `200 {"status":"OK","locations":[]}`, `alwayserror` → `500 {"status":"Service down","locations":[]}`.
 
