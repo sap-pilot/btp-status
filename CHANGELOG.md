@@ -35,6 +35,7 @@
 - **Stat grid back to 4 columns on both pages** — Overview and service detail both now show 4 stat cards (Uptime, Completely Failed, Partially Failed, Total Checks)
 
 ### Fixed
+- **`GET /api/overview` endpoint payload trimmed** — each endpoint entry in the response now contains only `name` and `url`; previously it included all config fields except credentials (`method`, `headers`, `body`, `conditions`, `region`, `interval`, `retry`, `retryDelay`, `mode`, etc.) which the Overview page never uses
 - **Response Detail modal: Console and Page Source tabs missing despite files existing** — the **Console** and **Page Source** tabs were conditionally rendered based on whether the sidecar fetch returned non-null text; if the fetch failed (e.g. due to a sync-key auth requirement or a transient error), the tabs would not appear even when `consoleLogFile` / `contentFile` were set in the record; tabs are now shown whenever the corresponding field is present in the response record, with the tab body displaying a loading placeholder until the fetch completes; the same fix applies to retry accordions in the same modal
 - **Download route: retry sidecar files returned 500** — `GET /api/download` previously routed console-log requests via `endsWith('_console.log')`, which did not match retry console files (`_console.retry.log`) or any new-naming files; all `.log` files are now routed to `readConsoleLogFile` and all `.html` files to `readContentFile`, with updated validation regexes accepting both old and new naming patterns
 
