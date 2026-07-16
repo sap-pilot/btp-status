@@ -7,8 +7,10 @@ resources/
 mta_archives/
 tmp/
 
+config*.json
+!server/config-sample.json
+
 default-env.json
-config.json
 Makefile*.mta
 *_mta_build_tmp/
 build-info.json

@@ -74,7 +74,7 @@ router.get('/:name', async (req: Request, res: Response, next: NextFunction) => 
   try {
     const service = getService(name);
     if (!service) {
-      res.status(404).type('text/plain').send(`Service '${name}' not found`);
+      replyJson(res, 404, { status: `Service '${name}' not found` });
       return;
     }
 
