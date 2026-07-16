@@ -42,9 +42,9 @@ function replyJson(res: Response, httpStatus: number, body: unknown): void {
  * [now − endpoint.interval × 2, now]. Only region-matching endpoints are considered.
  *
  * Responses:
- *   200 {"status":"OK",           "locations":[{"Ashburn":200},…]}
- *   200 {"status":"Partial OK",   "locations":[…]}
- *   500 {"status":"Service down", "locations":[…]}
+ *   200 {"status":"OK",           "locations":{"Ashburn":200,…}}
+ *   200 {"status":"Partial OK",   "locations":{…}}
+ *   500 {"status":"Service down", "locations":{…}}
  *
  * Evaluation-mode overrides (bypass file lookup):
  *   200 {"status":"Always OK"}
@@ -122,7 +122,7 @@ router.get('/:name', async (req: Request, res: Response, next: NextFunction) => 
       return;
     }
 
-    const locations = [...latestByCity.entries()].map(([city, e]) => ({ [city]: e.status }));
+    const locations = Object.fromEntries([...latestByCity.entries()].map(([city, e]) => [city, e.status]));
     const statuses = [...latestByCity.values()].map(e => e.status);
 
     const allDown = statuses.every(s => s === 500 || s === 503 || s === 504);
