@@ -19,15 +19,36 @@ function slugify(name: string): string {
 }
 
 /**
+ * Send a JSON response that is guaranteed never to be served as 304 Not Modified.
+ *
+ * res.json() calls res.send() which runs Express's ETag generation + req.fresh check
+ * and may convert a 200 into a 304 when the client supplies If-None-Match.
+ * Using res.end() bypasses that path entirely; no ETag is set, so the response
+ * is never considered "fresh" by the browser or a caching proxy.
+ */
+function replyJson(res: Response, httpStatus: number, body: unknown): void {
+  const payload = JSON.stringify(body);
+  res.status(httpStatus);
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Pragma', 'no-cache');
+  res.end(payload);
+}
+
+/**
  * File-based health check — designed for Traffic Manager probes (3–5 s interval, sub-second response).
  *
  * Evaluates the latest saved check result for each probe location (city) within the window
- * [now - endpoint.interval * 2, now]. Only region-matching endpoints are considered.
+ * [now − endpoint.interval × 2, now]. Only region-matching endpoints are considered.
  *
- * Responses (JSON body):
- *   200 { status: "OK",          locations: [{city: statusCode}, …] }
- *   200 { status: "Partial OK",  locations: [{city: statusCode}, …] }
- *   500 { status: "Service down",locations: [{city: statusCode}, …] }
+ * Responses:
+ *   200 {"status":"OK",           "locations":[{"Ashburn":200},…]}
+ *   200 {"status":"Partial OK",   "locations":[…]}
+ *   500 {"status":"Service down", "locations":[…]}
+ *
+ * Evaluation-mode overrides (bypass file lookup):
+ *   200 {"status":"Always OK"}
+ *   500 {"status":"Always Error"}
  */
 router.get('/:name', async (req: Request, res: Response, next: NextFunction) => {
   const name = req.params['name'] as string;
@@ -41,12 +62,12 @@ router.get('/:name', async (req: Request, res: Response, next: NextFunction) => 
 
   if (evalMode === 'alwaysok') {
     logger.info({ service: name }, 'Health check forced OK — eval mode: alwaysok');
-    res.status(200).json({ status: 'OK', locations: [] });
+    replyJson(res, 200, { status: 'Always OK' });
     return;
   }
   if (evalMode === 'alwayserror') {
     logger.warn({ service: name }, 'Health check forced fail — eval mode: alwayserror');
-    res.status(500).json({ status: 'Service down', locations: [] });
+    replyJson(res, 500, { status: 'Always Error' });
     return;
   }
 
@@ -70,7 +91,7 @@ router.get('/:name', async (req: Request, res: Response, next: NextFunction) => 
 
     if (epEntries.length === 0) {
       logger.info({ service: name, hostRegion }, 'Health check: no endpoints match region — returning OK');
-      res.status(200).json({ status: 'OK', locations: [] });
+      replyJson(res, 200, { status: 'OK', locations: [] });
       return;
     }
 
@@ -97,7 +118,7 @@ router.get('/:name', async (req: Request, res: Response, next: NextFunction) => 
 
     if (latestByCity.size === 0) {
       logger.info({ service: name }, 'Health check: no recent data in window — returning OK');
-      res.status(200).json({ status: 'OK', locations: [], note: 'no recent data' });
+      replyJson(res, 200, { status: 'OK', locations: [], note: 'no recent data' });
       return;
     }
 
@@ -109,13 +130,13 @@ router.get('/:name', async (req: Request, res: Response, next: NextFunction) => 
 
     if (allDown) {
       logger.warn({ service: name, locations }, 'Health check failed — all locations down');
-      res.status(500).json({ status: 'Service down', locations });
+      replyJson(res, 500, { status: 'Service down', locations });
     } else if (allOk) {
       logger.info({ service: name, locations }, 'Health check passed');
-      res.status(200).json({ status: 'OK', locations });
+      replyJson(res, 200, { status: 'OK', locations });
     } else {
       logger.info({ service: name, locations }, 'Health check partial — some locations degraded');
-      res.status(200).json({ status: 'Partial OK', locations });
+      replyJson(res, 200, { status: 'Partial OK', locations });
     }
   } catch (err) {
     next(err);
