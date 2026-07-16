@@ -40,10 +40,13 @@ function getEndpointNodeStatus(files: HistoryFile[]): NodeStatus | null {
   if (files.length === 0) return null;
   const sorted = [...files].sort((a, b) => tsOf(b) - tsOf(a));
   const latestTs = tsOf(sorted[0]);
-  const latestPassed = sorted
-    .filter(f => Math.floor(tsOf(f) / 1000) === Math.floor(latestTs / 1000))
-    .every(f => f.overallStatus === 200 || f.overallStatus === 203);
-  if (!latestPassed) return 'error';
+  const latestFiles = sorted.filter(f => Math.floor(tsOf(f) / 1000) === Math.floor(latestTs / 1000));
+  const latestPassed = latestFiles.every(f => f.overallStatus === 200 || f.overallStatus === 203);
+  if (!latestPassed) {
+    // Partial (400 only in latest) → warn; any full failure (500/503/504) → error
+    const latestFullFail = latestFiles.some(f => f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504);
+    return latestFullFail ? 'error' : 'warn';
+  }
   const anyFailed = sorted.some(f => f.overallStatus !== 200 && f.overallStatus !== 203);
   return anyFailed ? 'warn' : 'ok';
 }
@@ -613,7 +616,7 @@ export default function Overview() {
                       const epNodeSt = getEndpointNodeStatus(epFiles);
                       const badgeCls = epFiles.length === 0 ? 'text-muted-foreground border-border' :
                         epNodeSt === 'error' ? 'border-red-600 text-red-400' :
-                        epUptime < 100 ? 'border-yellow-600 text-yellow-400' :
+                        epNodeSt === 'warn' || epUptime < 100 ? 'border-yellow-600 text-yellow-400' :
                         'border-green-600 text-green-400';
                       return (
                         <tr
