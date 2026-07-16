@@ -698,9 +698,9 @@ export default function History() {
             {service ? (
               <table className="w-full table-fixed">
                 <colgroup>
-                  <col className="w-[140px]" />
+                  <col className="w-[170px]" />
                   <col />
-                  <col className="w-[90px]" />
+                  <col className="w-[110px]" />
                 </colgroup>
                 <tbody>
                   {service.endpoints.map((ep, ei) => {

@@ -26,6 +26,7 @@ function dotTooltip(d: HistoryFile): string {
   const label =
     d.overallStatus === 200 ? 'OK' :
     d.overallStatus === 203 ? 'OK (always ok)' :
+    d.overallStatus === 400 ? 'PARTIAL' :
     d.overallStatus === 503 ? 'FAIL (always error)' :
     d.overallStatus === 504 ? 'TIMEOUT' : 'FAIL';
   return [
@@ -75,6 +76,7 @@ export default function StatusDots({ history, maxDots = 48, showAvg = true, show
           const color =
             d.overallStatus === 200 ? 'bg-green-500' :
             d.overallStatus === 203 ? 'bg-emerald-700' :
+            d.overallStatus === 400 ? 'bg-yellow-500' :
             d.overallStatus === 503 ? 'bg-red-900' :
             d.overallStatus === 504 ? 'bg-orange-500' :
             'bg-red-500';
