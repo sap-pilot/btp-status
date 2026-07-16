@@ -20,7 +20,7 @@ A lightweight, file-backed status page and health checker for SAP BTP services. 
 
 ## Features
 
-1. **Azure Traffic Manager probe endpoint** — `GET /health/{service}` returns `200 OK` when all conditions pass or `500` with failure details when any condition fails; designed as a drop-in health probe for Azure Traffic Manager so unhealthy BTP services are automatically taken out of rotation
+1. **Azure Traffic Manager probe endpoint** — `GET /health/{service}` returns the **latest saved check result** for region-matching endpoints without running a live probe; returns `200 OK` (all passed), `200 Partially OK` (initial failure but retry succeeded), or `500 service down` (completely failed); designed for Azure Traffic Manager probes running every 3–5 seconds — responds in milliseconds with no network I/O; region is extracted from the request hostname (`cfapps.<region>.hana`) and matched against `endpoints[].region` so each deployed instance reports only its local endpoints
 
 2. **Browser-based IAS login check** (`mode: browser-ias-login`) — headless Chromium fills the SAP IAS login form, waits for a CSS selector to confirm the post-login page loaded, and captures a screenshot; validates the full authentication flow end-to-end, not just HTTP reachability; screenshot is stored with the check record and visible in the history drill-down and Test popup
 
@@ -271,7 +271,7 @@ The Overview and Service detail pages show separate **Completely Failed** (500/5
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /health/:name` | Run health check; returns `200 OK` or `500 <failure details>` (Azure Traffic Manager) |
+| `GET /health/:name` | Returns latest saved check result (no live probe): `200 OK`, `200 Partially OK`, or `500 service down`; region-filtered by request hostname; designed for Azure Traffic Manager probes |
 | `GET /overview` | Overview dashboard UI |
 | `GET /service/:name` | Service detail UI — history timeline, drill-down, "Run Test" button |
 | `GET /api/services` | List all services (JSON) |
@@ -296,9 +296,9 @@ On any service's detail page (`/service/:name`), two selectors in the header con
 
 | Mode | `/health/:name` | Saved status | Timeline dot |
 |------|----------------|-------------|--------------|
-| **Condition Based** (green, default) | `200`/`500` based on actual conditions | `200` or `500` | Green / Red |
-| **Always OK** (dark green) | Always `200 OK` regardless of conditions | `203` | Dark green |
-| **Always Error** (dark red) | Always `500` regardless of conditions | `503` | Dark red |
+| **Condition Based** (green, default) | Latest file result: `200 OK` / `200 Partially OK` / `500` | `200` or `500` | Green / Red |
+| **Always OK** (dark green) | Always `200 OK` regardless of file results | `203` | Dark green |
+| **Always Error** (dark red) | Always `500` regardless of file results | `503` | Dark red |
 
 A confirmation dialog appears before applying Always OK or Always Error. Both modes honour the evaluation setting for all execution paths (scheduled checks, manual `/health/:name`, Run Test).
 
@@ -319,8 +319,20 @@ Point your Traffic Manager HTTP probe at:
 GET https://<your-app>/health/<service-name>
 ```
 
-- Returns `200 OK` (plain text) → endpoint is healthy
-- Returns `500` (plain text with failure details) → endpoint is unhealthy
+The probe reads the **latest saved check result** for each endpoint — no live network probe is run, so it responds in milliseconds and is safe to call at 3–5 s intervals from multiple Traffic Manager PoPs.
+
+**Region filtering**: the incoming request hostname is matched against `cfapps.<region>.hana`. If an endpoint declares `endpoints[].region`, it is only considered when the hostname's region matches — so each deployed btp-status instance naturally reports the health of its own region's endpoints.
+
+| Response | Meaning |
+|----------|---------|
+| `200 OK` | All region-matching endpoints passed their last check |
+| `200 Partially OK` | At least one endpoint initially failed but succeeded on retry (status `400`) |
+| `500 service down: <slug>, …` | At least one endpoint completely failed (status 500/503/504) |
+| `200 OK (no recent data)` | No response files found in the retention window — treated as healthy |
+
+**Evaluation mode** still takes precedence: `alwaysok` returns `200 OK` and `alwayserror` returns `500` immediately, without reading any file.
+
+**Run Test / Test All** always runs a live probe against all endpoints regardless of region, so you can verify any endpoint from any location manually.
 
 ## Authentication and Authorization
 
@@ -405,14 +417,14 @@ When `VCAP_SERVICES` is not set (local dev), all auth middleware passes through 
 Each health check saves a file at:
 
 ```
-./response/{service-name}/yyyyMMdd-HHmmss_{endpointSlug}_{city}_{responseTimeMs}_{200|203|500|503}.json
+./response/{service-name}/yyyyMMdd-HHmmss_{endpointSlug}_{city}_{responseTimeMs}_{200|203|400|500|503|504}.json
 ```
 
 - **Timestamp**: UTC (`yyyyMMdd-HHmmss`)
 - **endpointSlug**: endpoint `name` from config with non-alphanumeric chars replaced by dashes
 - **city**: full city name from `ip-api.com` with spaces replaced by dashes (e.g. `Frankfurt-am-Main`); resolved once at startup; `unknown` if lookup fails or times out
 - **responseTimeMs**: integer milliseconds, no suffix
-- **Status codes**: `200` = genuine pass, `203` = pass under Always OK, `500` = genuine fail, `503` = fail under Always Error
+- **Status codes**: `200` = genuine pass, `203` = pass under Always OK, `400` = initial failure but retry succeeded (Partially Failed), `500` = genuine fail, `503` = fail under Always Error, `504` = timeout
 
 Old-format files (`yyyyMMdd-HHmmss_{index}_{ms}ms_{status}.json`, local-timezone timestamp) are still read and displayed correctly alongside new-format files.
 
