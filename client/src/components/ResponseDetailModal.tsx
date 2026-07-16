@@ -46,12 +46,13 @@ export default function ResponseDetailModal({ file, serviceName, onClose, auth }
   const [htmlText, setHtmlText] = useState<string | null>(null);
   const [retryRecords, setRetryRecords] = useState<ResponseRecord[]>([]);
   const [retrySidecars, setRetrySidecars] = useState<Array<{ consoleText: string | null; htmlText: string | null }>>([]);
-  const [expandedRetries, setExpandedRetries] = useState<Set<number>>(new Set());
+  // Set contains indices of COLLAPSED retries; empty = all expanded
+  const [collapsedRetries, setCollapsedRetries] = useState<Set<number>>(new Set());
 
   const requiresLogin = auth?.enabled && !auth.loggedIn;
 
   function toggleRetry(idx: number) {
-    setExpandedRetries(prev => {
+    setCollapsedRetries(prev => {
       const next = new Set(prev);
       if (next.has(idx)) next.delete(idx); else next.add(idx);
       return next;
@@ -74,7 +75,7 @@ export default function ResponseDetailModal({ file, serviceName, onClose, auth }
     setError(null);
     setRetryRecords([]);
     setRetrySidecars([]);
-    setExpandedRetries(new Set());
+    setCollapsedRetries(new Set());
     fetch(`/api/history/${encodeURIComponent(serviceName)}/${encodeURIComponent(file.filename)}`)
       .then(r => {
         if (r.status === 401) { setNeedsAuth(true); throw new Error('401'); }
@@ -167,390 +168,375 @@ export default function ResponseDetailModal({ file, serviceName, onClose, auth }
         {!needsAuth && error && <div className="text-destructive text-sm p-4">{error}</div>}
 
         {record && (
-          <>
-            <Tabs defaultValue="overview" className="flex-1 flex flex-col min-h-0">
-              <TabsList className="flex-shrink-0">
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                {isBrowser && screenshotUrl && <TabsTrigger value="screenshot">Screenshot</TabsTrigger>}
-                {isBrowser && !!record.contentFile && <TabsTrigger value="pagesource">Page Source</TabsTrigger>}
-                {isBrowser && !!record.consoleLogFile && <TabsTrigger value="console">Console</TabsTrigger>}
-                {!isBrowser && <TabsTrigger value="request">Request</TabsTrigger>}
-                {!isBrowser && <TabsTrigger value="response">Response</TabsTrigger>}
-              </TabsList>
+          <ScrollArea className="flex-1 min-h-0">
+            <div className="space-y-2 pr-1">
+              {/* Main response tabs */}
+              <Tabs defaultValue="overview">
+                <TabsList className="flex-shrink-0">
+                  <TabsTrigger value="overview">Overview</TabsTrigger>
+                  {isBrowser && screenshotUrl && <TabsTrigger value="screenshot">Screenshot</TabsTrigger>}
+                  {isBrowser && !!record.contentFile && <TabsTrigger value="pagesource">Page Source</TabsTrigger>}
+                  {isBrowser && !!record.consoleLogFile && <TabsTrigger value="console">Console</TabsTrigger>}
+                  {!isBrowser && <TabsTrigger value="request">Request</TabsTrigger>}
+                  {!isBrowser && <TabsTrigger value="response">Response</TabsTrigger>}
+                </TabsList>
 
-              <div className="flex-1 min-h-0 mt-2">
                 {isBrowser && screenshotUrl && (
-                  <TabsContent value="screenshot" className="h-full">
-                    <ScrollArea className="h-full">
-                      <img
-                        src={screenshotUrl}
-                        alt="Login screenshot"
-                        className="w-full rounded border border-border"
-                      />
-                    </ScrollArea>
+                  <TabsContent value="screenshot" className="mt-2">
+                    <img
+                      src={screenshotUrl}
+                      alt="Login screenshot"
+                      className="w-full rounded border border-border"
+                    />
                   </TabsContent>
                 )}
 
-                <TabsContent value="overview" className="h-full">
-                  <ScrollArea className="h-full">
-                    <div className="space-y-4 p-1">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <div className="text-xs text-muted-foreground mb-1">Timestamp</div>
-                          <div className="text-sm">{formatTs(record.timestamp)}</div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-muted-foreground mb-1">Response Time</div>
-                          <div className="text-sm">{record.responseTime}ms</div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-muted-foreground mb-1">Endpoint</div>
-                          <div className="text-sm flex items-center gap-1.5">
-                            {record.endpointName}
-                            {record.request.url.startsWith('http') && (
-                              <a
-                                href={record.request.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title={`Open ${record.endpointName}`}
-                                className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-                              >
-                                <ExternalLink className="h-3.5 w-3.5" />
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-muted-foreground mb-1">
-                            {isBrowser ? 'Check Type' : 'HTTP Status'}
-                          </div>
-                          <div className="text-sm">
-                            {isBrowser ? 'Browser IAS Login' : record.response.status}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-muted-foreground mb-1">Overall Result</div>
-                          {record.overallStatus === 200 ? <Badge variant="default">PASS</Badge> :
-                           record.overallStatus === 203 ? <Badge variant="default">PASS (always ok)</Badge> :
-                           record.overallStatus === 400 ? <Badge variant="outline" className="border-orange-500 text-orange-400">PARTIAL (retry succeeded)</Badge> :
-                           record.overallStatus === 503 ? <Badge variant="destructive">FAIL (always error)</Badge> :
-                           <Badge variant="destructive">FAIL</Badge>}
-                        </div>
-                        {isBrowser && record.response.body && (
-                          <div className="col-span-2">
-                            <div className="text-xs text-muted-foreground mb-1">Result Message</div>
-                            <div className="text-sm font-mono bg-muted rounded p-2 break-all">
-                              {record.response.body}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
+                <TabsContent value="overview" className="mt-2">
+                  <div className="space-y-4 p-1">
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <div className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">Conditions</div>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Condition</TableHead>
-                              <TableHead className="w-16">Result</TableHead>
-                              <TableHead>Actual</TableHead>
-                              <TableHead>Expected</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {record.conditions.map((c, i) => (
-                              <TableRow key={i} className={c.passed ? '' : 'bg-destructive/10'}>
-                                <TableCell className="font-mono text-xs">{c.condition}</TableCell>
-                                <TableCell>
-                                  <span className={c.passed ? 'text-green-500' : 'text-red-500'}>
-                                    {c.passed ? '✓' : '✗'}
-                                  </span>
-                                </TableCell>
-                                <TableCell className="font-mono text-xs max-w-xs truncate">
-                                  {c.actual}
-                                </TableCell>
-                                <TableCell className="font-mono text-xs">{c.expected}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
+                        <div className="text-xs text-muted-foreground mb-1">Timestamp</div>
+                        <div className="text-sm">{formatTs(record.timestamp)}</div>
                       </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Response Time</div>
+                        <div className="text-sm">{record.responseTime}ms</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Endpoint</div>
+                        <div className="text-sm flex items-center gap-1.5">
+                          {record.endpointName}
+                          {record.request.url.startsWith('http') && (
+                            <a
+                              href={record.request.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={`Open ${record.endpointName}`}
+                              className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">
+                          {isBrowser ? 'Check Type' : 'HTTP Status'}
+                        </div>
+                        <div className="text-sm">
+                          {isBrowser ? 'Browser IAS Login' : record.response.status}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Overall Result</div>
+                        {record.overallStatus === 200 ? <Badge variant="default">PASS</Badge> :
+                         record.overallStatus === 203 ? <Badge variant="default">PASS (always ok)</Badge> :
+                         record.overallStatus === 400 ? <Badge variant="outline" className="border-orange-500 text-orange-400">PARTIAL (retry succeeded)</Badge> :
+                         record.overallStatus === 503 ? <Badge variant="destructive">FAIL (always error)</Badge> :
+                         <Badge variant="destructive">FAIL</Badge>}
+                      </div>
+                      {isBrowser && record.response.body && (
+                        <div className="col-span-2">
+                          <div className="text-xs text-muted-foreground mb-1">Result Message</div>
+                          <div className="text-sm font-mono bg-muted rounded p-2 break-all">
+                            {record.response.body}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </ScrollArea>
+
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">Conditions</div>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Condition</TableHead>
+                            <TableHead className="w-16">Result</TableHead>
+                            <TableHead>Actual</TableHead>
+                            <TableHead>Expected</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {record.conditions.map((c, i) => (
+                            <TableRow key={i} className={c.passed ? '' : 'bg-destructive/10'}>
+                              <TableCell className="font-mono text-xs">{c.condition}</TableCell>
+                              <TableCell>
+                                <span className={c.passed ? 'text-green-500' : 'text-red-500'}>
+                                  {c.passed ? '✓' : '✗'}
+                                </span>
+                              </TableCell>
+                              <TableCell className="font-mono text-xs max-w-xs truncate">
+                                {c.actual}
+                              </TableCell>
+                              <TableCell className="font-mono text-xs">{c.expected}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
                 </TabsContent>
 
                 {!isBrowser && (
-                  <TabsContent value="request" className="h-full">
-                    <ScrollArea className="h-full">
-                      <div className="space-y-4 p-1">
-                        <div>
-                          <div className="text-xs text-muted-foreground mb-1">Method & URL</div>
-                          <div className="text-sm font-mono bg-muted rounded p-2 break-all">
-                            {record.request.method} {record.request.url}
-                          </div>
+                  <TabsContent value="request" className="mt-2">
+                    <div className="space-y-4 p-1">
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Method & URL</div>
+                        <div className="text-sm font-mono bg-muted rounded p-2 break-all">
+                          {record.request.method} {record.request.url}
                         </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Headers</div>
+                        <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto max-h-48">
+                          {JSON.stringify(record.request.headers, null, 2)}
+                        </pre>
+                      </div>
+                      {record.request.body && (
                         <div>
-                          <div className="text-xs text-muted-foreground mb-1">Headers</div>
-                          <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto">
-                            {JSON.stringify(record.request.headers, null, 2)}
+                          <div className="text-xs text-muted-foreground mb-1">Body</div>
+                          <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto max-h-48">
+                            {prettifyBody(record.request.body)}
                           </pre>
                         </div>
-                        {record.request.body && (
-                          <div>
-                            <div className="text-xs text-muted-foreground mb-1">Body</div>
-                            <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto">
-                              {prettifyBody(record.request.body)}
-                            </pre>
-                          </div>
-                        )}
-                      </div>
-                    </ScrollArea>
+                      )}
+                    </div>
                   </TabsContent>
                 )}
 
                 {!isBrowser && (
-                  <TabsContent value="response" className="h-full">
-                    <ScrollArea className="h-full">
-                      <div className="space-y-4 p-1">
-                        <div>
-                          <div className="text-xs text-muted-foreground mb-1">Status Code</div>
-                          <div className="text-sm font-mono">{record.response.status}</div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-muted-foreground mb-1">Headers</div>
-                          <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto max-h-48">
-                            {JSON.stringify(record.response.headers, null, 2)}
-                          </pre>
-                        </div>
-                        <div>
-                          <div className="text-xs text-muted-foreground mb-1">Body</div>
-                          <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto max-h-64 whitespace-pre-wrap break-all">
-                            {prettifyBody(record.response.body)}
-                          </pre>
-                        </div>
+                  <TabsContent value="response" className="mt-2">
+                    <div className="space-y-4 p-1">
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Status Code</div>
+                        <div className="text-sm font-mono">{record.response.status}</div>
                       </div>
-                    </ScrollArea>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Headers</div>
+                        <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto max-h-48">
+                          {JSON.stringify(record.response.headers, null, 2)}
+                        </pre>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Body</div>
+                        <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto max-h-64 whitespace-pre-wrap break-all">
+                          {prettifyBody(record.response.body)}
+                        </pre>
+                      </div>
+                    </div>
                   </TabsContent>
                 )}
 
                 {isBrowser && !!record.consoleLogFile && (
-                  <TabsContent value="console" className="h-full">
-                    <ScrollArea className="h-full">
-                      <pre className="text-xs font-mono bg-muted rounded p-2 whitespace-pre-wrap break-all">
-                        {consoleText === null ? '(loading…)' : consoleText || '(no console output)'}
-                      </pre>
-                    </ScrollArea>
+                  <TabsContent value="console" className="mt-2">
+                    <pre className="text-xs font-mono bg-muted rounded p-2 whitespace-pre-wrap break-all max-h-96 overflow-auto">
+                      {consoleText === null ? '(loading…)' : consoleText || '(no console output)'}
+                    </pre>
                   </TabsContent>
                 )}
 
                 {isBrowser && !!record.contentFile && (
-                  <TabsContent value="pagesource" className="h-full">
-                    <ScrollArea className="h-full">
-                      <pre className="text-xs font-mono bg-muted rounded p-2 whitespace-pre-wrap break-all">
-                        {htmlText === null ? '(loading…)' : htmlText}
-                      </pre>
-                    </ScrollArea>
+                  <TabsContent value="pagesource" className="mt-2">
+                    <pre className="text-xs font-mono bg-muted rounded p-2 whitespace-pre-wrap break-all max-h-96 overflow-auto">
+                      {htmlText === null ? '(loading…)' : htmlText}
+                    </pre>
                   </TabsContent>
                 )}
-              </div>
-            </Tabs>
+              </Tabs>
 
-            {/* Retry accordions — each has full tabs matching the main endpoint */}
-            {retryRecords.length > 0 && (
-              <div className="flex-shrink-0 border-t border-border mt-2 pt-2 space-y-1.5 overflow-y-auto max-h-[38%]">
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
-                  Retries ({retryRecords.length})
-                </div>
-                {retryRecords.map((rr, idx) => {
-                  const isExpanded = expandedRetries.has(idx);
-                  const isRetryBrowser = rr.request.method === 'BROWSER';
-                  const retryScreenshotUrl = rr.screenshotFile
-                    ? `/api/download?path=${encodeURIComponent(serviceName)}/${encodeURIComponent(rr.screenshotFile)}`
-                    : null;
-                  const sidecar = retrySidecars[idx] ?? { consoleText: null, htmlText: null };
-                  const retryPassed = rr.overallStatus === 200;
-                  return (
-                    <div key={idx} className="border border-border rounded">
+              {/* Retry sections — same visual style as endpoint sections, expanded by default */}
+              {retryRecords.map((rr, idx) => {
+                const isCollapsed = collapsedRetries.has(idx);
+                const isRetryBrowser = rr.request.method === 'BROWSER';
+                const retryScreenshotUrl = rr.screenshotFile
+                  ? `/api/download?path=${encodeURIComponent(serviceName)}/${encodeURIComponent(rr.screenshotFile)}`
+                  : null;
+                const sidecar = retrySidecars[idx] ?? { consoleText: null, htmlText: null };
+                const retryPassed = rr.overallStatus === 200;
+                return (
+                  <div key={idx}>
+                    <div className="border-t border-border my-3" />
+                    <div className="flex items-center gap-2 mb-3">
                       <button
-                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted/30 text-left"
                         onClick={() => toggleRetry(idx)}
+                        className="text-muted-foreground hover:text-foreground flex-shrink-0"
+                        title={isCollapsed ? 'Expand' : 'Collapse'}
                       >
-                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${retryPassed ? 'bg-green-500' : 'bg-red-500'}`} />
-                        <span className="text-sm font-medium flex-1 truncate">{rr.endpointName}</span>
-                        <Badge variant="outline" className="text-xs border-blue-500 text-blue-400 flex-shrink-0">
-                          retry #{idx + 1}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground flex-shrink-0">{rr.responseTime}ms</span>
-                        <Badge
-                          variant={retryPassed ? 'outline' : 'destructive'}
-                          className={`text-xs flex-shrink-0 ${retryPassed ? 'border-green-600 text-green-400' : ''}`}
-                        >
-                          {retryPassed ? 'PASS' : rr.overallStatus === 504 ? 'TIMEOUT' : 'FAIL'}
-                        </Badge>
-                        {isExpanded
-                          ? <ChevronDown className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
-                          : <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />}
+                        {isCollapsed
+                          ? <ChevronRight className="h-4 w-4" />
+                          : <ChevronDown className="h-4 w-4" />}
                       </button>
-                      {isExpanded && (
-                        <div className="border-t border-border p-2">
-                          <Tabs defaultValue="overview">
-                            <TabsList className="h-8">
-                              <TabsTrigger value="overview" className="text-xs h-7">Overview</TabsTrigger>
-                              {isRetryBrowser && retryScreenshotUrl && (
-                                <TabsTrigger value="screenshot" className="text-xs h-7">Screenshot</TabsTrigger>
-                              )}
-                              {isRetryBrowser && !!rr.consoleLogFile && (
-                                <TabsTrigger value="console" className="text-xs h-7">Console</TabsTrigger>
-                              )}
-                              {isRetryBrowser && !!rr.contentFile && (
-                                <TabsTrigger value="pagesource" className="text-xs h-7">Page Source</TabsTrigger>
-                              )}
-                              {!isRetryBrowser && (
-                                <TabsTrigger value="request" className="text-xs h-7">Request</TabsTrigger>
-                              )}
-                              {!isRetryBrowser && (
-                                <TabsTrigger value="response" className="text-xs h-7">
-                                  Response
-                                  {rr.response.status > 0 && (
-                                    <span className={`ml-1.5 ${rr.response.status < 400 ? 'text-green-400' : 'text-red-400'}`}>
-                                      {rr.response.status}
-                                    </span>
-                                  )}
-                                </TabsTrigger>
-                              )}
-                            </TabsList>
-
-                            <TabsContent value="overview" className="mt-2">
-                              <div className="space-y-3">
-                                <div className="grid grid-cols-2 gap-3 text-sm">
-                                  <div>
-                                    <div className="text-xs text-muted-foreground mb-1">Timestamp</div>
-                                    <div>{formatTs(rr.timestamp)}</div>
-                                  </div>
-                                  <div>
-                                    <div className="text-xs text-muted-foreground mb-1">Response Time</div>
-                                    <div>{rr.responseTime}ms</div>
-                                  </div>
-                                  <div>
-                                    <div className="text-xs text-muted-foreground mb-1">
-                                      {isRetryBrowser ? 'Check Type' : 'HTTP Status'}
-                                    </div>
-                                    <div>{isRetryBrowser ? 'Browser IAS Login' : rr.response.status}</div>
-                                  </div>
-                                  <div>
-                                    <div className="text-xs text-muted-foreground mb-1">Overall Result</div>
-                                    {retryPassed
-                                      ? <Badge variant="default">PASS</Badge>
-                                      : rr.overallStatus === 504
-                                        ? <Badge variant="outline" className="border-orange-600 text-orange-500">TIMEOUT</Badge>
-                                        : <Badge variant="destructive">FAIL</Badge>}
-                                  </div>
-                                </div>
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow>
-                                      <TableHead className="h-7 text-xs">Condition</TableHead>
-                                      <TableHead className="h-7 text-xs w-10">Result</TableHead>
-                                      <TableHead className="h-7 text-xs">Actual</TableHead>
-                                      <TableHead className="h-7 text-xs">Expected</TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    {rr.conditions.map((c, ci) => (
-                                      <TableRow key={ci} className={c.passed ? '' : 'bg-destructive/10'}>
-                                        <TableCell className="font-mono text-xs py-1.5">{c.condition}</TableCell>
-                                        <TableCell className="py-1.5">
-                                          <span className={c.passed ? 'text-green-500' : 'text-red-500'}>{c.passed ? '✓' : '✗'}</span>
-                                        </TableCell>
-                                        <TableCell className="font-mono text-xs py-1.5 max-w-xs truncate">{c.actual}</TableCell>
-                                        <TableCell className="font-mono text-xs py-1.5">{c.expected}</TableCell>
-                                      </TableRow>
-                                    ))}
-                                  </TableBody>
-                                </Table>
-                              </div>
-                            </TabsContent>
-
-                            {!isRetryBrowser && (
-                              <TabsContent value="request" className="mt-2 space-y-3">
-                                <div>
-                                  <div className="text-xs text-muted-foreground mb-1">Method & URL</div>
-                                  <div className="text-xs font-mono bg-muted rounded p-2 break-all">
-                                    {rr.request.method} {rr.request.url}
-                                  </div>
-                                </div>
-                                <div>
-                                  <div className="text-xs text-muted-foreground mb-1">Headers</div>
-                                  <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto max-h-40">
-                                    {JSON.stringify(rr.request.headers, null, 2)}
-                                  </pre>
-                                </div>
-                                {rr.request.body && (
-                                  <div>
-                                    <div className="text-xs text-muted-foreground mb-1">Body</div>
-                                    <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto max-h-40 whitespace-pre-wrap break-all">
-                                      {prettifyBody(rr.request.body)}
-                                    </pre>
-                                  </div>
-                                )}
-                              </TabsContent>
-                            )}
-
-                            {!isRetryBrowser && (
-                              <TabsContent value="response" className="mt-2 space-y-3">
-                                <div>
-                                  <div className="text-xs text-muted-foreground mb-1">Status Code</div>
-                                  <div className="text-xs font-mono">{rr.response.status}</div>
-                                </div>
-                                <div>
-                                  <div className="text-xs text-muted-foreground mb-1">Headers</div>
-                                  <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto max-h-40">
-                                    {JSON.stringify(rr.response.headers, null, 2)}
-                                  </pre>
-                                </div>
-                                <div>
-                                  <div className="text-xs text-muted-foreground mb-1">Body</div>
-                                  <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto max-h-48 whitespace-pre-wrap break-all">
-                                    {prettifyBody(rr.response.body)}
-                                  </pre>
-                                </div>
-                              </TabsContent>
-                            )}
-
-                            {retryScreenshotUrl && (
-                              <TabsContent value="screenshot" className="mt-2">
-                                <img
-                                  src={retryScreenshotUrl}
-                                  alt="Retry screenshot"
-                                  className="w-full rounded border border-border"
-                                />
-                              </TabsContent>
-                            )}
-
-                            {!!rr.consoleLogFile && (
-                              <TabsContent value="console" className="mt-2">
-                                <pre className="text-xs font-mono bg-muted rounded p-2 whitespace-pre-wrap break-all max-h-64 overflow-auto">
-                                  {sidecar.consoleText === null ? '(loading…)' : sidecar.consoleText || '(no console output)'}
-                                </pre>
-                              </TabsContent>
-                            )}
-
-                            {!!rr.contentFile && (
-                              <TabsContent value="pagesource" className="mt-2">
-                                <pre className="text-xs font-mono bg-muted rounded p-2 whitespace-pre-wrap break-all max-h-64 overflow-auto">
-                                  {sidecar.htmlText === null ? '(loading…)' : sidecar.htmlText}
-                                </pre>
-                              </TabsContent>
-                            )}
-                          </Tabs>
-                        </div>
-                      )}
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${retryPassed ? 'bg-green-500' : 'bg-red-500'}`} />
+                      <span className="text-sm font-semibold flex-1 truncate">{rr.endpointName}</span>
+                      <Badge variant="outline" className="text-xs border-blue-500 text-blue-400 flex-shrink-0">
+                        retry #{idx + 1}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground flex-shrink-0">{rr.responseTime}ms</span>
+                      <Badge
+                        variant={retryPassed ? 'outline' : 'destructive'}
+                        className={`text-xs flex-shrink-0 ${retryPassed ? 'border-green-600 text-green-400' : ''}`}
+                      >
+                        {retryPassed ? 'PASS' : rr.overallStatus === 504 ? 'TIMEOUT' : 'FAIL'}
+                      </Badge>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
+
+                    {!isCollapsed && (
+                      <Tabs defaultValue="overview">
+                        <TabsList className="h-8">
+                          <TabsTrigger value="overview" className="text-xs h-7">Overview</TabsTrigger>
+                          {isRetryBrowser && retryScreenshotUrl && (
+                            <TabsTrigger value="screenshot" className="text-xs h-7">Screenshot</TabsTrigger>
+                          )}
+                          {isRetryBrowser && !!rr.consoleLogFile && (
+                            <TabsTrigger value="console" className="text-xs h-7">Console</TabsTrigger>
+                          )}
+                          {isRetryBrowser && !!rr.contentFile && (
+                            <TabsTrigger value="pagesource" className="text-xs h-7">Page Source</TabsTrigger>
+                          )}
+                          {!isRetryBrowser && (
+                            <TabsTrigger value="request" className="text-xs h-7">Request</TabsTrigger>
+                          )}
+                          {!isRetryBrowser && (
+                            <TabsTrigger value="response" className="text-xs h-7">
+                              Response
+                              {rr.response.status > 0 && (
+                                <span className={`ml-1.5 ${rr.response.status < 400 ? 'text-green-400' : 'text-red-400'}`}>
+                                  {rr.response.status}
+                                </span>
+                              )}
+                            </TabsTrigger>
+                          )}
+                        </TabsList>
+
+                        <TabsContent value="overview" className="mt-2">
+                          <div className="space-y-3">
+                            <div className="grid grid-cols-2 gap-3 text-sm">
+                              <div>
+                                <div className="text-xs text-muted-foreground mb-1">Timestamp</div>
+                                <div>{formatTs(rr.timestamp)}</div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-muted-foreground mb-1">Response Time</div>
+                                <div>{rr.responseTime}ms</div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-muted-foreground mb-1">
+                                  {isRetryBrowser ? 'Check Type' : 'HTTP Status'}
+                                </div>
+                                <div>{isRetryBrowser ? 'Browser IAS Login' : rr.response.status}</div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-muted-foreground mb-1">Overall Result</div>
+                                {retryPassed
+                                  ? <Badge variant="default">PASS</Badge>
+                                  : rr.overallStatus === 504
+                                    ? <Badge variant="outline" className="border-orange-600 text-orange-500">TIMEOUT</Badge>
+                                    : <Badge variant="destructive">FAIL</Badge>}
+                              </div>
+                            </div>
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="h-7 text-xs">Condition</TableHead>
+                                  <TableHead className="h-7 text-xs w-10">Result</TableHead>
+                                  <TableHead className="h-7 text-xs">Actual</TableHead>
+                                  <TableHead className="h-7 text-xs">Expected</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {rr.conditions.map((c, ci) => (
+                                  <TableRow key={ci} className={c.passed ? '' : 'bg-destructive/10'}>
+                                    <TableCell className="font-mono text-xs py-1.5">{c.condition}</TableCell>
+                                    <TableCell className="py-1.5">
+                                      <span className={c.passed ? 'text-green-500' : 'text-red-500'}>{c.passed ? '✓' : '✗'}</span>
+                                    </TableCell>
+                                    <TableCell className="font-mono text-xs py-1.5 max-w-xs truncate">{c.actual}</TableCell>
+                                    <TableCell className="font-mono text-xs py-1.5">{c.expected}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </TabsContent>
+
+                        {!isRetryBrowser && (
+                          <TabsContent value="request" className="mt-2 space-y-3">
+                            <div>
+                              <div className="text-xs text-muted-foreground mb-1">Method & URL</div>
+                              <div className="text-xs font-mono bg-muted rounded p-2 break-all">
+                                {rr.request.method} {rr.request.url}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-muted-foreground mb-1">Headers</div>
+                              <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto max-h-40">
+                                {JSON.stringify(rr.request.headers, null, 2)}
+                              </pre>
+                            </div>
+                            {rr.request.body && (
+                              <div>
+                                <div className="text-xs text-muted-foreground mb-1">Body</div>
+                                <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto max-h-40 whitespace-pre-wrap break-all">
+                                  {prettifyBody(rr.request.body)}
+                                </pre>
+                              </div>
+                            )}
+                          </TabsContent>
+                        )}
+
+                        {!isRetryBrowser && (
+                          <TabsContent value="response" className="mt-2 space-y-3">
+                            <div>
+                              <div className="text-xs text-muted-foreground mb-1">Status Code</div>
+                              <div className="text-xs font-mono">{rr.response.status}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-muted-foreground mb-1">Headers</div>
+                              <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto max-h-40">
+                                {JSON.stringify(rr.response.headers, null, 2)}
+                              </pre>
+                            </div>
+                            <div>
+                              <div className="text-xs text-muted-foreground mb-1">Body</div>
+                              <pre className="text-xs font-mono bg-muted rounded p-2 overflow-auto max-h-48 whitespace-pre-wrap break-all">
+                                {prettifyBody(rr.response.body)}
+                              </pre>
+                            </div>
+                          </TabsContent>
+                        )}
+
+                        {retryScreenshotUrl && (
+                          <TabsContent value="screenshot" className="mt-2">
+                            <img
+                              src={retryScreenshotUrl}
+                              alt="Retry screenshot"
+                              className="w-full rounded border border-border"
+                            />
+                          </TabsContent>
+                        )}
+
+                        {!!rr.consoleLogFile && (
+                          <TabsContent value="console" className="mt-2">
+                            <pre className="text-xs font-mono bg-muted rounded p-2 whitespace-pre-wrap break-all max-h-64 overflow-auto">
+                              {sidecar.consoleText === null ? '(loading…)' : sidecar.consoleText || '(no console output)'}
+                            </pre>
+                          </TabsContent>
+                        )}
+
+                        {!!rr.contentFile && (
+                          <TabsContent value="pagesource" className="mt-2">
+                            <pre className="text-xs font-mono bg-muted rounded p-2 whitespace-pre-wrap break-all max-h-64 overflow-auto">
+                              {sidecar.htmlText === null ? '(loading…)' : sidecar.htmlText}
+                            </pre>
+                          </TabsContent>
+                        )}
+                      </Tabs>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </ScrollArea>
         )}
       </DialogContent>
     </Dialog>
