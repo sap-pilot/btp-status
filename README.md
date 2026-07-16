@@ -20,7 +20,7 @@ A lightweight, file-backed status page and health checker for SAP BTP services. 
 
 ## Features
 
-1. **Azure Traffic Manager probe endpoint** — `GET /health/{service}` returns the **latest saved check result** for region-matching endpoints without running a live probe; returns `200 OK` (all passed), `200 Partially OK` (initial failure but retry succeeded), or `500 service down` (completely failed); designed for Azure Traffic Manager probes running every 3–5 seconds — responds in milliseconds with no network I/O; region is extracted from the request hostname (`cfapps.<region>.hana`) and matched against `endpoints[].region` so each deployed instance reports only its local endpoints
+1. **Azure Traffic Manager probe endpoint** — `GET /health/{service}` returns a JSON summary of the latest check result per probe location, grouped by city, evaluated from saved response files within `endpoint.interval × 2` seconds — no live network probe; returns `200 {"status":"OK"}` when all locations passed, `200 {"status":"Partial OK"}` when some locations are degraded, or `500 {"status":"Service down"}` when all locations failed; designed for Azure Traffic Manager probes running every 3–5 seconds from multiple PoPs; region is extracted from the request hostname (`cfapps.<region>.hana`) and matched against `endpoints[].region` so each deployed instance reports only its local endpoints
 
 2. **Browser-based IAS login check** (`mode: browser-ias-login`) — headless Chromium fills the SAP IAS login form, waits for a CSS selector to confirm the post-login page loaded, and captures a screenshot; validates the full authentication flow end-to-end, not just HTTP reachability; screenshot is stored with the check record and visible in the history drill-down and Test popup
 
@@ -319,20 +319,26 @@ Point your Traffic Manager HTTP probe at:
 GET https://<your-app>/health/<service-name>
 ```
 
-The probe reads the **latest saved check result** for each endpoint — no live network probe is run, so it responds in milliseconds and is safe to call at 3–5 s intervals from multiple Traffic Manager PoPs.
+The probe reads saved response files and replies in milliseconds — no live network request is made. Safe to call at 3–5 s intervals from multiple Traffic Manager PoPs.
 
-**Region filtering**: the incoming request hostname is matched against `cfapps.<region>.hana`. If an endpoint declares `endpoints[].region`, it is only considered when the hostname's region matches — so each deployed btp-status instance naturally reports the health of its own region's endpoints.
+**Time window**: for each endpoint, files within `[now − endpoint.interval × 2, now]` are considered. This ensures the probe reflects recent check results without stale data from much older runs.
 
-| Response | Meaning |
-|----------|---------|
-| `200 OK` | All region-matching endpoints passed their last check |
-| `200 Partially OK` | At least one endpoint initially failed but succeeded on retry (status `400`) |
-| `500 service down: <slug>, …` | At least one endpoint completely failed (status 500/503/504) |
-| `200 OK (no recent data)` | No response files found in the retention window — treated as healthy |
+**Region filtering**: the incoming request hostname (`cfapps.<region>.hana`) is matched against `endpoints[].region`. Endpoints with no `region` are always included. Each deployed btp-status instance therefore reports only the health of its own region's endpoints.
 
-**Evaluation mode** still takes precedence: `alwaysok` returns `200 OK` and `alwayserror` returns `500` immediately, without reading any file.
+**Location grouping**: from the qualifying files, the latest check result per probe location (city stamped in the filename) is collected. The overall response is determined by aggregating across all locations.
 
-**Run Test / Test All** always runs a live probe against all endpoints regardless of region, so you can verify any endpoint from any location manually.
+**Response body** is JSON:
+
+| HTTP | Body | Meaning |
+|------|------|---------|
+| `200` | `{"status":"OK","locations":[{"Ashburn":200},…]}` | Latest result from every location is `200`/`203` |
+| `200` | `{"status":"Partial OK","locations":[{"Ashburn":200},{"Frankfurt":400},…]}` | At least one location is non-200 (e.g. `400` Partially Failed) but not all are down |
+| `500` | `{"status":"Service down","locations":[{"Ashburn":500},…]}` | Every location's latest result is `500`/`503`/`504` |
+| `200` | `{"status":"OK","locations":[],"note":"no recent data"}` | No files in the time window — treated as healthy |
+
+**Evaluation mode** takes precedence: `alwaysok` → `200 {"status":"OK","locations":[]}`, `alwayserror` → `500 {"status":"Service down","locations":[]}`.
+
+**Run Test / Test All** always run a live probe against all endpoints regardless of region, so you can verify any endpoint from any location manually.
 
 ## Authentication and Authorization
 
@@ -471,7 +477,7 @@ The server uses [pino](https://getpino.io) with colorized pretty-print output.
 | `CONFIG_FILE` | `./config.json` | Path to config JSON file (relative to `server/` working dir; resolved as `server/config.json` from repo root) |
 | `RESPONSE_DIR` | `./response` | Directory for response file storage |
 | `SYNC_REMOTE` | — | Base URL of another BTP Status instance (e.g. `https://btp-status-prod.cfapps.eu10.hana.ondemand.com`). On startup, missing response files are downloaded from the remote and saved to the local `RESPONSE_DIR`. Periodic sync runs every `SYNC_INTERVAL` seconds. |
-| `SYNC_INTERVAL` | `900` | Seconds between periodic remote sync runs (minimum 60). Only effective when `SYNC_REMOTE` is set. |
+| `SYNC_INTERVAL` | `300` | Seconds between periodic remote sync runs (minimum 60). Only effective when `SYNC_REMOTE` is set. |
 | `SYNC_REMOTE_BATCH_SIZE` | `100` | Number of files requested per `POST /api/batch-download` call during sync. The sync job tries the batch endpoint first; if the remote does not support it, it falls back to individual `GET /api/download` requests with concurrency 10. |
 | `MAX_RESPONSE_STORAGE_DAYS` | `3` | Response files (JSON + PNG) older than this many days are automatically deleted. Housekeeping runs once on startup then every 24 hours. Set to `0` to disable. Also controls the furthest date selectable in the UI's Date Range picker. |
 | `REQUEST_TIMEOUT_MS` | `30000` | Default HTTP request timeout in milliseconds for standard endpoint checks. A check that exceeds this limit is recorded with status `504` and the response filename ends in `_504.json`. Per-endpoint `timeout` in `config.json` overrides this value for that endpoint only. |

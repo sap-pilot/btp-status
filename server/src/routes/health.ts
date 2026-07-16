@@ -3,10 +3,12 @@ import type { Request, Response, NextFunction } from 'express';
 import { getService } from '../services/configService.js';
 import { listResponseFiles } from '../services/responseStore.js';
 import { getEvaluationMode } from '../services/overrideService.js';
-import { config } from '../config.js';
 import { logger } from '../logger.js';
 
 const router = Router();
+
+/** Fallback lookback when no interval is configured on the endpoint or service (seconds). */
+const DEFAULT_INTERVAL_S = 3600;
 
 function extractRegion(host: string): string | null {
   return host.match(/cfapps\.([^.]+)\.hana/)?.[1] ?? null;
@@ -17,14 +19,15 @@ function slugify(name: string): string {
 }
 
 /**
- * Returns the latest saved check result for region-matching endpoints.
- * Does NOT run a live probe — reads the most recent response file per endpoint.
- * Designed for Traffic Manager probes (called every 3-5 s, must respond in < 10 s).
+ * File-based health check — designed for Traffic Manager probes (3–5 s interval, sub-second response).
  *
- * Responses:
- *   200 "OK"            — all recent checks passed (status 200/203)
- *   200 "Partially OK"  — at least one endpoint had status 400 (initial fail, retry succeeded)
- *   500 "service down"  — at least one endpoint has status 500/503/504 as its latest result
+ * Evaluates the latest saved check result for each probe location (city) within the window
+ * [now - endpoint.interval * 2, now]. Only region-matching endpoints are considered.
+ *
+ * Responses (JSON body):
+ *   200 { status: "OK",          locations: [{city: statusCode}, …] }
+ *   200 { status: "Partial OK",  locations: [{city: statusCode}, …] }
+ *   500 { status: "Service down",locations: [{city: statusCode}, …] }
  */
 router.get('/:name', async (req: Request, res: Response, next: NextFunction) => {
   const name = req.params['name'] as string;
@@ -38,12 +41,12 @@ router.get('/:name', async (req: Request, res: Response, next: NextFunction) => 
 
   if (evalMode === 'alwaysok') {
     logger.info({ service: name }, 'Health check forced OK — eval mode: alwaysok');
-    res.status(200).type('text/plain').send('OK');
+    res.status(200).json({ status: 'OK', locations: [] });
     return;
   }
   if (evalMode === 'alwayserror') {
     logger.warn({ service: name }, 'Health check forced fail — eval mode: alwayserror');
-    res.status(500).type('text/plain').send('service evaluation mode: always error');
+    res.status(500).json({ status: 'Service down', locations: [] });
     return;
   }
 
@@ -56,55 +59,63 @@ router.get('/:name', async (req: Request, res: Response, next: NextFunction) => 
 
     const hostRegion = extractRegion(requestHost);
 
-    // Endpoints relevant to this region: include if endpoint has no region, request has no
-    // region (non-CF hostname), or regions match.
-    const relevantSlugs = new Set(
-      service.endpoints
-        .filter(ep => !ep.region || !hostRegion || ep.region === hostRegion)
-        .map(ep => (ep.name ? slugify(ep.name) : null))
-        .filter((s): s is string => s !== null),
-    );
+    // Build per-endpoint (slug, lookbackMs) list, filtered by region.
+    const epEntries = service.endpoints
+      .filter(ep => !ep.region || !hostRegion || ep.region === hostRegion)
+      .flatMap(ep => {
+        if (!ep.name) return [];
+        const effectiveInterval = ep.interval ?? service.interval ?? DEFAULT_INTERVAL_S;
+        return [{ slug: slugify(ep.name), lookbackMs: effectiveInterval * 2 * 1000 }];
+      });
 
-    if (relevantSlugs.size === 0) {
+    if (epEntries.length === 0) {
       logger.info({ service: name, hostRegion }, 'Health check: no endpoints match region — returning OK');
-      res.status(200).type('text/plain').send('OK');
+      res.status(200).json({ status: 'OK', locations: [] });
       return;
     }
 
-    // Load files for the full retention window; files are returned newest-first.
-    const lookbackHours = Math.max(24, config.MAX_RESPONSE_STORAGE_DAYS * 24);
-    const files = await listResponseFiles(name, { hours: lookbackHours });
+    const now = Date.now();
+    // Fetch files using the broadest window across all endpoints; files are newest-first.
+    const minFromMs = Math.min(...epEntries.map(e => now - e.lookbackMs));
+    const files = await listResponseFiles(name, { fromMs: minFromMs, untilMs: now });
 
-    // Pick the most recent file for each relevant endpoint slug.
-    const latestBySlug = new Map<string, (typeof files)[0]>();
-    for (const f of files) {
-      if (!f.endpointSlug || !relevantSlugs.has(f.endpointSlug)) continue;
-      if (!latestBySlug.has(f.endpointSlug)) latestBySlug.set(f.endpointSlug, f);
-      if (latestBySlug.size === relevantSlugs.size) break; // found latest for every endpoint
+    // For each endpoint, find files within its own window and track the latest per city.
+    const latestByCity = new Map<string, { status: number; timestamp: number }>();
+
+    for (const { slug, lookbackMs } of epEntries) {
+      const fromMs = now - lookbackMs;
+      for (const f of files) {
+        if (f.endpointSlug !== slug) continue;
+        if (f.timestamp < fromMs) continue;
+        const city = f.city ?? 'unknown';
+        const existing = latestByCity.get(city);
+        if (!existing || f.timestamp > existing.timestamp) {
+          latestByCity.set(city, { status: f.overallStatus, timestamp: f.timestamp });
+        }
+      }
     }
 
-    if (latestBySlug.size === 0) {
-      logger.info({ service: name }, 'Health check: no recent data — returning OK');
-      res.status(200).type('text/plain').send('OK (no recent data)');
+    if (latestByCity.size === 0) {
+      logger.info({ service: name }, 'Health check: no recent data in window — returning OK');
+      res.status(200).json({ status: 'OK', locations: [], note: 'no recent data' });
       return;
     }
 
-    const failedSlugs = [...latestBySlug.entries()]
-      .filter(([, f]) => f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504)
-      .map(([slug]) => slug);
+    const locations = [...latestByCity.entries()].map(([city, e]) => ({ [city]: e.status }));
+    const statuses = [...latestByCity.values()].map(e => e.status);
 
-    const statuses = [...latestBySlug.values()].map(f => f.overallStatus);
-    const anyPartial = statuses.some(s => s === 400);
+    const allDown = statuses.every(s => s === 500 || s === 503 || s === 504);
+    const allOk = statuses.every(s => s === 200 || s === 203);
 
-    if (failedSlugs.length > 0) {
-      logger.warn({ service: name, failedSlugs }, 'Health check failed (latest file)');
-      res.status(500).type('text/plain').send(`service down: ${failedSlugs.join(', ')}`);
-    } else if (anyPartial) {
-      logger.info({ service: name }, 'Health check: partial failures, retry succeeded (latest file)');
-      res.status(200).type('text/plain').send('Partially OK');
+    if (allDown) {
+      logger.warn({ service: name, locations }, 'Health check failed — all locations down');
+      res.status(500).json({ status: 'Service down', locations });
+    } else if (allOk) {
+      logger.info({ service: name, locations }, 'Health check passed');
+      res.status(200).json({ status: 'OK', locations });
     } else {
-      logger.info({ service: name }, 'Health check passed (latest file)');
-      res.status(200).type('text/plain').send('OK');
+      logger.info({ service: name, locations }, 'Health check partial — some locations degraded');
+      res.status(200).json({ status: 'Partial OK', locations });
     }
   } catch (err) {
     next(err);
