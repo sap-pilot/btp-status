@@ -211,11 +211,12 @@ export default function History() {
   function openFile(file: HistoryFile | null) {
     setSelected(file);
     const base = `/service/${encodeURIComponent(name)}`;
+    const search = window.location.search;
     if (file) {
       const hash = file.filename.replace(/\.(json|png)$/, '');
-      window.history.replaceState(null, '', `${base}#${hash}`);
+      window.history.replaceState(null, '', `${base}${search}#${hash}`);
     } else {
-      window.history.replaceState(null, '', base);
+      window.history.replaceState(null, '', `${base}${search}`);
     }
   }
 
