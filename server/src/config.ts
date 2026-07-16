@@ -4,7 +4,7 @@ const RESPONSE_DIR = process.env.RESPONSE_DIR ?? './response';
 const SYNC_REMOTE = process.env.SYNC_REMOTE ?? '';
 const SYNC_REMOTE_BATCH_SIZE = Math.max(1, parseInt(process.env.SYNC_REMOTE_BATCH_SIZE ?? '100', 10));
 const SYNC_INTERVAL = Math.max(0, parseInt(process.env.SYNC_INTERVAL ?? '300', 10));
-const MAX_RESPONSE_STORAGE_DAYS = Math.max(0, parseInt(process.env.MAX_RESPONSE_STORAGE_DAYS ?? '3', 10));
+const MAX_RESPONSE_STORAGE_DAYS = Math.max(0, parseInt(process.env.MAX_RESPONSE_STORAGE_DAYS ?? '7', 10));
 const REQUEST_TIMEOUT_MS = Math.max(1000, parseInt(process.env.REQUEST_TIMEOUT_MS ?? '30000', 10));
 
 // Self URL for webhook callback registration. Set SELF_URL explicitly or derive from CF VCAP_APPLICATION.
