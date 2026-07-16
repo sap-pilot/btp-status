@@ -117,13 +117,14 @@ export default function History() {
 
   // Table filters — initialise from URL params so diagram node clicks pre-filter
   const [filterEndpoint, setFilterEndpoint] = useState(() => new URLSearchParams(location.search).get('endpoint') ?? 'all');
-  const [filterLocation, setFilterLocation] = useState('all');
+  const [filterLocation, setFilterLocation] = useState(() => new URLSearchParams(location.search).get('location') ?? 'all');
   const [filterStatus, setFilterStatus] = useState(() => new URLSearchParams(location.search).get('status') ?? 'all');
 
   // Re-apply URL params when navigating to same route with different params
   useEffect(() => {
     const p = new URLSearchParams(location.search);
     setFilterEndpoint(p.get('endpoint') ?? 'all');
+    setFilterLocation(p.get('location') ?? 'all');
     setFilterStatus(p.get('status') ?? 'all');
   // Only re-run when the search string itself changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -321,6 +322,18 @@ export default function History() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files, service, filterEndpoint, filterLocation, filterStatus, hasFilter]);
 
+  // Files for the response time chart: filtered by endpoint + location only (status does not affect the chart)
+  const chartFiles = useMemo(() => {
+    if (filterEndpoint === 'all' && filterLocation === 'all') return files;
+    return files.filter(f => {
+      if (filterEndpoint !== 'all' && endpointLabel(f) !== filterEndpoint) return false;
+      if (filterLocation !== 'all' && (f.city ?? '—') !== filterLocation) return false;
+      return true;
+    });
+  // endpointLabel depends on service
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files, service, filterEndpoint, filterLocation]);
+
   function setSearchParam(updates: Record<string, string | null>) {
     const p = new URLSearchParams(location.search);
     for (const [k, v] of Object.entries(updates)) {
@@ -335,7 +348,7 @@ export default function History() {
     setFilterEndpoint('all');
     setFilterLocation('all');
     setFilterStatus('all');
-    setSearchParam({ endpoint: null, status: null });
+    setSearchParam({ endpoint: null, location: null, status: null });
   }
 
   // Build schedule select value — may not match a preset if config uses a custom interval
@@ -774,7 +787,7 @@ export default function History() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponseTimeChart files={files} service={service} />
+            <ResponseTimeChart files={chartFiles} service={service} />
           </CardContent>
         </Card>
 
@@ -811,7 +824,7 @@ export default function History() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Select value={filterLocation} onValueChange={setFilterLocation}>
+                  <Select value={filterLocation} onValueChange={v => { setFilterLocation(v); setSearchParam({ location: v === 'all' ? null : v }); }}>
                     <SelectTrigger className="h-7 text-xs w-auto min-w-[9rem] max-w-[14rem]">
                       <SelectValue />
                     </SelectTrigger>
@@ -822,7 +835,7 @@ export default function History() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <Select value={filterStatus} onValueChange={v => { setFilterStatus(v); setSearchParam({ status: v === 'all' ? null : v }); }}>
                     <SelectTrigger className="h-7 text-xs w-40">
                       <SelectValue />
                     </SelectTrigger>
