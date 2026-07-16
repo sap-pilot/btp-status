@@ -399,37 +399,41 @@ export default function TestModal({ serviceName, open, onClose, onComplete }: Pr
                     )}
                   </Tabs>}
 
-                  {/* Retry accordions — each displayed like a full endpoint */}
+                  {/* Retry sections — same visual style as endpoint sections */}
                   {!collapsed.has(epIdx) && ep.retries && ep.retries.length > 0 && (
-                    <div className="mt-3 space-y-1.5">
+                    <div className="mt-3">
                       {ep.retries.map((retry, retryIdx) => {
                         const key = `${epIdx}-${retryIdx}`;
                         const isExpanded = collapsedRetries.has(key);
                         const isBrowserRetry = retry.request.method === 'BROWSER';
                         return (
-                          <div key={retryIdx} className="border border-border rounded">
-                            <button
-                              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted/30 text-left"
-                              onClick={() => toggleRetry(key)}
-                            >
+                          <div key={retryIdx}>
+                            <div className="border-t border-border mt-3 mb-3" />
+                            <div className="flex items-center gap-2 mb-3">
+                              <button
+                                onClick={() => toggleRetry(key)}
+                                className="text-muted-foreground hover:text-foreground flex-shrink-0"
+                                title={isExpanded ? 'Collapse' : 'Expand'}
+                              >
+                                {isExpanded
+                                  ? <ChevronDown className="h-4 w-4" />
+                                  : <ChevronRight className="h-4 w-4" />}
+                              </button>
                               <span className={`w-2 h-2 rounded-full flex-shrink-0 ${retry.passed ? 'bg-green-500' : 'bg-red-500'}`} />
-                              <span className="text-sm font-medium flex-1 truncate">{ep.name}</span>
+                              <span className="text-sm font-semibold">{ep.name}</span>
                               <Badge variant="outline" className="text-xs border-blue-500 text-blue-400 flex-shrink-0">
                                 retry #{retry.attempt}
                               </Badge>
-                              <span className="text-xs text-muted-foreground flex-shrink-0">{retry.responseTime}ms</span>
+                              <span className="text-xs text-muted-foreground">{retry.responseTime}ms</span>
                               <Badge
                                 variant={retry.passed ? 'outline' : 'destructive'}
-                                className={`text-xs flex-shrink-0 ${retry.passed ? 'border-green-600 text-green-400' : ''}`}
+                                className={`text-xs ml-auto ${retry.passed ? 'border-green-600 text-green-400' : ''}`}
                               >
                                 {retry.passed ? 'PASS' : 'FAIL'}
                               </Badge>
-                              {isExpanded
-                                ? <ChevronDown className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
-                                : <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />}
-                            </button>
+                            </div>
                             {isExpanded && (
-                              <div className="border-t border-border p-2">
+                              <div>
                                 <Tabs defaultValue="conditions">
                                   <TabsList className="h-8">
                                     <TabsTrigger value="conditions" className="text-xs h-7">

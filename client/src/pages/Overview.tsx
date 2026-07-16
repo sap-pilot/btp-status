@@ -1,4 +1,4 @@
-import { Fragment, lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { parseFilename } from '@/lib/parseFilename';
 import { Link, useNavigate } from 'react-router-dom';
 import type { ServiceWithHistory, HistoryFile, LandscapeConfig, ServiceSummary, SiteConfig } from '@shared/types';
@@ -187,13 +187,6 @@ export default function Overview() {
       setRefreshTick(t => t + 1);
     }
   }
-
-  const groups = data.reduce<Record<string, ParsedService[]>>((acc, svc) => {
-    const g = svc.group || 'Default';
-    if (!acc[g]) acc[g] = [];
-    acc[g].push(svc);
-    return acc;
-  }, {});
 
   const summaryMap = useMemo(
     () => Object.fromEntries(summaries.map(s => [s.name, s.rangeStatus])) as Record<string, ServiceSummary['rangeStatus']>,
@@ -565,131 +558,120 @@ export default function Overview() {
           </Card>
         )}
 
-        {/* Groups */}
-        {Object.entries(groups).map(([group, services]) => (
-          <Card key={group}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base font-medium text-muted-foreground uppercase tracking-wider">
-                {group}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <table className={`w-full ${isMobile ? '' : 'table-fixed'}`}>
-                {!isMobile && (
-                  <colgroup>
-                    <col className="w-[170px]" />
-                    <col />
-                    <col className="w-[110px]" />
-                  </colgroup>
-                )}
-                <tbody>
-                  {services.map(svc => {
-                    const rs = summaryMap[svc.name] ?? null;
-                    return (
-                      <Fragment key={svc.name}>
-                        {/* Service group header */}
-                        <tr className="bg-muted/30 border-b border-border">
-                          <td colSpan={99} className="px-4 py-2">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                  rs === 'ok' ? 'bg-green-500' :
-                                  rs === 'warning' ? 'bg-amber-400' :
-                                  rs === 'error' ? 'bg-red-500' :
-                                  'bg-gray-500'
-                                }`}
-                              />
+        {/* Per-service cards */}
+        {data.map(svc => {
+          const rs = summaryMap[svc.name] ?? null;
+          return (
+            <Card key={svc.name}>
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                      rs === 'ok' ? 'bg-green-500' :
+                      rs === 'warning' ? 'bg-amber-400' :
+                      rs === 'error' ? 'bg-red-500' :
+                      'bg-gray-500'
+                    }`}
+                  />
+                  <CardTitle className="text-sm font-medium">
+                    <Link
+                      to={`/service/${encodeURIComponent(svc.name)}`}
+                      className="hover:text-primary transition-colors"
+                    >
+                      {svc.name}
+                    </Link>
+                  </CardTitle>
+                  {svc.homepage && (
+                    <a
+                      href={svc.homepage}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={`Open ${svc.name} homepage`}
+                      className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <table className={`w-full ${isMobile ? '' : 'table-fixed'}`}>
+                  {!isMobile && (
+                    <colgroup>
+                      <col className="w-[170px]" />
+                      <col />
+                      <col className="w-[110px]" />
+                    </colgroup>
+                  )}
+                  <tbody>
+                    {svc.endpoints.map((ep, ei) => {
+                      const epSlug = slugify(ep.name ?? '');
+                      const epFiles = svc.history.filter(f =>
+                        f.endpointSlug !== undefined ? f.endpointSlug === epSlug : f.endpointIndex === ei,
+                      );
+                      const epUptime = getUptimePct(epFiles);
+                      const epNodeSt = getEndpointNodeStatus(epFiles);
+                      const badgeCls = epFiles.length === 0 ? 'text-muted-foreground border-border' :
+                        epNodeSt === 'error' ? 'border-red-600 text-red-400' :
+                        epUptime < 100 ? 'border-yellow-600 text-yellow-400' :
+                        'border-green-600 text-green-400';
+                      return (
+                        <tr
+                          key={ei}
+                          className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
+                        >
+                          <td className="px-4 pr-2 py-2 align-middle">
+                            <div className="flex items-center gap-1.5 min-w-0">
                               <Link
-                                to={`/service/${encodeURIComponent(svc.name)}`}
-                                className="text-sm font-medium hover:text-primary transition-colors truncate"
+                                to={`/service/${encodeURIComponent(svc.name)}?endpoint=${encodeURIComponent(ep.name ?? ep.url)}`}
+                                className="text-xs hover:underline truncate"
                               >
-                                {svc.name}
+                                {ep.name ?? ep.url}
                               </Link>
-                              {svc.homepage && (
+                              {ep.url.startsWith('http') && (
                                 <a
-                                  href={svc.homepage}
+                                  href={ep.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  title={`Open ${svc.name} homepage`}
-                                  className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+                                  className="flex-shrink-0 text-muted-foreground hover:text-foreground"
+                                  title={ep.url}
+                                  onClick={e => e.stopPropagation()}
                                 >
-                                  <ExternalLink className="h-3.5 w-3.5" />
+                                  <ExternalLink className="h-3 w-3" />
                                 </a>
                               )}
                             </div>
                           </td>
+                          {!isMobile && (
+                            <td className="px-0 py-2 align-middle">
+                              <StatusDots
+                                history={epFiles}
+                                maxDots={maxDots}
+                                showUptime={false}
+                                showAvg={false}
+                                onDotClick={file => navigate(
+                                  `/service/${encodeURIComponent(svc.name)}`,
+                                  { state: { autoOpenFilename: file.filename } },
+                                )}
+                              />
+                            </td>
+                          )}
+                          <td className="px-2 py-2 align-middle">
+                            <div className="flex justify-end">
+                              <Badge variant="outline" className={`text-xs ${badgeCls}`}>
+                                {epFiles.length > 0 ? `${fmtUptime(epUptime)} up` : 'no data'}
+                              </Badge>
+                            </div>
+                          </td>
                         </tr>
-                        {/* One row per endpoint */}
-                        {svc.endpoints.map((ep, ei) => {
-                          const epSlug = slugify(ep.name ?? '');
-                          const epFiles = svc.history.filter(f =>
-                            f.endpointSlug !== undefined ? f.endpointSlug === epSlug : f.endpointIndex === ei,
-                          );
-                          const epUptime = getUptimePct(epFiles);
-                          const epNodeSt = getEndpointNodeStatus(epFiles);
-                          const badgeCls = epFiles.length === 0 ? 'text-muted-foreground border-border' :
-                            epNodeSt === 'error' ? 'border-red-600 text-red-400' :
-                            epUptime < 100 ? 'border-yellow-600 text-yellow-400' :
-                            'border-green-600 text-green-400';
-                          return (
-                            <tr
-                              key={ei}
-                              className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
-                            >
-                              <td className="pl-7 pr-2 py-2 align-middle">
-                                <div className="flex items-center gap-1.5 min-w-0">
-                                  <Link
-                                    to={`/service/${encodeURIComponent(svc.name)}?endpoint=${encodeURIComponent(ep.name ?? ep.url)}`}
-                                    className="text-xs hover:underline truncate"
-                                  >
-                                    {ep.name ?? ep.url}
-                                  </Link>
-                                  {ep.url.startsWith('http') && (
-                                    <a
-                                      href={ep.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex-shrink-0 text-muted-foreground hover:text-foreground"
-                                      title={ep.url}
-                                      onClick={e => e.stopPropagation()}
-                                    >
-                                      <ExternalLink className="h-3 w-3" />
-                                    </a>
-                                  )}
-                                </div>
-                              </td>
-                              {!isMobile && (
-                                <td className="px-0 py-2 align-middle">
-                                  <StatusDots
-                                    history={epFiles}
-                                    maxDots={maxDots}
-                                    showUptime={false}
-                                    showAvg={false}
-                                    onDotClick={file => navigate(
-                                      `/service/${encodeURIComponent(svc.name)}`,
-                                      { state: { autoOpenFilename: file.filename } },
-                                    )}
-                                  />
-                                </td>
-                              )}
-                              <td className="px-2 py-2 align-middle">
-                                <div className="flex justify-end">
-                                  <Badge variant="outline" className={`text-xs ${badgeCls}`}>
-                                    {epFiles.length > 0 ? `${fmtUptime(epUptime)} up` : 'no data'}
-                                  </Badge>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
-        ))}
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          );
+        })}
 
         {!loading && data.length === 0 && !error && (
           <div className="text-center text-muted-foreground py-16">
