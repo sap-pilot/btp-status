@@ -37,17 +37,17 @@ export async function saveResponse(
 
   let finalRecord = record;
   if (screenshot && screenshot.length > 0) {
-    const pngFilename = `${base}${retrySuffix}.png`;
+    const pngFilename = `${base}${retrySuffix}.screenshot.png`;
     await writeFile(join(dir, pngFilename), screenshot);
     finalRecord = { ...finalRecord, screenshotFile: pngFilename };
   }
   if (consoleLogs && consoleLogs.length > 0) {
-    const logFilename = `${base}_console${retrySuffix}.log`;
+    const logFilename = `${base}${retrySuffix}.console.log`;
     await writeFile(join(dir, logFilename), consoleLogs.join('\n'), 'utf-8');
     finalRecord = { ...finalRecord, consoleLogFile: logFilename };
   }
   if (htmlContent && htmlContent.length > 0) {
-    const htmlFilename = `${base}_content${retrySuffix}.html`;
+    const htmlFilename = `${base}${retrySuffix}.content.html`;
     await writeFile(join(dir, htmlFilename), htmlContent, 'utf-8');
     finalRecord = { ...finalRecord, contentFile: htmlFilename };
   }
@@ -73,8 +73,11 @@ export async function listResponseFiles(
       if (f.endsWith('.retry.json')) continue;  // exclude retry files from history
       const meta = parseFilename(f);
       if (meta && meta.timestamp >= fromMs && meta.timestamp <= untilMs) {
-        const pngName = f.replace(/\.json$/, '.png');
-        results.push(fileSet.has(pngName) ? { ...meta, screenshotFile: pngName } : meta);
+        // Support both old (*.png) and new (*.screenshot.png) screenshot naming
+        const pngNew = f.replace(/\.json$/, '.screenshot.png');
+        const pngOld = f.replace(/\.json$/, '.png');
+        const pngFile = fileSet.has(pngNew) ? pngNew : fileSet.has(pngOld) ? pngOld : null;
+        results.push(pngFile ? { ...meta, screenshotFile: pngFile } : meta);
       }
     }
     return results.sort((a, b) => b.timestamp - a.timestamp);
@@ -97,7 +100,8 @@ export async function readScreenshotFile(
   serviceName: string,
   filename: string,
 ): Promise<Buffer> {
-  if (!/^[\w-]+\.png$/.test(filename)) throw new Error('Invalid filename');
+  // Accept new (*.screenshot.png) and legacy (*.png) naming
+  if (!/^[\w-]+(?:\.screenshot)?\.png$/.test(filename)) throw new Error('Invalid filename');
   const filepath = join(config.RESPONSE_DIR, sanitizeName(serviceName), filename);
   return readFile(filepath);
 }
@@ -106,7 +110,8 @@ export async function readConsoleLogFile(
   serviceName: string,
   filename: string,
 ): Promise<Buffer> {
-  if (!/^[\w-]+_console(?:\.retry)?\.log$/.test(filename)) throw new Error('Invalid filename');
+  // Accept new (*[.retry].console.log) and legacy (*_console[.retry].log) naming
+  if (!/^[\w-]+(?:(?:\.retry)?\.console\.log|_console(?:\.retry)?\.log)$/.test(filename)) throw new Error('Invalid filename');
   const filepath = join(config.RESPONSE_DIR, sanitizeName(serviceName), filename);
   return readFile(filepath);
 }
@@ -115,7 +120,8 @@ export async function readContentFile(
   serviceName: string,
   filename: string,
 ): Promise<Buffer> {
-  if (!/^[\w-]+_content(?:\.retry)?\.html$/.test(filename)) throw new Error('Invalid filename');
+  // Accept new (*[.retry].content.html) and legacy (*_content[.retry].html) naming
+  if (!/^[\w-]+(?:(?:\.retry)?\.content\.html|_content(?:\.retry)?\.html)$/.test(filename)) throw new Error('Invalid filename');
   const filepath = join(config.RESPONSE_DIR, sanitizeName(serviceName), filename);
   return readFile(filepath);
 }
@@ -190,8 +196,7 @@ export async function browseResponseFiles(): Promise<Record<string, string[]>> {
             const files = await readdir(join(config.RESPONSE_DIR, dir.name));
             result[dir.name] = files.filter(f =>
               f.endsWith('.json') || f.endsWith('.png') ||
-              f.endsWith('_console.log') || f.endsWith('_content.html') ||
-              f.endsWith('_console.retry.log') || f.endsWith('_content.retry.html'),
+              f.endsWith('.log') || f.endsWith('.html'),
             ).sort();
           } catch {
             result[dir.name] = [];

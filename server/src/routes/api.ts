@@ -292,10 +292,10 @@ router.get('/download', requireSyncAuth, async (req, res, next) => {
     if (filename.endsWith('.png')) {
       const buf = await readScreenshotFile(folder, filename);
       res.type('image/png').send(buf);
-    } else if (filename.endsWith('_console.log')) {
+    } else if (filename.endsWith('.log')) {
       const buf = await readConsoleLogFile(folder, filename);
       res.type('text/plain').send(buf);
-    } else if (filename.endsWith('_content.html')) {
+    } else if (filename.endsWith('.html')) {
       const buf = await readContentFile(folder, filename);
       res.type('text/plain').send(buf);
     } else {

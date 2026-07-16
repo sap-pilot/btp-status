@@ -182,7 +182,7 @@ export async function checkService(serviceName: string, requestHost?: string, on
             response: { status: retryStatus, headers: {}, body: rr.message },
             responseTime: rr.responseTime,
             screenshotUrl: hasRetryScreenshot
-              ? `/api/download?path=${encodeURIComponent(serviceName)}/${encodeURIComponent(retryFile.replace(/\.json$/, '.png'))}`
+              ? `/api/download?path=${encodeURIComponent(serviceName)}/${encodeURIComponent(retryFile.replace(/\.json$/, '.screenshot.png'))}`
               : undefined,
             consoleText: rr.consoleLogs.length > 0 ? rr.consoleLogs.join('\n') : undefined,
             htmlText: rr.htmlContent || undefined,
@@ -211,7 +211,7 @@ export async function checkService(serviceName: string, requestHost?: string, on
       };
 
       const jsonFile = await saveResponse(serviceName, record, result.screenshot, result.consoleLogs, result.htmlContent);
-      const screenshotFile = jsonFile.replace(/\.json$/, '.png');
+      const screenshotFile = jsonFile.replace(/\.json$/, '.screenshot.png');
       const hasScreenshot = result.screenshot.length > 0;
 
       details.push({
