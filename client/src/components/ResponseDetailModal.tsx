@@ -44,6 +44,8 @@ export default function ResponseDetailModal({ file, serviceName, onClose, auth }
   const [needsAuth, setNeedsAuth] = useState(false);
   const [consoleText, setConsoleText] = useState<string | null>(null);
   const [htmlText, setHtmlText] = useState<string | null>(null);
+  const [retryRecords, setRetryRecords] = useState<ResponseRecord[]>([]);
+  const [expandedRetry, setExpandedRetry] = useState<number | null>(null);
 
   const requiresLogin = auth?.enabled && !auth.loggedIn;
 
@@ -61,6 +63,8 @@ export default function ResponseDetailModal({ file, serviceName, onClose, auth }
     setNeedsAuth(false);
     setLoading(true);
     setError(null);
+    setRetryRecords([]);
+    setExpandedRetry(null);
     fetch(`/api/history/${encodeURIComponent(serviceName)}/${encodeURIComponent(file.filename)}`)
       .then(r => {
         if (r.status === 401) { setNeedsAuth(true); throw new Error('401'); }
@@ -85,6 +89,16 @@ export default function ResponseDetailModal({ file, serviceName, onClose, auth }
       record.consoleLogFile ? fetchSidecar(record.consoleLogFile) : Promise.resolve(null),
       record.contentFile ? fetchSidecar(record.contentFile) : Promise.resolve(null),
     ]).then(([c, h]) => { setConsoleText(c); setHtmlText(h); });
+
+    if (record.retryFiles && record.retryFiles.length > 0) {
+      void Promise.all(
+        record.retryFiles.map(f =>
+          fetch(`/api/history/${encodeURIComponent(serviceName)}/${encodeURIComponent(f)}`)
+            .then(r => r.ok ? r.json() as Promise<ResponseRecord> : null)
+            .catch(() => null),
+        ),
+      ).then(results => setRetryRecords(results.filter((r): r is ResponseRecord => r !== null)));
+    }
   }, [record, serviceName]);
 
   const isBrowser = record?.request.method === 'BROWSER';
@@ -99,9 +113,11 @@ export default function ResponseDetailModal({ file, serviceName, onClose, auth }
           <DialogTitle className="flex items-center gap-2">
             Response Detail
             {record && (
-              <Badge variant={record.overallStatus === 200 || record.overallStatus === 203 ? 'default' : 'destructive'}>
-                {record.overallStatus === 200 ? 'PASS' : record.overallStatus === 203 ? 'PASS (always ok)' : record.overallStatus === 503 ? 'FAIL (always error)' : 'FAIL'}
-              </Badge>
+              record.overallStatus === 200 ? <Badge variant="default">PASS</Badge> :
+              record.overallStatus === 203 ? <Badge variant="default">PASS (always ok)</Badge> :
+              record.overallStatus === 400 ? <Badge variant="outline" className="border-orange-500 text-orange-400">PARTIAL</Badge> :
+              record.overallStatus === 503 ? <Badge variant="destructive">FAIL (always error)</Badge> :
+              <Badge variant="destructive">FAIL</Badge>
             )}
             {isBrowser && (
               <Badge variant="outline" className="text-xs border-blue-600 text-blue-400">Browser</Badge>
@@ -128,6 +144,7 @@ export default function ResponseDetailModal({ file, serviceName, onClose, auth }
           <Tabs defaultValue="overview" className="flex-1 flex flex-col min-h-0">
             <TabsList className="flex-shrink-0">
               <TabsTrigger value="overview">Overview</TabsTrigger>
+              {retryRecords.length > 0 && <TabsTrigger value="retries">Retries ({retryRecords.length})</TabsTrigger>}
               {isBrowser && screenshotUrl && <TabsTrigger value="screenshot">Screenshot</TabsTrigger>}
               {isBrowser && htmlText !== null && <TabsTrigger value="pagesource">Page Source</TabsTrigger>}
               {isBrowser && consoleText !== null && <TabsTrigger value="console">Console</TabsTrigger>}
@@ -144,6 +161,60 @@ export default function ResponseDetailModal({ file, serviceName, onClose, auth }
                       alt="Login screenshot"
                       className="w-full rounded border border-border"
                     />
+                  </ScrollArea>
+                </TabsContent>
+              )}
+
+              {retryRecords.length > 0 && (
+                <TabsContent value="retries" className="h-full">
+                  <ScrollArea className="h-full">
+                    <div className="space-y-2 p-1">
+                      {retryRecords.map((rr, idx) => (
+                        <div key={idx} className="border border-border rounded">
+                          <button
+                            className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-muted/30 transition-colors"
+                            onClick={() => setExpandedRetry(expandedRetry === idx ? null : idx)}
+                          >
+                            <span className="font-medium">Retry {idx + 1}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground">{rr.responseTime}ms</span>
+                              {rr.overallStatus === 200
+                                ? <Badge variant="default" className="text-xs">PASS</Badge>
+                                : rr.overallStatus === 504
+                                  ? <Badge variant="outline" className="text-xs border-orange-600 text-orange-500">TIMEOUT</Badge>
+                                  : <Badge variant="destructive" className="text-xs">FAIL</Badge>}
+                              <span className="text-muted-foreground text-xs">{expandedRetry === idx ? '▲' : '▼'}</span>
+                            </div>
+                          </button>
+                          {expandedRetry === idx && (
+                            <div className="border-t border-border px-3 py-2">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Condition</TableHead>
+                                    <TableHead className="w-16">Result</TableHead>
+                                    <TableHead>Actual</TableHead>
+                                    <TableHead>Expected</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {rr.conditions.map((c, ci) => (
+                                    <TableRow key={ci} className={c.passed ? '' : 'bg-destructive/10'}>
+                                      <TableCell className="font-mono text-xs">{c.condition}</TableCell>
+                                      <TableCell>
+                                        <span className={c.passed ? 'text-green-500' : 'text-red-500'}>{c.passed ? '✓' : '✗'}</span>
+                                      </TableCell>
+                                      <TableCell className="font-mono text-xs max-w-xs truncate">{c.actual}</TableCell>
+                                      <TableCell className="font-mono text-xs">{c.expected}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </ScrollArea>
                 </TabsContent>
               )}
@@ -188,9 +259,11 @@ export default function ResponseDetailModal({ file, serviceName, onClose, auth }
                       </div>
                       <div>
                         <div className="text-xs text-muted-foreground mb-1">Overall Result</div>
-                        <Badge variant={record.overallStatus === 200 || record.overallStatus === 203 ? 'default' : 'destructive'}>
-                          {record.overallStatus === 200 ? 'PASS' : record.overallStatus === 203 ? 'PASS (always ok)' : record.overallStatus === 503 ? 'FAIL (always error)' : 'FAIL'}
-                        </Badge>
+                        {record.overallStatus === 200 ? <Badge variant="default">PASS</Badge> :
+                         record.overallStatus === 203 ? <Badge variant="default">PASS (always ok)</Badge> :
+                         record.overallStatus === 400 ? <Badge variant="outline" className="border-orange-500 text-orange-400">PARTIAL (retry succeeded)</Badge> :
+                         record.overallStatus === 503 ? <Badge variant="destructive">FAIL (always error)</Badge> :
+                         <Badge variant="destructive">FAIL</Badge>}
                       </div>
                       {isBrowser && record.response.body && (
                         <div className="col-span-2">

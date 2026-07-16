@@ -35,6 +35,8 @@ export async function runHousekeeping(): Promise<void> {
         else if (file.endsWith('.png')) jsonName = file.replace(/\.png$/, '.json');
         else if (file.endsWith('_console.log')) jsonName = file.slice(0, -12) + '.json';
         else if (file.endsWith('_content.html')) jsonName = file.slice(0, -13) + '.json';
+        else if (file.endsWith('_console.retry.log')) jsonName = file.slice(0, file.length - '_console.retry.log'.length) + '.retry.json';
+        else if (file.endsWith('_content.retry.html')) jsonName = file.slice(0, file.length - '_content.retry.html'.length) + '.retry.json';
         else continue;
         // Use the shared parser which correctly handles UTC (new format) and local (old format)
         const meta = parseFilename(jsonName);

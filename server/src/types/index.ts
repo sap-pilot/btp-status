@@ -9,14 +9,22 @@ export interface EndpointConfig {
   username?: string;
   password?: string;
   waitForSelector?: string;
+  /** Timeout in seconds (was milliseconds before v0.12) */
   timeout?: number;
   region?: string;
+  /** Per-endpoint auto-check interval in seconds */
+  interval?: number;
+  /** Max retry attempts on failure */
+  retry?: number;
+  /** Seconds between retry attempts */
+  retryDelay?: number;
 }
 
 export interface ServiceConfig {
   group: string;
   name: string;
   enabled: boolean;
+  /** Service-level interval (seconds) — kept for backward compat; endpoint-level interval takes precedence */
   interval?: number;
   homepage?: string;
   landscapes?: string[];
@@ -55,11 +63,13 @@ export interface ResponseRecord {
   endpointIndex: number;
   endpointName: string;
   conditions: ConditionResult[];
-  overallStatus: 200 | 203 | 500 | 503 | 504;
+  overallStatus: 200 | 203 | 400 | 500 | 503 | 504;
   city?: string;
   screenshotFile?: string;
   consoleLogFile?: string;
   contentFile?: string;
+  /** Filenames of .retry.json files saved for each retry attempt */
+  retryFiles?: string[];
 }
 
 export interface HistoryFile {
@@ -73,7 +83,7 @@ export interface HistoryFile {
   city?: string;
   responseTime: number;
   httpStatus: number;
-  overallStatus: 200 | 203 | 500 | 503 | 504;
+  overallStatus: 200 | 203 | 400 | 500 | 503 | 504;
   screenshotFile?: string;
 }
 
@@ -90,6 +100,7 @@ export interface EndpointCheckResult {
   name: string;
   conditions: ConditionResult[];
   passed: boolean;
+  partiallyFailed?: boolean;
   request: { url: string; method: string; headers: Record<string, string>; body: string | null };
   response: { status: number; headers: Record<string, string>; body: string };
   responseTime: number;

@@ -192,7 +192,8 @@ router.get('/schedule/:name', (req, res) => {
     return;
   }
   const svc = getService(name);
-  res.json({ intervalSeconds: svc?.interval ?? 0 });
+  const firstEp = svc?.endpoints[0];
+  res.json({ intervalSeconds: firstEp?.interval ?? svc?.interval ?? 0 });
 });
 
 router.post('/schedule/:name', requireAdmin, (req, res) => {

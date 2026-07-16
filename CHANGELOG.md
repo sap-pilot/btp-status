@@ -1,5 +1,23 @@
 # Changelog
 
+## [v0.12.0] - 2026-07-15
+
+### Added
+- **Per-endpoint `interval`** — `endpoints[].interval` sets the auto-check schedule per endpoint; takes precedence over the service-level `interval` fallback; different endpoints in the same service can now run at different frequencies; the scheduler registers one independent timer per endpoint (key `{service}/{idx}`)
+- **Endpoint retry logic** — new `endpoints[].retry` (max attempts) and `endpoints[].retryDelay` (seconds between attempts) config fields; when a check fails and `retry > 0`, the check is automatically re-attempted up to `retry` times; each retry result is saved as a sidecar file with a `.retry` suffix (e.g. `…_500.retry.json`, `…_500.retry.png`, `…_console.retry.log`, `…_content.retry.html`); retry files are excluded from the history list and timeline dots; the main JSON record's `retryFiles` field lists the retry filenames for reference
+- **Partially Failed status (`400`)** — if a failing check is saved after any retry succeeds, the main result file is saved with `overallStatus: 400` (Partially Failed); this signals "endpoint is up but needed retries"; a completely failed check (all attempts fail) keeps status `500`/`504`
+- **"Partially Failed" stat card** — both the Overview and Service detail pages now show a fifth stat card (orange) counting checks with `overallStatus === 400`; clicking the card on the Service detail page sets `?status=partial` in the URL and filters the history table to show only partially failed checks
+- **"Partially Failed" history filter** — a new **Partially failed** option in the status filter dropdown; clicking the **Partially Failed** stat card sets `?status=partial` in the URL for persistent filtering; a `PARTIAL` badge (orange outline) is shown for 400-status rows in the history table with a subtle orange row background
+- **Response Detail modal: Retries tab** — when `record.retryFiles` is non-empty, a **Retries (N)** tab appears in the detail modal; each retry is shown as a collapsible row with its conditions table and pass/fail result; expanding a retry shows the full condition breakdown for that attempt
+
+### Changed
+- **`endpoints[].timeout` unit changed to seconds** — was milliseconds; existing configs must be updated (e.g. `30000` → `30`); the sample config and README are updated; browser check timeout default remains `30` s
+- **Stat grid expanded from 4 to 5 columns** — both Overview and Service detail pages show the new Partially Failed card as the third column between Completely Failed and Total Checks
+- **"Failed Checks" renamed to "Completely Failed"** — the red failed-checks stat card now explicitly refers to completely failed checks (500/503/504); the Partially Failed card shows 400-status checks separately
+- **"Completely Failed" filter now includes 504 (TIMEOUT)** — clicking the Completely Failed stat card or selecting "Completely failed" in the status dropdown now shows 500, 503, and 504 results (previously 504 was excluded from the "All failures" filter)
+- **`config-sample.json` updated** — `interval` moved from service level to endpoint level; `timeout` changed to seconds; `retry` and `retryDelay` added as examples; endpoint names changed to lowercase-dash format (e.g. `"workzone-login"`, `"api-portal"`, `"btp-amer-cockpit"`)
+- **PARTIAL badge in Response Detail modal** — `overallStatus === 400` now renders an orange "PARTIAL" badge in the modal header and overview tab; the overall result field reads "PARTIAL (retry succeeded)"
+
 ## [v0.11.0] - 2026-07-15
 
 ### Added
