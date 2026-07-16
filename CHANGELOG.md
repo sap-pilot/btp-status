@@ -1,5 +1,10 @@
 # Changelog
 
+## [v1.0.0] - 2026-07-16
+
+### Changed
+- **Stat card layout simplified to 4 cards** — the **Overall Uptime** card has been removed from the Overview page and the **Uptime** card removed from the Service detail page; **Total Checks** is now the first card (before Completely Failed and Partially Failed); the grid changes from 5 to 4 columns (`sm:grid-cols-4`); on mobile, all 4 cards fit into a clean 2×2 grid without any card needing to span two columns
+
 ## [v0.12.0] - 2026-07-16
 
 ### Added

@@ -250,17 +250,11 @@ export default function Overview() {
   const anyCurrentlyFailing = summaries.some(s => s.rangeStatus === 'error');
   const anyImperfect = summaries.some(s => s.rangeStatus === 'warning');
 
-  // Aggregate stats — raw endpoint files for check/response counts; combined runs for uptime
+  // Aggregate stats — raw endpoint files for check/response counts
   const allFiles = data.flatMap(s => s.history);
   const totalChecks = allFiles.length;
   const failedChecks = allFiles.filter(f => f.overallStatus === 500 || f.overallStatus === 503 || f.overallStatus === 504).length;
   const partiallyFailedChecks = allFiles.filter(f => f.overallStatus === 400).length;
-  // Use combined per-run history so multi-endpoint services don't dilute the uptime %
-  const allCombinedRuns = data.flatMap(s => getServiceOverallHistory(s));
-  const overallUptime = allCombinedRuns.length > 0
-    ? allCombinedRuns.filter(h => h.overallStatus === 200 || h.overallStatus === 203).length / allCombinedRuns.length * 100
-    : 100;
-  const overallUptimeColor = anyCurrentlyFailing ? 'text-red-500' : overallUptime < 100 ? 'text-yellow-500' : 'text-green-500';
 
   // Per-service + per-endpoint status for diagram coloring
   const serviceStatusMap = useMemo<Record<string, NodeStatus>>(() => {
@@ -545,11 +539,15 @@ export default function Overview() {
 
         {/* Aggregate stats */}
         {data.length > 0 && (
-          <div className="stat-grid grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
-            <Card>
+          <div className="stat-grid grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+            <Card
+              className={`transition-colors${statusFilter ? ' cursor-pointer hover:bg-muted/50' : ''}`}
+              onClick={statusFilter ? () => applyStatusFilter(null) : undefined}
+              title={statusFilter ? 'Clear status filter' : undefined}
+            >
               <CardContent className="pt-4">
-                <div className={`text-base sm:text-2xl font-bold ${overallUptimeColor}`}>{fmtUptime(overallUptime)}</div>
-                <div className="text-xs text-muted-foreground mt-1">Overall Uptime</div>
+                <div className="text-base sm:text-2xl font-bold">{totalChecks}</div>
+                <div className="text-xs text-muted-foreground mt-1">Total Checks</div>
               </CardContent>
             </Card>
             <Card
@@ -573,17 +571,7 @@ export default function Overview() {
               </CardContent>
             </Card>
             <Card
-              className={`transition-colors${statusFilter ? ' cursor-pointer hover:bg-muted/50' : ''}`}
-              onClick={statusFilter ? () => applyStatusFilter(null) : undefined}
-              title={statusFilter ? 'Clear status filter' : undefined}
-            >
-              <CardContent className="pt-4">
-                <div className="text-base sm:text-2xl font-bold">{totalChecks}</div>
-                <div className="text-xs text-muted-foreground mt-1">Total Checks</div>
-              </CardContent>
-            </Card>
-            <Card
-              className={`col-span-2 sm:col-span-1${(!auth.enabled || auth.loggedIn) ? ' cursor-pointer hover:bg-muted/50 transition-colors' : ''}`}
+              className={`transition-colors${(!auth.enabled || auth.loggedIn) ? ' cursor-pointer hover:bg-muted/50' : ''}`}
               onClick={(!auth.enabled || auth.loggedIn) ? () => void runSync() : undefined}
               title={(!auth.enabled || auth.loggedIn) ? 'Click to sync' : undefined}
             >
