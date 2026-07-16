@@ -263,15 +263,16 @@ export default function Overview() {
     window.location.hash = `#landscape-${encodeURIComponent(name)}`;
   }
 
-  const appTitle = `BTP Status${serverCity ? ` (${serverCity})` : ''}`;
+  const currentSite = sites.find(s => {
+    try { return new URL(s.url).origin === window.location.origin; } catch { return false; }
+  }) ?? null;
+  const currentSiteUrl = currentSite?.url ?? '';
+
+  const appTitle = currentSite?.name ?? (serverCity ? `${serverCity} - BTP Status` : 'BTP Status');
 
   useEffect(() => {
-    document.title = serverCity ? `${serverCity} - BTP Status Overview` : 'BTP Status Overview';
-  }, [serverCity]);
-
-  const currentSiteUrl = sites.find(s => {
-    try { return new URL(s.url).origin === window.location.origin; } catch { return false; }
-  })?.url ?? '';
+    document.title = appTitle;
+  }, [appTitle]);
 
   function handleSiteSwitch(url: string) {
     if (url && url !== currentSiteUrl) window.location.replace(url);
