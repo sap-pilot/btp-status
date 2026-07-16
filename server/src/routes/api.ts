@@ -3,7 +3,7 @@ import { getAllServices, getLandscapes, getSites } from '../services/configServi
 import { listResponseFiles, readResponseFile, readRawResponseFile, readScreenshotFile, readConsoleLogFile, readContentFile, browseResponseFiles } from '../services/responseStore.js';
 import { buildZip } from '../services/zipBuilder.js';
 import { checkService } from '../services/healthCheckService.js';
-import { syncFromRemote } from '../services/syncService.js';
+import { syncFromRemote, handleDownloadTrigger, registerCallback } from '../services/syncService.js';
 import { getEvaluationMode, setEvaluationMode, getIntervalOverride, setIntervalOverride } from '../services/overrideService.js';
 import { rescheduleService } from '../services/schedulerService.js';
 import { getService } from '../services/configService.js';
@@ -292,9 +292,29 @@ router.post('/batch-download', requireSyncAuth, async (req, res, next) => {
   }
 });
 
-router.get('/browse', async (_req, res, next) => {
+router.get('/download-trigger', requireSyncAuth, (req, res) => {
+  void req; // service is not scoped — always triggers a full delta sync
+  handleDownloadTrigger();
+  res.json({ ok: true });
+});
+
+router.get('/browse', requireSyncAuth, async (req, res, next) => {
   try {
-    const folders = await browseResponseFiles();
+    const rawSince = req.query['since'];
+    const since = typeof rawSince === 'string' ? parseInt(rawSince, 10) : undefined;
+
+    // Register callback URL if provided (consumer registers its webhook on the producer)
+    const rawCallback = req.query['callback'];
+    if (typeof rawCallback === 'string') {
+      try {
+        const parsed = new URL(rawCallback);
+        if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+          registerCallback(rawCallback);
+        }
+      } catch { /* invalid URL — ignore */ }
+    }
+
+    const folders = await browseResponseFiles(since && since > 0 ? since : undefined);
     res.json({ folders });
   } catch (err) {
     next(err);

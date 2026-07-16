@@ -22,8 +22,124 @@ class SyncAuthError extends Error {
   }
 }
 
-let syncTimer: ReturnType<typeof setInterval> | null = null;
-let syncInProgress = false;
+// ── Callback registry (producer side) ────────────────────────────────────────
+// Stores callback URLs registered by consumers via ?callback= on batch-download.
+// When new check results are available, notifyCallbacks() fires all registered URLs.
+const registeredCallbacks = new Set<string>();
+
+export function registerCallback(url: string): void {
+  if (registeredCallbacks.has(url)) return;
+  registeredCallbacks.add(url);
+  logger.info({ url }, 'Sync callback registered');
+}
+
+export function notifyCallbacks(): void {
+  if (registeredCallbacks.size === 0) return;
+  const headers = syncKeyHeader();
+  for (const url of registeredCallbacks) {
+    fetchRaw(url, headers)
+      .then(() => logger.debug({ url }, 'Sync callback notified'))
+      .catch(err => logger.warn({ url, err }, 'Failed to notify sync callback'));
+  }
+}
+
+// ── Download trigger (consumer side) ─────────────────────────────────────────
+// One concurrent download allowed; latest trigger queued, extras dropped.
+let lastTriggerSyncTs = 0;  // ms timestamp after last successful trigger sync (0 = do full sync)
+let lastBrowseTs = 0;       // ms timestamp just before the last browse HTTP call (used as since= for interval syncs)
+let triggerRunning = false;
+let triggerQueued = false;
+
+/** Advance the trigger timestamp — call after a non-trigger sync (e.g. startup) completes. */
+export function setLastTriggerSyncTs(ts: number): void {
+  if (ts > lastTriggerSyncTs) lastTriggerSyncTs = ts;
+}
+
+/** Fire-and-forget: queues one delta download from SYNC_REMOTE. */
+export function handleDownloadTrigger(): void {
+  if (!config.SYNC_REMOTE) return;
+  if (triggerRunning) {
+    if (!triggerQueued) {
+      triggerQueued = true;
+      logger.debug('Download trigger queued (sync already in progress)');
+    } else {
+      logger.debug('Download trigger dropped (already queued)');
+    }
+    return;
+  }
+  void runTriggerSync();
+}
+
+async function runTriggerSync(): Promise<void> {
+  triggerRunning = true;
+  const since = lastTriggerSyncTs;
+  const startTs = Date.now();
+  try {
+    logger.debug({ since }, 'Download trigger sync starting');
+    const stats = await syncFromRemote(config.SYNC_REMOTE, { since, selfBaseUrl: config.SELF_URL });
+    if (!stats.busy) lastTriggerSyncTs = startTs; // only advance on success
+  } catch (err) {
+    logger.error({ err }, 'Download trigger sync error');
+  } finally {
+    triggerRunning = false;
+    if (triggerQueued) {
+      triggerQueued = false;
+      void runTriggerSync();
+    }
+  }
+}
+
+// ── Interval fallback (consumer side) ────────────────────────────────────────
+// Fires a delta sync when no webhook-triggered download has completed within
+// SYNC_INTERVAL seconds — recovers automatically if the producer restarts and
+// loses its registered callback URLs.
+let intervalHandle: NodeJS.Timeout | null = null;
+
+async function runIntervalSync(): Promise<void> {
+  if (!config.SYNC_REMOTE) return;
+  triggerRunning = true;
+  // Use lastBrowseTs as since= so files generated between the last browse and
+  // the last batch-download are included (they were not in the browse response).
+  const since = lastBrowseTs > 0 ? lastBrowseTs : undefined;
+  const startTs = Date.now();
+  try {
+    logger.info({ since }, 'Interval fallback sync starting');
+    const stats = await syncFromRemote(config.SYNC_REMOTE, { since, selfBaseUrl: config.SELF_URL });
+    if (!stats.busy) lastTriggerSyncTs = startTs;
+  } catch (err) {
+    logger.error({ err }, 'Interval fallback sync error');
+  } finally {
+    triggerRunning = false;
+    if (triggerQueued) {
+      triggerQueued = false;
+      void runTriggerSync();
+    }
+  }
+}
+
+export function startIntervalFallback(): void {
+  if (intervalHandle || !config.SYNC_REMOTE) return;
+  const ms = config.SYNC_INTERVAL * 1000;
+  if (ms <= 0) return;
+  // Check at most every 60 s so the maximum extra delay is 60 s above SYNC_INTERVAL.
+  const checkMs = Math.min(ms, 60_000);
+  intervalHandle = setInterval(() => {
+    if (lastTriggerSyncTs === 0) return; // startup sync not done yet
+    if (Date.now() - lastTriggerSyncTs < ms) return; // recent sync — skip
+    if (triggerRunning) return; // already in progress
+    logger.info({ lastSyncAgoMs: Date.now() - lastTriggerSyncTs }, 'No recent download — interval fallback triggered');
+    void runIntervalSync();
+  }, checkMs);
+}
+
+export function stopIntervalFallback(): void {
+  if (intervalHandle) {
+    clearInterval(intervalHandle);
+    intervalHandle = null;
+  }
+}
+
+// ── HTTP helpers ──────────────────────────────────────────────────────────────
 
 export interface SyncStats {
   files: number;
@@ -162,24 +278,39 @@ async function downloadBatch(
   return { transferred, decompressed };
 }
 
-export async function syncFromRemote(remoteBase: string): Promise<SyncStats> {
+// ── Main sync function ────────────────────────────────────────────────────────
+
+let syncInProgress = false;
+
+export async function syncFromRemote(
+  remoteBase: string,
+  opts?: { since?: number; selfBaseUrl?: string },
+): Promise<SyncStats> {
   if (syncInProgress) {
     logger.warn({ remote: remoteBase }, 'Sync already in progress, skipping');
     return { files: 0, transferredMB: '0.00', decompressedMB: '0.00', elapsedSec: '0.0', busy: true };
   }
 
   syncInProgress = true;
-  logger.info({ remote: remoteBase }, 'Remote sync starting');
+  const since = opts?.since && opts.since > 0 ? opts.since : undefined;
+  const callbackUrl = opts?.selfBaseUrl ? `${opts.selfBaseUrl}/api/download-trigger` : undefined;
+  logger.info({ remote: remoteBase, since, hasCallback: !!callbackUrl }, 'Remote sync starting');
   const start = Date.now();
 
   try {
-    const { buf: browseBuf } = await fetchRaw(`${remoteBase}/api/browse`);
+    const browseParams = new URLSearchParams();
+    if (since) browseParams.set('since', String(since));
+    if (callbackUrl) browseParams.set('callback', callbackUrl);
+    const browseQs = browseParams.toString();
+    const browseUrl = browseQs ? `${remoteBase}/api/browse?${browseQs}` : `${remoteBase}/api/browse`;
+    lastBrowseTs = Date.now();
+    const { buf: browseBuf } = await fetchRaw(browseUrl, syncKeyHeader());
     const { folders } = JSON.parse(browseBuf.toString('utf-8')) as { folders: Record<string, string[]> };
 
     const localFolders = await browseResponseFiles();
 
     const maxDays = config.MAX_RESPONSE_STORAGE_DAYS;
-    const cutoff = maxDays > 0 ? Date.now() - maxDays * 24 * 60 * 60 * 1000 : 0;
+    const cutoff = !since && maxDays > 0 ? Date.now() - maxDays * 24 * 60 * 60 * 1000 : 0;
 
     const missing: string[] = [];
     for (const [folder, files] of Object.entries(folders)) {
@@ -216,7 +347,7 @@ export async function syncFromRemote(remoteBase: string): Promise<SyncStats> {
 
       if (batchAvailable !== false) {
         try {
-          const result = await downloadBatch(remoteBase, chunk);
+            const result = await downloadBatch(remoteBase, chunk);
           totalTransferred += result.transferred;
           totalDecompressed += result.decompressed;
           batchAvailable = true;
@@ -280,24 +411,5 @@ export async function syncFromRemote(remoteBase: string): Promise<SyncStats> {
     };
   } finally {
     syncInProgress = false;
-  }
-}
-
-export function startSyncScheduler(remoteBase: string): void {
-  if (syncTimer) return;
-  const intervalMs = config.SYNC_INTERVAL * 1000;
-  logger.info({ remote: remoteBase, intervalSec: config.SYNC_INTERVAL }, 'Remote sync scheduler started');
-  syncTimer = setInterval(() => {
-    syncFromRemote(remoteBase).catch(err =>
-      logger.error({ err }, 'Scheduled remote sync error'),
-    );
-  }, intervalMs);
-  syncTimer.unref();
-}
-
-export function stopSyncScheduler(): void {
-  if (syncTimer) {
-    clearInterval(syncTimer);
-    syncTimer = null;
   }
 }
