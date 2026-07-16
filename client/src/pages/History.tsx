@@ -708,7 +708,7 @@ export default function History() {
                 <>
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="text-xs text-muted-foreground">Endpoints</div>
-                    <div className="text-xs text-muted-foreground">Avg Response Time</div>
+                    <div className="text-xs text-muted-foreground" title="Average Response Time">ART</div>
                   </div>
                   <div className="space-y-1 max-h-20 overflow-y-auto">
                     {epStats.map((ep, i) => (
@@ -743,7 +743,7 @@ export default function History() {
               ) : (
                 <>
                   <div className="text-base sm:text-2xl font-bold">{avgMs > 0 ? `${avgMs}ms` : '—'}</div>
-                  <div className="text-xs text-muted-foreground mt-1">Avg Response Time</div>
+                  <div className="text-xs text-muted-foreground mt-1" title="Average Response Time">ART</div>
                 </>
               )}
             </CardContent>
