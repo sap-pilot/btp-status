@@ -29,6 +29,9 @@ export async function runHousekeeping(): Promise<void> {
       }
 
       for (const file of files) {
+        // Starred files are retained indefinitely
+        if (file.includes('.starred.')) continue;
+
         // Derive the corresponding .json filename so we can parse the timestamp
         let jsonName: string;
         if (file.endsWith('.json')) jsonName = file;

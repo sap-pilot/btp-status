@@ -14,11 +14,6 @@ function toYMD(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function addDays(ymd: string, n: number): string {
-  const [y, m, d] = ymd.split('-').map(Number);
-  return toYMD(new Date(y, m - 1, d + n));
-}
-
 interface CalProps {
   label: string;
   selected: string;
@@ -117,7 +112,6 @@ interface Props {
 
 export default function DateRangePicker({ open, onClose, onApply, fromDate: initFrom, untilDate: initUntil, maxStorageDays }: Props) {
   const today = toYMD(new Date());
-  const minDate = addDays(today, -(maxStorageDays - 1));
 
   const [from, setFrom] = useState(initFrom);
   const [until, setUntil] = useState(initUntil);
@@ -147,7 +141,7 @@ export default function DateRangePicker({ open, onClose, onApply, fromDate: init
             label="From"
             selected={from}
             onSelect={handleFrom}
-            min={minDate}
+            min=""
             max={until}
           />
           <div className="hidden sm:block w-px bg-border self-stretch" />
@@ -162,7 +156,8 @@ export default function DateRangePicker({ open, onClose, onApply, fromDate: init
         </div>
         <p className="text-[11px] text-muted-foreground mt-1">
           Up to <strong>{maxStorageDays} days</strong> of history is available based on the server&apos;s{' '}
-          <code className="text-[10px]">MAX_RESPONSE_STORAGE_DAYS</code> setting.
+          <code className="text-[10px]">MAX_RESPONSE_STORAGE_DAYS</code> setting, unless files are starred
+          (starred files are retained indefinitely).
         </p>
         <DialogFooter className="mt-2">
           <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getAllServices, getLandscapes, getSites } from '../services/configService.js';
-import { listResponseFiles, readResponseFile, readRawResponseFile, readScreenshotFile, readConsoleLogFile, readContentFile, browseResponseFiles } from '../services/responseStore.js';
+import { listResponseFiles, readResponseFile, readRawResponseFile, readScreenshotFile, readConsoleLogFile, readContentFile, browseResponseFiles, starResponseFile } from '../services/responseStore.js';
 import { buildZip } from '../services/zipBuilder.js';
 import { checkService } from '../services/healthCheckService.js';
 import { syncFromRemote, handleDownloadTrigger, registerCallback } from '../services/syncService.js';
@@ -103,6 +103,22 @@ router.get('/history/:name/:filename', requireAuth, async (req, res, next) => {
   try {
     const data = await readResponseFile(req.params['name'] as string, req.params['filename'] as string);
     res.json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/star/:name/:filename', requireAuth, async (req, res, next) => {
+  try {
+    const serviceName = req.params['name'] as string;
+    const filename = req.params['filename'] as string;
+    const { star } = req.body as { star?: unknown };
+    if (typeof star !== 'boolean') {
+      res.status(400).json({ error: 'star must be a boolean' });
+      return;
+    }
+    await starResponseFile(serviceName, filename, star);
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

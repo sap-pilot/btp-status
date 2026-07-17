@@ -29,7 +29,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, AlertCircle, ChevronDown, ExternalLink, Menu, PlayCircle, RefreshCw, Sun, Moon, X } from 'lucide-react';
+import { ArrowLeft, AlertCircle, ChevronDown, ExternalLink, Menu, PlayCircle, RefreshCw, Star, Sun, Moon, X } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useWindowWidth } from '@/hooks/useWindowWidth';
 import { useAuth } from '@/hooks/useAuth';
@@ -134,6 +134,7 @@ export default function History() {
   const [filterEndpoint, setFilterEndpoint] = useState(() => new URLSearchParams(location.search).get('endpoint') ?? 'all');
   const [filterLocation, setFilterLocation] = useState(() => new URLSearchParams(location.search).get('location') ?? 'all');
   const [filterStatus, setFilterStatus] = useState(() => new URLSearchParams(location.search).get('status') ?? 'all');
+  const [filterTag, setFilterTag] = useState(() => new URLSearchParams(location.search).get('tag') ?? 'all');
 
   // Re-apply URL params when navigating to same route with different params
   useEffect(() => {
@@ -141,6 +142,7 @@ export default function History() {
     setFilterEndpoint(p.get('endpoint') ?? 'all');
     setFilterLocation(p.get('location') ?? 'all');
     setFilterStatus(p.get('status') ?? 'all');
+    setFilterTag(p.get('tag') ?? 'all');
   // Only re-run when the search string itself changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
@@ -338,7 +340,7 @@ export default function History() {
     return [...seen].sort();
   }, [files]);
 
-  const hasFilter = filterEndpoint !== 'all' || filterLocation !== 'all' || filterStatus !== 'all';
+  const hasFilter = filterEndpoint !== 'all' || filterLocation !== 'all' || filterStatus !== 'all' || filterTag !== 'all';
 
   const filteredFiles = useMemo(() => {
     if (!hasFilter) return files;
@@ -354,10 +356,11 @@ export default function History() {
           return false;
         }
       }
+      if (filterTag === 'starred' && !f.starred) return false;
       return true;
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [files, service, filterEndpoint, filterLocation, filterStatus, hasFilter]);
+  }, [files, service, filterEndpoint, filterLocation, filterStatus, filterTag, hasFilter]);
 
   // Files for the response time chart: filtered by endpoint + location only (status does not affect the chart)
   const chartFiles = useMemo(() => {
@@ -385,7 +388,28 @@ export default function History() {
     setFilterEndpoint('all');
     setFilterLocation('all');
     setFilterStatus('all');
-    setSearchParam({ endpoint: null, location: null, status: null });
+    setFilterTag('all');
+    setSearchParam({ endpoint: null, location: null, status: null, tag: null });
+  }
+
+  async function toggleStar(f: HistoryFile) {
+    const newStar = !f.starred;
+    const newFilename = newStar
+      ? f.filename.replace(/\.json$/, '.starred.json')
+      : f.filename.replace('.starred.json', '.json');
+    try {
+      const res = await fetch(`/api/star/${encodeURIComponent(name)}/${encodeURIComponent(f.filename)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ star: newStar }),
+      });
+      if (!res.ok) return;
+      setFiles(prev => prev.map(file =>
+        file.filename === f.filename
+          ? { ...file, starred: newStar, filename: newFilename }
+          : file,
+      ));
+    } catch { /* ignore */ }
   }
 
   const currentSite = sites.find(s => {
@@ -920,6 +944,15 @@ export default function History() {
                       <SelectItem value="504" className="text-xs">TIMEOUT</SelectItem>
                     </SelectContent>
                   </Select>
+                  <Select value={filterTag} onValueChange={v => { setFilterTag(v); setSearchParam({ tag: v === 'all' ? null : v }); }}>
+                    <SelectTrigger className="h-7 text-xs w-28">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-xs">All tags</SelectItem>
+                      <SelectItem value="starred" className="text-xs">Starred</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
             </div>
@@ -947,6 +980,7 @@ export default function History() {
                     <TableHead className="hidden sm:table-cell">From Location</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="hidden sm:table-cell text-right">Response Time</TableHead>
+                    <TableHead className="w-8" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -999,6 +1033,15 @@ export default function History() {
                       </TableCell>
                       <TableCell className="hidden sm:table-cell text-right text-sm">
                         {f.responseTime ?? 0}ms
+                      </TableCell>
+                      <TableCell className="w-8 pr-3 text-right">
+                        <button
+                          onClick={e => { e.stopPropagation(); void toggleStar(f); }}
+                          className={`p-0.5 transition-colors ${f.starred ? 'text-yellow-400 hover:text-yellow-300' : 'text-muted-foreground/40 hover:text-yellow-400'}`}
+                          title={f.starred ? 'Unstar this record' : 'Star this record (retained indefinitely)'}
+                        >
+                          <Star className={`h-3.5 w-3.5 ${f.starred ? 'fill-yellow-400' : ''}`} />
+                        </button>
                       </TableCell>
                     </TableRow>
                   ))}

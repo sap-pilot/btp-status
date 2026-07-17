@@ -85,6 +85,8 @@ export interface HistoryFile {
   httpStatus: number;
   overallStatus: 200 | 203 | 400 | 500 | 503 | 504;
   screenshotFile?: string;
+  /** True when this file has been starred (filename contains .starred.) */
+  starred?: boolean;
 }
 
 export interface ServiceWithHistory {

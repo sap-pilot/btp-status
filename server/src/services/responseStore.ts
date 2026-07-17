@@ -1,4 +1,4 @@
-import { mkdir, writeFile, readdir, readFile, stat } from 'node:fs/promises';
+import { mkdir, writeFile, readdir, readFile, rename, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { config } from '../config.js';
 import { getCity } from './geoService.js';
@@ -90,7 +90,7 @@ export async function readResponseFile(
   serviceName: string,
   filename: string,
 ): Promise<ResponseRecord> {
-  if (!/^[\w-]+(?:\.retry)?\.json$/.test(filename)) throw new Error('Invalid filename');
+  if (!/^[\w-]+(?:\.starred)?(?:\.retry)?\.json$/.test(filename)) throw new Error('Invalid filename');
   const filepath = join(config.RESPONSE_DIR, sanitizeName(serviceName), filename);
   const raw = await readFile(filepath, 'utf-8');
   return JSON.parse(raw) as ResponseRecord;
@@ -100,8 +100,8 @@ export async function readScreenshotFile(
   serviceName: string,
   filename: string,
 ): Promise<Buffer> {
-  // Accept new (*.screenshot.png / *.retry.screenshot.png) and legacy (*.png / *.retry.png) naming
-  if (!/^[\w-]+(?:\.retry)?(?:\.screenshot)?\.png$/.test(filename)) throw new Error('Invalid filename');
+  // Accept new (*.screenshot.png / *.retry.screenshot.png / *.starred.screenshot.png) and legacy naming
+  if (!/^[\w-]+(?:\.starred)?(?:\.retry)?(?:\.screenshot)?\.png$/.test(filename)) throw new Error('Invalid filename');
   const filepath = join(config.RESPONSE_DIR, sanitizeName(serviceName), filename);
   return readFile(filepath);
 }
@@ -110,8 +110,8 @@ export async function readConsoleLogFile(
   serviceName: string,
   filename: string,
 ): Promise<Buffer> {
-  // Accept new (*[.retry].console.log) and legacy (*_console[.retry].log) naming
-  if (!/^[\w-]+(?:(?:\.retry)?\.console\.log|_console(?:\.retry)?\.log)$/.test(filename)) throw new Error('Invalid filename');
+  // Accept new (*[.starred][.retry].console.log) and legacy (*_console[.retry].log) naming
+  if (!/^[\w-]+(?:(?:\.starred)?(?:\.retry)?\.console\.log|_console(?:\.retry)?\.log)$/.test(filename)) throw new Error('Invalid filename');
   const filepath = join(config.RESPONSE_DIR, sanitizeName(serviceName), filename);
   return readFile(filepath);
 }
@@ -120,20 +120,20 @@ export async function readContentFile(
   serviceName: string,
   filename: string,
 ): Promise<Buffer> {
-  // Accept new (*[.retry].content.html) and legacy (*_content[.retry].html) naming
-  if (!/^[\w-]+(?:(?:\.retry)?\.content\.html|_content(?:\.retry)?\.html)$/.test(filename)) throw new Error('Invalid filename');
+  // Accept new (*[.starred][.retry].content.html) and legacy (*_content[.retry].html) naming
+  if (!/^[\w-]+(?:(?:\.starred)?(?:\.retry)?\.content\.html|_content(?:\.retry)?\.html)$/.test(filename)) throw new Error('Invalid filename');
   const filepath = join(config.RESPONSE_DIR, sanitizeName(serviceName), filename);
   return readFile(filepath);
 }
 
 export function parseFilename(filename: string): HistoryFile | null {
-  // New format (v0.5.0+): yyyyMMdd-HHmmss_{slug}_{city}_{ms}_{status}[.retry].json  (UTC timestamp)
+  // New format (v0.5.0+): yyyyMMdd-HHmmss_{slug}_{city}_{ms}_{status}[.starred][.retry].json  (UTC timestamp)
   const newM = filename.match(
-    /^(\d{8}-\d{6})_([a-zA-Z0-9-]+)_([a-zA-Z0-9-]+)_(\d+)_(200|203|400|500|503|504)(?:\.retry)?\.json$/,
+    /^(\d{8}-\d{6})_([a-zA-Z0-9-]+)_([a-zA-Z0-9-]+)_(\d+)_(200|203|400|500|503|504)(?:\.starred)?(?:\.retry)?\.json$/,
   );
   if (newM) {
     const [, dateStr, slug, city, msStr, statusStr] = newM;
-    return {
+    const result: HistoryFile = {
       filename,
       timestamp: parseFileDateUTC(dateStr),
       endpointIndex: -1,
@@ -143,6 +143,8 @@ export function parseFilename(filename: string): HistoryFile | null {
       httpStatus: 0,
       overallStatus: parseInt(statusStr, 10) as 200 | 203 | 400 | 500 | 503 | 504,
     };
+    if (filename.includes('.starred.')) result.starred = true;
+    return result;
   }
 
   // Old format (pre-v0.5.0): yyyyMMdd-HHmmss_{idx}_{ms}ms_{status}.json  (local timestamp)
@@ -221,6 +223,103 @@ export async function browseResponseFiles(since?: number): Promise<Record<string
     // response dir doesn't exist yet
   }
   return result;
+}
+
+/**
+ * Stars or unstars a response file (and all its sidecar / retry files) by renaming them
+ * to include or remove the `.starred.` segment, and updating JSON references accordingly.
+ */
+export async function starResponseFile(
+  serviceName: string,
+  filename: string,
+  star: boolean,
+): Promise<void> {
+  // Only new-format main json files (not retry) are allowed
+  if (
+    !/^\d{8}-\d{6}_[a-zA-Z0-9-]+_[a-zA-Z0-9-]+_\d+_(200|203|400|500|503|504)(?:\.starred)?\.json$/.test(filename)
+  ) {
+    throw new Error('Invalid filename');
+  }
+
+  const isAlreadyStarred = filename.includes('.starred.json');
+  if (star === isAlreadyStarred) return; // already in desired state
+
+  const dir = join(config.RESPONSE_DIR, sanitizeName(serviceName));
+  const filePath = join(dir, filename);
+
+  const raw = await readFile(filePath, 'utf-8');
+  const record = JSON.parse(raw) as ResponseRecord;
+
+  function transform(name: string): string {
+    if (star) {
+      // Insert .starred after the base (before the first dot)
+      const firstDot = name.indexOf('.');
+      return firstDot === -1 ? name : name.slice(0, firstDot) + '.starred' + name.slice(firstDot);
+    }
+    return name.replace('.starred.', '.');
+  }
+
+  async function renameSafe(oldName: string, newName: string): Promise<void> {
+    try { await rename(join(dir, oldName), join(dir, newName)); } catch { /* may not exist */ }
+  }
+
+  const updates = { ...record };
+
+  if (record.screenshotFile) {
+    const n = transform(record.screenshotFile);
+    await renameSafe(record.screenshotFile, n);
+    updates.screenshotFile = n;
+  }
+  if (record.consoleLogFile) {
+    const n = transform(record.consoleLogFile);
+    await renameSafe(record.consoleLogFile, n);
+    updates.consoleLogFile = n;
+  }
+  if (record.contentFile) {
+    const n = transform(record.contentFile);
+    await renameSafe(record.contentFile, n);
+    updates.contentFile = n;
+  }
+
+  if (record.retryFiles && record.retryFiles.length > 0) {
+    const newRetryFiles: string[] = [];
+    for (const retryFile of record.retryFiles) {
+      const retryPath = join(dir, retryFile);
+      try {
+        const retryRaw = await readFile(retryPath, 'utf-8');
+        const retryRecord = JSON.parse(retryRaw) as ResponseRecord;
+        const retryUpdates = { ...retryRecord };
+        if (retryRecord.screenshotFile) {
+          const n = transform(retryRecord.screenshotFile);
+          await renameSafe(retryRecord.screenshotFile, n);
+          retryUpdates.screenshotFile = n;
+        }
+        if (retryRecord.consoleLogFile) {
+          const n = transform(retryRecord.consoleLogFile);
+          await renameSafe(retryRecord.consoleLogFile, n);
+          retryUpdates.consoleLogFile = n;
+        }
+        if (retryRecord.contentFile) {
+          const n = transform(retryRecord.contentFile);
+          await renameSafe(retryRecord.contentFile, n);
+          retryUpdates.contentFile = n;
+        }
+        const newRetryFilename = transform(retryFile);
+        await writeFile(retryPath, JSON.stringify(retryUpdates, null, 2), 'utf-8');
+        await rename(retryPath, join(dir, newRetryFilename));
+        newRetryFiles.push(newRetryFilename);
+      } catch {
+        const newRetryFilename = transform(retryFile);
+        await renameSafe(retryFile, newRetryFilename);
+        newRetryFiles.push(newRetryFilename);
+      }
+    }
+    updates.retryFiles = newRetryFiles;
+  }
+
+  const newFilename = transform(filename);
+  await writeFile(filePath, JSON.stringify(updates, null, 2), 'utf-8');
+  await rename(filePath, join(dir, newFilename));
 }
 
 export async function readRawResponseFile(folder: string, filename: string): Promise<Buffer> {

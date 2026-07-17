@@ -83,6 +83,7 @@ export interface HistoryFile {
   city?: string;
   endpointSlug?: string;                         // new-format files only
   endpointIndex?: number;                        // old-format files only
+  starred?: boolean;                             // true when filename contains .starred.
 }
 
 export interface ServiceWithHistory extends ServiceConfig {
