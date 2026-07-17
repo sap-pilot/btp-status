@@ -23,7 +23,7 @@ modules:
       # no-source: true
       builder: custom
       commands:
-        - npm ci --prefix ..
+      #  - npm ci --prefix ..
         - npm run build --prefix ..
       ignore:
         - response/
