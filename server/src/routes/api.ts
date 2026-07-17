@@ -14,7 +14,7 @@ import { getXsuaaConfig, readSessionFromRequest, userLabel } from '../services/a
 import { requireAuth, requireAdmin, requireSyncAuth, requireSyncAuthOrOpen } from '../middleware/requireAuth.js';
 import type { AuthRequest } from '../middleware/requireAuth.js';
 import type { EvaluationMode, ServiceWithHistory, ServiceSummary } from '../types/index.js';
-import { subscribe } from '../services/liveEvents.js';
+import { subscribe, emit } from '../services/liveEvents.js';
 
 const VALID_EVAL_MODES = new Set<string>(['condition', 'alwaysok', 'alwayserror']);
 
@@ -91,11 +91,15 @@ router.get('/check/:name', requireAuth, async (req, res, next) => {
 
 router.get('/history/:name', async (req, res, next) => {
   try {
-    const range = req.query['tag'] === 'starred'
-      ? ({ tag: 'starred' } as const)
-      : parseTimeRangeQuery(req.query);
+    const rawTag = req.query['tag'];
+    const sinceParsed = typeof req.query['since'] === 'string' ? parseInt(req.query['since'], 10) : NaN;
+    const range =
+      rawTag === 'starred' ? ({ tag: 'starred' } as const) :
+      !isNaN(sinceParsed) && sinceParsed > 0 ? { since: sinceParsed } :
+      parseTimeRangeQuery(req.query);
+    const lastModified = Date.now();
     const files = await listResponseFiles(req.params.name, range);
-    res.json(files.map(f => f.filename.replace(/\.json$/, '')));
+    res.json({ lastModified, files: files.map(f => f.filename.replace(/\.json$/, '')) });
   } catch (err) {
     next(err);
   }
@@ -123,6 +127,7 @@ router.post('/star/:name/:filename', requireAuth, async (req, res, next) => {
     await starResponseFile(serviceName, filename, star);
     logger.info({ service: serviceName, filename, star, user, from: req.ip }, star ? 'Response file starred' : 'Response file unstarred');
     notifyCallbacks();
+    emit(`service:${serviceName}`, { service: serviceName, ts: Date.now() });
     res.json({ ok: true });
   } catch (err) {
     next(err);
