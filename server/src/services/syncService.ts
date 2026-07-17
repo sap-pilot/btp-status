@@ -47,9 +47,24 @@ export function notifyCallbacks(): void {
 // ── Download trigger (consumer side) ─────────────────────────────────────────
 // One concurrent download allowed; latest trigger queued, extras dropped.
 let lastTriggerSyncTs = 0;  // ms timestamp after last successful trigger sync (0 = do full sync)
-let lastBrowseTs = 0;       // ms timestamp just before the last browse HTTP call (used as since= for interval syncs)
+let lastBrowseTs = 0;       // ms timestamp just before the last browse HTTP call
 let triggerRunning = false;
 let triggerQueued = false;
+
+/**
+ * Returns the `since=` timestamp to use for the next browse request.
+ * Steps back by SYNC_INTERVAL milliseconds (min 300 s) from the last browse
+ * timestamp to create an overlap window that catches files created on the
+ * producer just as the previous browse was executing. Already-local files are
+ * filtered by the local-set comparison in syncFromRemote, so the overlap adds
+ * no redundant downloads. Falls back to lastTriggerSyncTs (0 = full sync)
+ * when no browse has been issued yet.
+ */
+function sinceWithOverlap(): number {
+  if (lastBrowseTs <= 0) return lastTriggerSyncTs;
+  const overlap = config.SYNC_INTERVAL > 0 ? config.SYNC_INTERVAL * 1000 : 300_000;
+  return Math.max(0, lastBrowseTs - overlap);
+}
 
 /** Advance the trigger timestamp — call after a non-trigger sync (e.g. startup) completes. */
 export function setLastTriggerSyncTs(ts: number): void {
@@ -73,7 +88,7 @@ export function handleDownloadTrigger(): void {
 
 async function runTriggerSync(): Promise<void> {
   triggerRunning = true;
-  const since = lastTriggerSyncTs;
+  const since = sinceWithOverlap();
   const startTs = Date.now();
   try {
     logger.debug({ since }, 'Download trigger sync starting');
@@ -99,9 +114,7 @@ let intervalHandle: NodeJS.Timeout | null = null;
 async function runIntervalSync(): Promise<void> {
   if (!config.SYNC_REMOTE) return;
   triggerRunning = true;
-  // Use lastBrowseTs as since= so files generated between the last browse and
-  // the last batch-download are included (they were not in the browse response).
-  const since = lastBrowseTs > 0 ? lastBrowseTs : undefined;
+  const since = sinceWithOverlap() || undefined;
   const startTs = Date.now();
   try {
     logger.info({ since }, 'Interval fallback sync starting');
