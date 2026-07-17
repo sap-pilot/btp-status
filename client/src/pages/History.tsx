@@ -209,7 +209,6 @@ export default function History() {
         if (data === null) return;
         lastFetchTsRef.current = data.lastModified;
         setLastChecked(new Date());
-        if (data.files.length === 0) return;
         const incoming = data.files.map(fn => parseFilename(fn) ?? { filename: fn + '.json', overallStatus: 200 as const });
         setFiles(prev => {
           const toCanonical = (fn: string) => fn.replace('.starred.', '.');
@@ -218,11 +217,17 @@ export default function History() {
           const kept = prev.filter(f =>
             !incomingNames.has(f.filename) && !incomingCanonicals.has(toCanonical(f.filename)),
           );
-          return [...incoming, ...kept].sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
+          const merged = [...incoming, ...kept].sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
+          // Drop files that have slid outside the current time window
+          if (!starredMode && range.mode === 'hours') {
+            const cutoff = Date.now() - range.hours * 3_600_000;
+            return merged.filter(f => (f.timestamp ?? 0) >= cutoff);
+          }
+          return merged;
         });
       })
       .catch(() => null);
-  }, [name]);
+  }, [name, range, starredMode]);
 
   // Disable live updates when viewing a fixed date range (new files would be outside the range)
   useLiveEvents(range.mode === 'dateRange' ? null : name, fetchDelta);
