@@ -495,6 +495,7 @@ The server uses [pino](https://getpino.io) with colorized pretty-print output.
 | `SYNC_INTERVAL` | `300` | Fallback sync interval in seconds. If no webhook-triggered download completes within this window (e.g. because the producer was restarted and lost its registered callbacks), the consumer triggers a delta sync automatically using `GET /api/browse?since=<lastBrowseTs>`. Set to `0` to disable the fallback. |
 | `MAX_RESPONSE_STORAGE_DAYS` | `7` | Response files (JSON + PNG) older than this many days are automatically deleted. Housekeeping runs once on startup then every 24 hours. Set to `0` to disable. Also controls the furthest date selectable in the UI's Date Range picker. |
 | `REQUEST_TIMEOUT_MS` | `30000` | Default HTTP request timeout in milliseconds for standard endpoint checks. A check that exceeds this limit is recorded with status `504` and the response filename ends in `_504.json`. Per-endpoint `timeout` in `config.json` overrides this value for that endpoint only. |
+| `SYNC_PROTECTION_OFF` | — | When set to any non-empty value (e.g. `true`, `1`), `GET /api/browse` and `POST /api/batch-download` skip all authentication. Useful for key rotation or bootstrapping a backup instance. Unset after the initial sync completes. |
 | `LOG_LEVEL` | `debug` | Pino log level: `trace`, `debug`, `info`, `warn`, `error` |
 
 ## Remote Sync
@@ -570,6 +571,20 @@ When a sync key is configured:
 - Requests from loopback (`127.0.0.1`, `::1`) are always allowed for local development
 
 Both instances must use the same key. If XSUAA is configured, authenticated browser users can also access the sync endpoints without a key.
+
+### Key rotation / temporary open access (`SYNC_PROTECTION_OFF`)
+
+If you need to pull files from a producer whose `SYNC_KEY` no longer matches yours (e.g. after rotating the key on the producer, or when bootstrapping a backup instance from a third server), set `SYNC_PROTECTION_OFF` on the **producer** temporarily:
+
+```bash
+SYNC_PROTECTION_OFF=true cf set-env btp-status-producer SYNC_PROTECTION_OFF true
+cf restart btp-status-producer
+```
+
+While active, `GET /api/browse` and `POST /api/batch-download` on that instance accept requests from any caller with no authentication. `GET /api/download`, `GET /api/download-trigger`, and all other endpoints remain protected by the usual auth. A `WARN` log line is emitted at startup when the flag is on.
+
+> [!WARNING]
+> Unset `SYNC_PROTECTION_OFF` and restart the producer as soon as the consumer has finished its initial sync.
 
 ## Gzip Compression
 
