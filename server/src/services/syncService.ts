@@ -25,12 +25,15 @@ class SyncAuthError extends Error {
 }
 
 // ── Callback registry (producer side) ────────────────────────────────────────
-// Stores callback URLs registered by consumers via ?callback= on batch-download.
+// Stores callback URLs registered by consumers via ?callback= on /api/browse.
 // When new check results are available, notifyCallbacks() fires all registered URLs.
 const registeredCallbacks = new Set<string>();
 
 export function registerCallback(url: string): void {
-  if (registeredCallbacks.has(url)) return;
+  if (registeredCallbacks.has(url)) {
+    logger.debug({ url }, 'Sync callback already registered (skipping duplicate)');
+    return;
+  }
   registeredCallbacks.add(url);
   logger.info({ url }, 'Sync callback registered');
 }
