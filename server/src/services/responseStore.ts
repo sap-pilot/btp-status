@@ -66,12 +66,35 @@ export async function saveResponse(
 
 export async function listResponseFiles(
   serviceName: string,
-  range: { hours: number } | { fromMs: number; untilMs: number } | { tag: 'starred' },
+  range: { hours: number } | { fromMs: number; untilMs: number } | { tag: 'starred' } | { since: number },
 ): Promise<HistoryFile[]> {
   const dir = join(config.RESPONSE_DIR, sanitizeName(serviceName));
   try {
     const files = await readdir(dir);
     const fileSet = new Set(files);
+
+    // mtime-based delta: stat every JSON concurrently and return those modified since the timestamp
+    if ('since' in range) {
+      const { since } = range;
+      const hits = await Promise.all(
+        files.map(async (f): Promise<HistoryFile | null> => {
+          if (!f.endsWith('.json') || f.endsWith('.retry.json')) return null;
+          const meta = parseFilename(f);
+          if (!meta) return null;
+          try {
+            const info = await stat(join(dir, f));
+            if (info.mtimeMs < since) return null;
+            const pngNew = f.replace(/\.json$/, '.screenshot.png');
+            const pngOld = f.replace(/\.json$/, '.png');
+            const pngFile = fileSet.has(pngNew) ? pngNew : fileSet.has(pngOld) ? pngOld : null;
+            return pngFile ? { ...meta, screenshotFile: pngFile } : meta;
+          } catch { return null; }
+        }),
+      );
+      return (hits.filter((f): f is HistoryFile => f !== null))
+        .sort((a, b) => b.timestamp - a.timestamp);
+    }
+
     const starredOnly = 'tag' in range;
     let fromMs: number;
     let untilMs: number;

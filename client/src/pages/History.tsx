@@ -185,13 +185,16 @@ export default function History() {
   const fetchHistory = useCallback(() => {
     setLoading(true);
     setError(null);
-    lastFetchTsRef.current = Date.now();
     fetch(`/api/history/${encodeURIComponent(name)}?${effectiveQueryString}`)
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json() as Promise<string[]>;
+        return r.json() as Promise<{ lastModified: number; files: string[] }>;
       })
-      .then(d => { setFiles(d.map(fn => parseFilename(fn) ?? { filename: fn + '.json', overallStatus: 200 as const })); setLastChecked(new Date()); })
+      .then(({ lastModified, files: d }) => {
+        lastFetchTsRef.current = lastModified;
+        setFiles(d.map(fn => parseFilename(fn) ?? { filename: fn + '.json', overallStatus: 200 as const }));
+        setLastChecked(new Date());
+      })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false));
   }, [name, effectiveQueryString]);
@@ -199,19 +202,23 @@ export default function History() {
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
 
   const fetchDelta = useCallback(() => {
-    const since = lastFetchTsRef.current - 5_000;
-    lastFetchTsRef.current = Date.now();
+    const since = lastFetchTsRef.current;
     fetch(`/api/history/${encodeURIComponent(name)}?since=${since}`)
-      .then(r => r.ok ? r.json() as Promise<string[]> : null)
-      .then(d => {
+      .then(r => r.ok ? r.json() as Promise<{ lastModified: number; files: string[] }> : null)
+      .then(data => {
+        if (data === null) return;
+        lastFetchTsRef.current = data.lastModified;
         setLastChecked(new Date());
-        if (!d || d.length === 0) return;
-        const newFiles = d.map(fn => parseFilename(fn) ?? { filename: fn + '.json', overallStatus: 200 as const });
+        if (data.files.length === 0) return;
+        const incoming = data.files.map(fn => parseFilename(fn) ?? { filename: fn + '.json', overallStatus: 200 as const });
         setFiles(prev => {
-          const known = new Set(prev.map(f => f.filename));
-          const unique = newFiles.filter(f => !known.has(f.filename));
-          if (unique.length === 0) return prev;
-          return [...unique, ...prev];
+          const toCanonical = (fn: string) => fn.replace('.starred.', '.');
+          const incomingNames = new Set(incoming.map(f => f.filename));
+          const incomingCanonicals = new Set(incoming.map(f => toCanonical(f.filename)));
+          const kept = prev.filter(f =>
+            !incomingNames.has(f.filename) && !incomingCanonicals.has(toCanonical(f.filename)),
+          );
+          return [...incoming, ...kept].sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
         });
       })
       .catch(() => null);
