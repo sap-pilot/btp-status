@@ -618,6 +618,14 @@ cf login -a https://api.cf.<region>.hana.ondemand.com
 cf target -o <org> -s <space>
 ```
 
+> **Dependency install (once, or after `package.json` / `package-lock.json` changes)**
+> `npm ci` is intentionally omitted from `mta.yaml` to keep iterative MTA builds fast — running it on every `mbt build` adds ~1–2 minutes even when nothing in `package.json` has changed.
+> Run it manually before your first build, and again whenever you add, remove, or update a dependency:
+>
+> ```bash
+> npm install       # or: npm ci
+> ```
+
 | Script | What it does |
 |--------|-------------|
 | `npm run bd` | Build MTA archive + standard deploy (full pipeline) |
