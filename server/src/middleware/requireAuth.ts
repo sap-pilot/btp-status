@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { getXsuaaConfig, readSessionFromRequest } from '../services/authService.js';
 import type { SessionPayload } from '../services/authService.js';
 import { getSyncKey } from '../services/configService.js';
+import { logger } from '../logger.js';
 
 export interface AuthRequest extends Request {
   authSession?: SessionPayload;
@@ -28,7 +29,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
  * Allows the request if:
  *   - No sync key is configured (open access)
  *   - The request originates from loopback (127.0.0.1 / ::1) — local dev
- *   - The request carries valid HMAC-signed headers (x-sync-ts + x-sync-sig) within a 5-minute window
+ *   - The request carries valid HMAC-signed headers (x-sync-ts + x-sync-sig) within a 1-minute window
  *   - The request carries a valid XSUAA session cookie
  * Otherwise responds 401.
  */
@@ -42,11 +43,15 @@ export function requireSyncAuth(req: Request, res: Response, next: NextFunction)
   if (typeof ts === 'string' && typeof sig === 'string') {
     const tsNum = parseInt(ts, 10);
     const now = Math.floor(Date.now() / 1000);
-    if (!isNaN(tsNum) && Math.abs(now - tsNum) <= 300) {
+    const skew = isNaN(tsNum) ? Infinity : Math.abs(now - tsNum);
+    if (skew > 60) {
+      logger.warn({ skewSec: skew, ip, path: req.path }, 'Sync auth rejected: timestamp skew exceeds 60 s');
+    } else {
       const expected = createHmac('sha256', syncKey).update(ts).digest('hex');
       const expBuf = Buffer.from(expected);
       const sigBuf = Buffer.from(sig);
       if (expBuf.length === sigBuf.length && timingSafeEqual(expBuf, sigBuf)) { next(); return; }
+      logger.warn({ ip, path: req.path }, 'Sync auth rejected: HMAC signature mismatch');
     }
   }
   const x = getXsuaaConfig();

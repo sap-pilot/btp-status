@@ -558,7 +558,7 @@ The key is **never transmitted in plaintext**. Instead, every sync request carri
 - `x-sync-ts` — the sender's current Unix timestamp in seconds
 - `x-sync-sig` — `HMAC-SHA256(timestamp, SYNC_KEY)` as a hex digest
 
-The server verifies the signature with `timingSafeEqual` and rejects requests whose timestamp falls outside a ±5-minute window, preventing replay attacks.
+The server verifies the signature with `timingSafeEqual` and rejects requests whose timestamp falls outside a ±1-minute window, preventing replay attacks.
 
 When a sync key is configured:
 - `GET /api/browse`, `GET /api/download`, `POST /api/batch-download`, and `GET /api/download-trigger` all require either valid HMAC signature headers **or** a valid XSUAA session cookie
