@@ -555,7 +555,7 @@ export default function Overview() {
               onClick={statusFilter ? () => applyStatusFilter(null) : undefined}
               title={statusFilter ? 'Clear status filter' : undefined}
             >
-              <CardContent className="pt-4">
+              <CardContent className="pt-4 text-center">
                 <div className="text-base sm:text-2xl font-bold">{totalChecks}</div>
                 <div className="text-xs text-muted-foreground mt-1">Total Checks</div>
               </CardContent>
@@ -565,7 +565,7 @@ export default function Overview() {
               onClick={failedChecks > 0 ? () => applyStatusFilter(statusFilter === 'failed' ? null : 'failed') : undefined}
               title={failedChecks > 0 ? (statusFilter === 'failed' ? 'Clear filter' : 'Show completely failed only') : undefined}
             >
-              <CardContent className="pt-4">
+              <CardContent className="pt-4 text-center">
                 <div className={`text-base sm:text-2xl font-bold ${failedChecks > 0 ? 'text-red-500' : ''}`}>{failedChecks}</div>
                 <div className="text-xs text-muted-foreground mt-1">Completely Failed</div>
               </CardContent>
@@ -575,7 +575,7 @@ export default function Overview() {
               onClick={partiallyFailedChecks > 0 ? () => applyStatusFilter(statusFilter === 'partial' ? null : 'partial') : undefined}
               title={partiallyFailedChecks > 0 ? (statusFilter === 'partial' ? 'Clear filter' : 'Show partially failed only') : undefined}
             >
-              <CardContent className="pt-4">
+              <CardContent className="pt-4 text-center">
                 <div className={`text-base sm:text-2xl font-bold ${partiallyFailedChecks > 0 ? 'text-orange-400' : ''}`}>{partiallyFailedChecks}</div>
                 <div className="text-xs text-muted-foreground mt-1">Partially Failed</div>
               </CardContent>
@@ -585,7 +585,7 @@ export default function Overview() {
               onClick={(!auth.enabled || auth.loggedIn) ? () => void runSync() : undefined}
               title={(!auth.enabled || auth.loggedIn) ? 'Click to sync' : undefined}
             >
-              <CardContent className="pt-4">
+              <CardContent className="pt-4 text-center">
                 <div className={`text-base sm:text-2xl font-bold tabular-nums${syncing ? ' opacity-50' : ''}`}>
                   {lastRefresh.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
                 </div>

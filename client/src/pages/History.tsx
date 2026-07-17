@@ -773,7 +773,7 @@ export default function History() {
             onClick={clearFilters}
             title="Clear all filters"
           >
-            <CardContent className="pt-4">
+            <CardContent className="pt-4 text-center">
               <div className="text-base sm:text-2xl font-bold">{files.length}</div>
               <div className="text-xs text-muted-foreground mt-1">Total Checks</div>
             </CardContent>
@@ -783,7 +783,7 @@ export default function History() {
             onClick={failedCount > 0 ? () => { const next = filterStatus === 'failed' ? 'all' : 'failed'; setFilterStatus(next); setSearchParam({ status: next === 'all' ? null : next }); } : undefined}
             title={failedCount > 0 ? (filterStatus === 'failed' ? 'Clear filter' : 'Show completely failed checks') : undefined}
           >
-            <CardContent className="pt-4">
+            <CardContent className="pt-4 text-center">
               <div className={`text-base sm:text-2xl font-bold ${failedCount > 0 ? 'text-red-500' : ''}`}>{failedCount}</div>
               <div className="text-xs text-muted-foreground mt-1">Completely Failed</div>
             </CardContent>
@@ -793,7 +793,7 @@ export default function History() {
             onClick={partiallyFailedCount > 0 ? () => { const next = filterStatus === 'partial' ? 'all' : 'partial'; setFilterStatus(next); setSearchParam({ status: next === 'all' ? null : next }); } : undefined}
             title={partiallyFailedCount > 0 ? (filterStatus === 'partial' ? 'Clear filter' : 'Show partially failed checks (initial failed, retry succeeded)') : undefined}
           >
-            <CardContent className="pt-4">
+            <CardContent className="pt-4 text-center">
               <div className={`text-base sm:text-2xl font-bold ${partiallyFailedCount > 0 ? 'text-orange-400' : ''}`}>{partiallyFailedCount}</div>
               <div className="text-xs text-muted-foreground mt-1">Partially Failed</div>
             </CardContent>
@@ -803,7 +803,7 @@ export default function History() {
             onClick={(!auth.enabled || auth.loggedIn) ? () => void runSync() : undefined}
             title={(!auth.enabled || auth.loggedIn) ? 'Click to sync' : undefined}
           >
-            <CardContent className="pt-4">
+            <CardContent className="pt-4 text-center">
               <div className={`text-base sm:text-2xl font-bold tabular-nums${syncing ? ' opacity-50' : ''}`}>
                 {lastChecked.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
               </div>
