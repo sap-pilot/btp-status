@@ -255,8 +255,17 @@ export default function Overview() {
     [summaries],
   );
 
-  const totalServices = data.length;
-  const healthyServices = data.filter(s => (summaryMap[s.name] ?? null) !== 'error').length;
+  const endpointStatuses = data.flatMap(svc =>
+    svc.endpoints.map((ep, ei) => {
+      const epSlug = slugify(ep.name ?? '');
+      const epFiles = svc.history.filter(f =>
+        f.endpointSlug !== undefined ? f.endpointSlug === epSlug : f.endpointIndex === ei,
+      );
+      return getEndpointNodeStatus(epFiles);
+    }),
+  );
+  const totalEndpoints = endpointStatuses.length;
+  const healthyEndpoints = endpointStatuses.filter(st => st !== 'error').length;
   const anyCurrentlyFailing = summaries.some(s => s.rangeStatus === 'error');
   const anyImperfect = summaries.some(s => s.rangeStatus === 'warning');
 
@@ -393,8 +402,9 @@ export default function Overview() {
                 anyImperfect ? 'border-yellow-600 text-yellow-400' :
                 'bg-green-600 hover:bg-green-600 border-green-600 text-white'
               }
+              title={`${healthyEndpoints} out of ${totalEndpoints} endpoints are healthy (for yellow status — some previous check failed but latest was successful)`}
             >
-              {healthyServices}/{totalServices} healthy
+              {healthyEndpoints}/{totalEndpoints} healthy
             </Badge>
             <Select
               value={range.mode === 'dateRange' ? '' : String(range.hours)}
@@ -468,8 +478,9 @@ export default function Overview() {
                     anyImperfect ? 'border-yellow-600 text-yellow-400' :
                     'bg-green-600 hover:bg-green-600 border-green-600 text-white'
                   }
+                  title={`${healthyEndpoints} out of ${totalEndpoints} endpoints are healthy (for yellow status — some previous check failed but latest was successful)`}
                 >
-                  {healthyServices}/{totalServices} healthy
+                  {healthyEndpoints}/{totalEndpoints} healthy
                 </Badge>
               </div>
               <div className="flex items-center gap-2">
