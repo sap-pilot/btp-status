@@ -3,7 +3,7 @@ import { getAllServices, getLandscapes, getSites } from '../services/configServi
 import { listResponseFiles, readResponseFile, readRawResponseFile, readScreenshotFile, readConsoleLogFile, readContentFile, browseResponseFiles, starResponseFile } from '../services/responseStore.js';
 import { buildZip } from '../services/zipBuilder.js';
 import { checkService } from '../services/healthCheckService.js';
-import { syncFromRemote, handleDownloadTrigger, registerCallback } from '../services/syncService.js';
+import { syncFromRemote, handleDownloadTrigger, registerCallback, notifyCallbacks } from '../services/syncService.js';
 import { getEvaluationMode, setEvaluationMode, getIntervalOverride, setIntervalOverride } from '../services/overrideService.js';
 import { rescheduleService } from '../services/schedulerService.js';
 import { getService } from '../services/configService.js';
@@ -91,7 +91,9 @@ router.get('/check/:name', requireAuth, async (req, res, next) => {
 
 router.get('/history/:name', async (req, res, next) => {
   try {
-    const range = parseTimeRangeQuery(req.query);
+    const range = req.query['tag'] === 'starred'
+      ? ({ tag: 'starred' } as const)
+      : parseTimeRangeQuery(req.query);
     const files = await listResponseFiles(req.params.name, range);
     res.json(files.map(f => f.filename.replace(/\.json$/, '')));
   } catch (err) {
@@ -117,7 +119,10 @@ router.post('/star/:name/:filename', requireAuth, async (req, res, next) => {
       res.status(400).json({ error: 'star must be a boolean' });
       return;
     }
+    const user = (req as AuthRequest).authSession ? userLabel((req as AuthRequest).authSession!) : 'anon';
     await starResponseFile(serviceName, filename, star);
+    logger.info({ service: serviceName, filename, star, user, from: req.ip }, star ? 'Response file starred' : 'Response file unstarred');
+    notifyCallbacks();
     res.json({ ok: true });
   } catch (err) {
     next(err);

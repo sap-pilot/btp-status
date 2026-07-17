@@ -43,6 +43,7 @@ const HOUR_OPTIONS = [
   { value: '48', label: 'Last 48 hours' },
   { value: '72', label: 'Last 72 hours' },
   { value: 'range', label: 'Date Range…' },
+  { value: 'starred', label: 'All Time Starred' },
 ];
 
 const SCHEDULE_OPTIONS = [
@@ -95,7 +96,9 @@ export default function History() {
   const isMobile = windowWidth < 640;
 
   const { range, setRange: setRangeBase, queryString } = useTimeRange(location.search);
+  const [starredMode, setStarredMode] = useState(false);
   function setRange(next: Parameters<typeof setRangeBase>[0]) {
+    setStarredMode(false);
     setRangeBase(next);
     const sp = new URLSearchParams(window.location.search);
     if (next.mode === 'hours') {
@@ -177,11 +180,13 @@ export default function History() {
       .catch(() => null);
   }, [name]);
 
+  const effectiveQueryString = starredMode ? 'tag=starred' : queryString;
+
   const fetchHistory = useCallback(() => {
     setLoading(true);
     setError(null);
     lastFetchTsRef.current = Date.now();
-    fetch(`/api/history/${encodeURIComponent(name)}?${queryString}`)
+    fetch(`/api/history/${encodeURIComponent(name)}?${effectiveQueryString}`)
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json() as Promise<string[]>;
@@ -189,7 +194,7 @@ export default function History() {
       .then(d => { setFiles(d.map(fn => parseFilename(fn) ?? { filename: fn + '.json', overallStatus: 200 as const })); setLastChecked(new Date()); })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false));
-  }, [name, queryString]);
+  }, [name, effectiveQueryString]);
 
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
 
@@ -389,8 +394,12 @@ export default function History() {
     setFilterLocation('all');
     setFilterStatus('all');
     setFilterTag('all');
+    setStarredMode(false);
     setSearchParam({ endpoint: null, location: null, status: null, tag: null });
   }
+
+  const canStar = !auth.enabled || auth.loggedIn;
+  const starDisabledTooltip = 'Log in to star/unstar response files';
 
   async function toggleStar(f: HistoryFile) {
     const newStar = !f.starred;
@@ -577,14 +586,15 @@ export default function History() {
             )}
 
             <Select
-              value={range.mode === 'dateRange' ? '' : String(range.hours)}
+              value={starredMode ? 'starred' : (range.mode === 'dateRange' ? '' : String(range.hours))}
               onValueChange={v => {
-                if (v === 'range') { setDatePickerOpen(true); }
+                if (v === 'starred') { setStarredMode(true); setFilterTag('starred'); setSearchParam({ tag: 'starred', hours: null }); }
+                else if (v === 'range') { setDatePickerOpen(true); }
                 else setRange({ mode: 'hours', hours: Number(v) });
               }}
             >
               <SelectTrigger className="w-36 h-8 text-xs">
-                {range.mode === 'dateRange'
+                {!starredMode && range.mode === 'dateRange'
                   ? <span className="truncate">{fmtDateRange(range.fromDate, range.untilDate)}</span>
                   : <SelectValue />
                 }
@@ -678,14 +688,15 @@ export default function History() {
               )}
               <div className="flex items-center gap-2">
                 <Select
-                  value={range.mode === 'dateRange' ? '' : String(range.hours)}
+                  value={starredMode ? 'starred' : (range.mode === 'dateRange' ? '' : String(range.hours))}
                   onValueChange={v => {
-                    if (v === 'range') { setDatePickerOpen(true); setMenuOpen(false); }
+                    if (v === 'starred') { setStarredMode(true); setFilterTag('starred'); setSearchParam({ tag: 'starred', hours: null }); setMenuOpen(false); }
+                    else if (v === 'range') { setDatePickerOpen(true); setMenuOpen(false); }
                     else setRange({ mode: 'hours', hours: Number(v) });
                   }}
                 >
                   <SelectTrigger className="flex-1 h-9 text-xs">
-                    {range.mode === 'dateRange'
+                    {!starredMode && range.mode === 'dateRange'
                       ? <span className="truncate">{fmtDateRange(range.fromDate, range.untilDate)}</span>
                       : <SelectValue />
                     }
@@ -1036,11 +1047,21 @@ export default function History() {
                       </TableCell>
                       <TableCell className="w-8 pr-3 text-right">
                         <button
-                          onClick={e => { e.stopPropagation(); void toggleStar(f); }}
-                          className={`p-0.5 transition-colors ${f.starred ? 'text-yellow-400 hover:text-yellow-300' : 'text-muted-foreground/40 hover:text-yellow-400'}`}
-                          title={f.starred ? 'Unstar this record' : 'Star this record (retained indefinitely)'}
+                          onClick={e => { e.stopPropagation(); if (canStar) void toggleStar(f); }}
+                          title={canStar
+                            ? (f.starred ? 'Unstar this record' : 'Star this record (retained indefinitely)')
+                            : starDisabledTooltip}
+                          className={`p-0.5 transition-colors ${
+                            canStar
+                              ? f.starred
+                                ? 'text-yellow-400 hover:text-yellow-300 cursor-pointer'
+                                : 'text-muted-foreground/40 hover:text-yellow-400 cursor-pointer'
+                              : f.starred
+                                ? 'text-yellow-400/50 cursor-not-allowed'
+                                : 'text-muted-foreground/20 cursor-not-allowed'
+                          }`}
                         >
-                          <Star className={`h-3.5 w-3.5 ${f.starred ? 'fill-yellow-400' : ''}`} />
+                          <Star className={`h-3.5 w-3.5 ${f.starred ? 'fill-yellow-400' : ''} ${!canStar && f.starred ? 'opacity-50' : ''}`} />
                         </button>
                       </TableCell>
                     </TableRow>
