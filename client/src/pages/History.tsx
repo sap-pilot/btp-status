@@ -202,7 +202,7 @@ export default function History() {
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
 
   const fetchDelta = useCallback(() => {
-    const since = lastFetchTsRef.current;
+    const since = lastFetchTsRef.current - 5_000;
     fetch(`/api/history/${encodeURIComponent(name)}?since=${since}`)
       .then(r => r.ok ? r.json() as Promise<{ lastModified: number; files: string[] }> : null)
       .then(data => {

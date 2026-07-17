@@ -138,6 +138,7 @@ router.get('/overview', async (req, res, next) => {
   try {
     const range = parseTimeRangeQuery(req.query);
     const services = getAllServices();
+    const lastModified = Date.now();
     const result = await Promise.all(
       services.map(async s => {
         const history = await listResponseFiles(s.name, range);
@@ -148,7 +149,7 @@ router.get('/overview', async (req, res, next) => {
         return { ...s, endpoints: safeEndpoints, history: safeHistory };
       }),
     );
-    res.json(result);
+    res.json({ lastModified, services: result });
   } catch (err) {
     next(err);
   }
