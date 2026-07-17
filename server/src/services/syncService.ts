@@ -2,12 +2,13 @@ import { get as httpGet, request as httpRequest } from 'node:http';
 import { get as httpsGet, request as httpsRequest } from 'node:https';
 import { gunzip } from 'node:zlib';
 import { promisify } from 'node:util';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, utimes } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHmac } from 'node:crypto';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
-import { browseResponseFiles, sanitizeName } from './responseStore.js';
+import { browseResponseFiles, resolveSyncDuplicates, sanitizeName } from './responseStore.js';
+import type { BrowseFile } from './responseStore.js';
 import { extractZip } from './zipBuilder.js';
 import { getSyncKey, getAllServices } from './configService.js';
 import { emit } from './liveEvents.js';
@@ -322,16 +323,29 @@ export async function syncFromRemote(
     const browseUrl = browseQs ? `${remoteBase}/api/browse?${browseQs}` : `${remoteBase}/api/browse`;
     lastBrowseTs = Date.now();
     const { buf: browseBuf } = await fetchRaw(browseUrl, syncKeyHeader());
-    const { folders } = JSON.parse(browseBuf.toString('utf-8')) as { folders: Record<string, string[]> };
+    // Support legacy servers that return string[] instead of BrowseFile[]; mtime will be 0 (falsy) for those entries
+    const rawBrowse = JSON.parse(browseBuf.toString('utf-8')) as { folders: Record<string, (string | BrowseFile)[]> };
+    const folders: Record<string, BrowseFile[]> = {};
+    for (const [folder, items] of Object.entries(rawBrowse.folders)) {
+      folders[folder] = items.map(item => (typeof item === 'string' ? { name: item, mtime: 0 } : item));
+    }
 
     const localFolders = await browseResponseFiles();
 
+    // Build a map of remote file path → mtime for post-download mtime restoration
+    const remoteMtimes = new Map<string, number>();
+    for (const [folder, files] of Object.entries(folders)) {
+      for (const f of files) {
+        remoteMtimes.set(`${folder}/${f.name}`, f.mtime);
+      }
+    }
+
     const missing: string[] = [];
     for (const [folder, files] of Object.entries(folders)) {
-      const localSet = new Set(localFolders[folder] ?? []);
+      const localSet = new Set((localFolders[folder] ?? []).map(f => f.name));
       for (const f of files) {
-        if (localSet.has(f)) continue;
-        missing.push(`${folder}/${f}`);
+        if (localSet.has(f.name)) continue;
+        missing.push(`${folder}/${f.name}`);
       }
     }
 
@@ -385,6 +399,36 @@ export async function syncFromRemote(
       }
       logger.debug({ done: Math.min(i + batchSize, missing.length), total: missing.length }, 'Sync batch complete');
     }
+
+    // Restore remote mtimes on all downloaded files so future delta syncs can detect
+    // star/unstar renames by mtime rather than filename timestamp alone
+    await Promise.all(
+      missing.map(async (filePath) => {
+        const remoteMtime = remoteMtimes.get(filePath);
+        if (!remoteMtime) return;
+        const slash = filePath.indexOf('/');
+        const folder = filePath.slice(0, slash);
+        const filename = filePath.slice(slash + 1);
+        const localPath = join(config.RESPONSE_DIR, folder, filename);
+        const mt = new Date(remoteMtime);
+        try { await utimes(localPath, mt, mt); } catch { /* ignore */ }
+      }),
+    );
+
+    // Resolve starred/unstarred duplicates that appeared due to remote star operations
+    const downloadedByFolder = new Map<string, string[]>();
+    for (const fp of missing) {
+      const slash = fp.indexOf('/');
+      const folder = fp.slice(0, slash);
+      const filename = fp.slice(slash + 1);
+      if (!downloadedByFolder.has(folder)) downloadedByFolder.set(folder, []);
+      downloadedByFolder.get(folder)!.push(filename);
+    }
+    await Promise.all(
+      [...downloadedByFolder.entries()].map(([folder, files]) =>
+        resolveSyncDuplicates(folder, files),
+      ),
+    );
 
     const stats: SyncStats = {
       files: missing.length,

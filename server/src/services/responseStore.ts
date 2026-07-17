@@ -1,8 +1,15 @@
-import { mkdir, writeFile, readdir, readFile, rename, stat } from 'node:fs/promises';
+import { mkdir, writeFile, readdir, readFile, rename, stat, utimes, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { config } from '../config.js';
 import { getCity } from './geoService.js';
+import { logger } from '../logger.js';
 import type { ResponseRecord, HistoryFile } from '../types/index.js';
+
+export interface BrowseFile {
+  name: string;
+  /** File last-modified time in Unix milliseconds. */
+  mtime: number;
+}
 
 /** UTC timestamp string: yyyyMMdd-HHmmss */
 function formatTimestamp(d: Date): string {
@@ -59,18 +66,27 @@ export async function saveResponse(
 
 export async function listResponseFiles(
   serviceName: string,
-  range: { hours: number } | { fromMs: number; untilMs: number },
+  range: { hours: number } | { fromMs: number; untilMs: number } | { tag: 'starred' },
 ): Promise<HistoryFile[]> {
   const dir = join(config.RESPONSE_DIR, sanitizeName(serviceName));
   try {
     const files = await readdir(dir);
     const fileSet = new Set(files);
-    const fromMs = 'hours' in range ? Date.now() - range.hours * 3_600_000 : range.fromMs;
-    const untilMs = 'hours' in range ? Infinity : range.untilMs;
+    const starredOnly = 'tag' in range;
+    let fromMs: number;
+    let untilMs: number;
+    if (starredOnly) {
+      fromMs = 0; untilMs = Infinity;
+    } else if ('hours' in range) {
+      fromMs = Date.now() - range.hours * 3_600_000; untilMs = Infinity;
+    } else {
+      fromMs = range.fromMs; untilMs = range.untilMs;
+    }
     const results: HistoryFile[] = [];
     for (const f of files) {
       if (!f.endsWith('.json')) continue;
       if (f.endsWith('.retry.json')) continue;  // exclude retry files from history
+      if (starredOnly && !f.includes('.starred.')) continue;
       const meta = parseFilename(f);
       if (meta && meta.timestamp >= fromMs && meta.timestamp <= untilMs) {
         // Support both old (*.png) and new (*.screenshot.png) screenshot naming
@@ -187,35 +203,47 @@ export function sanitizeName(name: string): string {
 }
 
 /** Extract the UTC timestamp from a response filename prefix (yyyyMMdd-HHmmss_). Returns 0 if unparseable. */
-function filenameTimestamp(filename: string): number {
+export function filenameTimestamp(filename: string): number {
   const m = filename.match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})_/);
   if (!m) return 0;
   return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
 }
 
-export async function browseResponseFiles(since?: number): Promise<Record<string, string[]>> {
-  const result: Record<string, string[]> = {};
+/**
+ * Lists all response files in all service folders, with their last-modified timestamps.
+ * When `since` is provided, only files whose mtime >= since are returned (mtime-based,
+ * so starred/unstarred renames appear in the next delta browse).
+ */
+export async function browseResponseFiles(since?: number): Promise<Record<string, BrowseFile[]>> {
+  const result: Record<string, BrowseFile[]> = {};
   try {
     const entries = await readdir(config.RESPONSE_DIR, { withFileTypes: true });
     await Promise.all(
       entries
         .filter(e => e.isDirectory())
-        .map(async (dir) => {
+        .map(async (dirEntry) => {
           try {
-            let files = await readdir(join(config.RESPONSE_DIR, dir.name));
-            files = files.filter(f =>
+            const names = await readdir(join(config.RESPONSE_DIR, dirEntry.name));
+            const filtered = names.filter(f =>
               f.endsWith('.json') || f.endsWith('.png') ||
               f.endsWith('.log') || f.endsWith('.html'),
             );
-            if (since && since > 0) {
-              files = files.filter(f => {
-                const ts = filenameTimestamp(f);
-                return ts === 0 || ts >= since; // include unparseable files conservatively
-              });
-            }
-            result[dir.name] = files.sort();
+            const withMtime = await Promise.all(
+              filtered.map(async (name) => {
+                try {
+                  const info = await stat(join(config.RESPONSE_DIR, dirEntry.name, name));
+                  return { name, mtime: info.mtimeMs };
+                } catch {
+                  return { name, mtime: 0 };
+                }
+              }),
+            );
+            result[dirEntry.name] = since && since > 0
+              ? withMtime.filter(f => f.mtime === 0 || f.mtime >= since)
+              : withMtime;
+            result[dirEntry.name].sort((a, b) => a.name.localeCompare(b.name));
           } catch {
-            result[dir.name] = [];
+            result[dirEntry.name] = [];
           }
         }),
     );
@@ -223,6 +251,67 @@ export async function browseResponseFiles(since?: number): Promise<Record<string
     // response dir doesn't exist yet
   }
   return result;
+}
+
+/**
+ * After a batch download, finds local starred/unstarred duplicate pairs (filenames
+ * identical except for `.starred.`) among files with timestamp >= the oldest filename
+ * timestamp in the newly downloaded batch, then deletes the one with the older mtime.
+ * This resolves star/unstar operations that happened on the producer since the last sync.
+ */
+export async function resolveSyncDuplicates(
+  folder: string,
+  downloadedFilenames: string[],
+): Promise<void> {
+  if (downloadedFilenames.length === 0) return;
+
+  // Find the oldest filename timestamp among downloaded files
+  let minTs = Infinity;
+  for (const f of downloadedFilenames) {
+    const ts = filenameTimestamp(f);
+    if (ts > 0 && ts < minTs) minTs = ts;
+  }
+  if (!isFinite(minTs)) return;
+
+  const dir = join(config.RESPONSE_DIR, folder);
+  let allFiles: string[];
+  try {
+    allFiles = await readdir(dir);
+  } catch {
+    return;
+  }
+
+  // Only check files with filename timestamp >= the oldest downloaded file
+  const candidates = allFiles.filter(f => {
+    if (!f.endsWith('.json') && !f.endsWith('.png') && !f.endsWith('.log') && !f.endsWith('.html')) return false;
+    const ts = filenameTimestamp(f);
+    return ts > 0 && ts >= minTs;
+  });
+  if (candidates.length === 0) return;
+
+  // Stat candidates for local mtime (includes mtimes just restored from remote)
+  const mtimes = new Map<string, number>();
+  await Promise.all(candidates.map(async (f) => {
+    try {
+      const info = await stat(join(dir, f));
+      mtimes.set(f, info.mtimeMs);
+    } catch { /* file may have been deleted */ }
+  }));
+
+  // Find starred/canonical pairs and delete the stale one
+  const processed = new Set<string>();
+  for (const f of candidates) {
+    if (processed.has(f) || !mtimes.has(f) || !f.includes('.starred.')) continue;
+    const canonical = f.replace('.starred.', '.');
+    if (!mtimes.has(canonical)) continue;
+    processed.add(f);
+    processed.add(canonical);
+    const toDelete = mtimes.get(f)! >= mtimes.get(canonical)! ? canonical : f;
+    try {
+      await unlink(join(dir, toDelete));
+      logger.info({ folder, deleted: toDelete }, 'Removed stale duplicate (star/unstar resolved by mtime)');
+    } catch { /* already gone */ }
+  }
 }
 
 /**
@@ -259,25 +348,30 @@ export async function starResponseFile(
     return name.replace('.starred.', '.');
   }
 
-  async function renameSafe(oldName: string, newName: string): Promise<void> {
-    try { await rename(join(dir, oldName), join(dir, newName)); } catch { /* may not exist */ }
+  const now = new Date();
+  async function renameTouchNow(oldName: string, newName: string): Promise<void> {
+    const newPath = join(dir, newName);
+    try {
+      await rename(join(dir, oldName), newPath);
+      await utimes(newPath, now, now);
+    } catch { /* may not exist */ }
   }
 
   const updates = { ...record };
 
   if (record.screenshotFile) {
     const n = transform(record.screenshotFile);
-    await renameSafe(record.screenshotFile, n);
+    await renameTouchNow(record.screenshotFile, n);
     updates.screenshotFile = n;
   }
   if (record.consoleLogFile) {
     const n = transform(record.consoleLogFile);
-    await renameSafe(record.consoleLogFile, n);
+    await renameTouchNow(record.consoleLogFile, n);
     updates.consoleLogFile = n;
   }
   if (record.contentFile) {
     const n = transform(record.contentFile);
-    await renameSafe(record.contentFile, n);
+    await renameTouchNow(record.contentFile, n);
     updates.contentFile = n;
   }
 
@@ -291,26 +385,27 @@ export async function starResponseFile(
         const retryUpdates = { ...retryRecord };
         if (retryRecord.screenshotFile) {
           const n = transform(retryRecord.screenshotFile);
-          await renameSafe(retryRecord.screenshotFile, n);
+          await renameTouchNow(retryRecord.screenshotFile, n);
           retryUpdates.screenshotFile = n;
         }
         if (retryRecord.consoleLogFile) {
           const n = transform(retryRecord.consoleLogFile);
-          await renameSafe(retryRecord.consoleLogFile, n);
+          await renameTouchNow(retryRecord.consoleLogFile, n);
           retryUpdates.consoleLogFile = n;
         }
         if (retryRecord.contentFile) {
           const n = transform(retryRecord.contentFile);
-          await renameSafe(retryRecord.contentFile, n);
+          await renameTouchNow(retryRecord.contentFile, n);
           retryUpdates.contentFile = n;
         }
         const newRetryFilename = transform(retryFile);
         await writeFile(retryPath, JSON.stringify(retryUpdates, null, 2), 'utf-8');
         await rename(retryPath, join(dir, newRetryFilename));
+        await utimes(join(dir, newRetryFilename), now, now);
         newRetryFiles.push(newRetryFilename);
       } catch {
         const newRetryFilename = transform(retryFile);
-        await renameSafe(retryFile, newRetryFilename);
+        await renameTouchNow(retryFile, newRetryFilename);
         newRetryFiles.push(newRetryFilename);
       }
     }
@@ -319,7 +414,9 @@ export async function starResponseFile(
 
   const newFilename = transform(filename);
   await writeFile(filePath, JSON.stringify(updates, null, 2), 'utf-8');
-  await rename(filePath, join(dir, newFilename));
+  const newFilePath = join(dir, newFilename);
+  await rename(filePath, newFilePath);
+  await utimes(newFilePath, now, now);
 }
 
 export async function readRawResponseFile(folder: string, filename: string): Promise<Buffer> {
