@@ -11,7 +11,7 @@ import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { getCity } from '../services/geoService.js';
 import { getXsuaaConfig, readSessionFromRequest, userLabel } from '../services/authService.js';
-import { requireAuth, requireAdmin, requireSyncAuth } from '../middleware/requireAuth.js';
+import { requireAuth, requireAdmin, requireSyncAuth, requireSyncAuthOrOpen } from '../middleware/requireAuth.js';
 import type { AuthRequest } from '../middleware/requireAuth.js';
 import type { EvaluationMode, ServiceWithHistory, ServiceSummary } from '../types/index.js';
 import { subscribe } from '../services/liveEvents.js';
@@ -265,7 +265,7 @@ router.post('/sync', requireAuth, async (req, res, next) => {
   }
 });
 
-router.post('/batch-download', requireSyncAuth, async (req, res, next) => {
+router.post('/batch-download', requireSyncAuthOrOpen, async (req, res, next) => {
   try {
     const { paths } = req.body as { paths?: unknown };
     if (!Array.isArray(paths) || paths.length === 0) {
@@ -314,7 +314,7 @@ router.get('/download-trigger', requireSyncAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-router.get('/browse', requireSyncAuth, async (req, res, next) => {
+router.get('/browse', requireSyncAuthOrOpen, async (req, res, next) => {
   try {
     const rawSince = req.query['since'];
     const since = typeof rawSince === 'string' ? parseInt(rawSince, 10) : undefined;

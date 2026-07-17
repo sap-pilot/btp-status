@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { getXsuaaConfig, readSessionFromRequest } from '../services/authService.js';
 import type { SessionPayload } from '../services/authService.js';
 import { getSyncKey } from '../services/configService.js';
+import { config } from '../config.js';
 import { logger } from '../logger.js';
 
 export interface AuthRequest extends Request {
@@ -62,6 +63,16 @@ export function requireSyncAuth(req: Request, res: Response, next: NextFunction)
   res.status(401).json({
     error: 'Unauthorized: provide valid HMAC sync signature headers (x-sync-ts, x-sync-sig) or authenticate via XSUAA',
   });
+}
+
+/**
+ * Same as requireSyncAuth but skips all validation when SYNC_PROTECTION_OFF is set.
+ * Used on /api/browse and /api/batch-download so a backup/transitory instance can
+ * pull files without needing a matching SYNC_KEY.
+ */
+export function requireSyncAuthOrOpen(req: Request, res: Response, next: NextFunction): void {
+  if (config.SYNC_PROTECTION_OFF) { next(); return; }
+  requireSyncAuth(req, res, next);
 }
 
 /** Requires admin scope. Pass-through when XSUAA is not configured. */

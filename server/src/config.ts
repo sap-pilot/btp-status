@@ -6,6 +6,8 @@ const SYNC_REMOTE_BATCH_SIZE = Math.max(1, parseInt(process.env.SYNC_REMOTE_BATC
 const SYNC_INTERVAL = Math.max(0, parseInt(process.env.SYNC_INTERVAL ?? '300', 10));
 const MAX_RESPONSE_STORAGE_DAYS = Math.max(0, parseInt(process.env.MAX_RESPONSE_STORAGE_DAYS ?? '7', 10));
 const REQUEST_TIMEOUT_MS = Math.max(1000, parseInt(process.env.REQUEST_TIMEOUT_MS ?? '30000', 10));
+/** When set to any non-empty value, /api/browse and /api/batch-download skip HMAC/XSUAA validation entirely. */
+const SYNC_PROTECTION_OFF = !!(process.env['SYNC_PROTECTION_OFF']);
 
 // Self URL for webhook callback registration. Set SELF_URL explicitly or derive from CF VCAP_APPLICATION.
 const SELF_URL = (() => {
@@ -17,4 +19,4 @@ const SELF_URL = (() => {
   } catch { return ''; }
 })();
 
-export const config = { CONFIG_FILE, PORT, RESPONSE_DIR, SYNC_REMOTE, SELF_URL, SYNC_REMOTE_BATCH_SIZE, SYNC_INTERVAL, MAX_RESPONSE_STORAGE_DAYS, REQUEST_TIMEOUT_MS };
+export const config = { CONFIG_FILE, PORT, RESPONSE_DIR, SYNC_REMOTE, SELF_URL, SYNC_REMOTE_BATCH_SIZE, SYNC_INTERVAL, MAX_RESPONSE_STORAGE_DAYS, REQUEST_TIMEOUT_MS, SYNC_PROTECTION_OFF };

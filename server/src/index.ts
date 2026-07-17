@@ -37,6 +37,9 @@ app.use(errorHandler);
 
 const server = app.listen(config.PORT, () => {
   logger.info({ port: config.PORT }, 'BTP Status server started');
+  if (config.SYNC_PROTECTION_OFF) {
+    logger.warn('SYNC_PROTECTION_OFF is active — /api/browse and /api/batch-download require no authentication');
+  }
   void initGeo();
   startScheduler();
   startHousekeepingScheduler();
