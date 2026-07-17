@@ -263,7 +263,7 @@ router.post('/sync', requireAuth, async (req, res, next) => {
   try {
     const user = (req as AuthRequest).authSession ? userLabel((req as AuthRequest).authSession!) : 'anon';
     logger.info({ from: req.ip, user }, 'On-demand sync triggered');
-    const stats = await syncFromRemote(config.SYNC_REMOTE);
+    const stats = await syncFromRemote(config.SYNC_REMOTE, { selfBaseUrl: config.SELF_URL });
     res.json({ ok: !stats.error, ...stats });
   } catch (err) {
     next(err);
