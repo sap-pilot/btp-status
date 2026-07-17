@@ -78,7 +78,7 @@ export function setLastTriggerSyncTs(ts: number): void {
 /** Fire-and-forget: queues one delta download from SYNC_REMOTE. */
 export function handleDownloadTrigger(): void {
   if (!config.SYNC_REMOTE) return;
-  if (triggerRunning) {
+  if (triggerRunning || syncInProgress) {
     if (!triggerQueued) {
       triggerQueued = true;
       logger.debug('Download trigger queued (sync already in progress)');
@@ -467,5 +467,12 @@ export async function syncFromRemote(
     };
   } finally {
     syncInProgress = false;
+    // Dispatch a queued trigger when this syncFromRemote call was the manual-sync
+    // path (triggerRunning is false). The trigger/interval paths handle this in
+    // their own finally blocks after clearing triggerRunning.
+    if (!triggerRunning && triggerQueued) {
+      triggerQueued = false;
+      void runTriggerSync();
+    }
   }
 }
