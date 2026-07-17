@@ -998,7 +998,7 @@ export default function History() {
                     <TableHead className="hidden sm:table-cell">From Location</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="hidden sm:table-cell text-right">Response Time</TableHead>
-                    <TableHead className="w-8" />
+                    <TableHead className="w-4" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1052,7 +1052,7 @@ export default function History() {
                       <TableCell className="hidden sm:table-cell text-right text-sm">
                         {f.responseTime ?? 0}ms
                       </TableCell>
-                      <TableCell className="w-8 pr-3 text-right">
+                      <TableCell className="w-4 pl-0 pr-3 text-right">
                         <button
                           onClick={e => { e.stopPropagation(); if (canStar) void toggleStar(f); }}
                           title={canStar

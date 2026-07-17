@@ -117,7 +117,7 @@ export default function LandscapeDiagram({
 
   if (!diagramText) {
     return (
-      <div className="text-xs text-muted-foreground p-6 text-center">
+      <div className="text-xs text-muted-foreground p-4 text-center">
         No diagram defined for this landscape.
       </div>
     );
