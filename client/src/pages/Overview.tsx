@@ -166,14 +166,14 @@ export default function Overview() {
     silentRefreshRef.current = false;
     if (!silent) setLoading(true);
     setError(null);
-    lastFetchTsRef.current = Date.now();
     fetch(`/api/overview?${queryString}`)
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json() as Promise<ServiceWithHistory[]>;
+        return r.json() as Promise<{ lastModified: number; services: ServiceWithHistory[] }>;
       })
-      .then(d => {
-        setData(d.map(svc => ({
+      .then(({ lastModified, services }) => {
+        lastFetchTsRef.current = lastModified;
+        setData(services.map(svc => ({
           ...svc,
           history: svc.history.map(fn => parseFilename(fn) ?? { filename: fn + '.json', overallStatus: 200 as const }),
         })));
@@ -189,21 +189,24 @@ export default function Overview() {
 
   const handleLiveUpdate = useCallback(() => {
     const since = lastFetchTsRef.current - 5_000;
-    lastFetchTsRef.current = Date.now();
     fetch(`/api/overview?since=${since}`)
-      .then(r => r.json() as Promise<ServiceWithHistory[]>)
-      .then(delta => {
-        const deltaData = delta.map(svc => ({
+      .then(r => r.json() as Promise<{ lastModified: number; services: ServiceWithHistory[] }>)
+      .then(({ lastModified, services }) => {
+        lastFetchTsRef.current = lastModified;
+        const deltaData = services.map(svc => ({
           ...svc,
           history: svc.history.map(fn => parseFilename(fn) ?? { filename: fn + '.json', overallStatus: 200 as const }),
         }));
         setData(prev => prev.map(existing => {
           const dSvc = deltaData.find(d => d.name === existing.name);
           if (!dSvc || dSvc.history.length === 0) return existing;
-          const knownNames = new Set(existing.history.map(f => f.filename));
-          const newFiles = dSvc.history.filter(f => !knownNames.has(f.filename));
-          if (newFiles.length === 0) return existing;
-          return { ...existing, history: [...newFiles, ...existing.history] };
+          const toCanonical = (fn: string) => fn.replace('.starred.', '.');
+          const incomingNames = new Set(dSvc.history.map(f => f.filename));
+          const incomingCanonicals = new Set(dSvc.history.map(f => toCanonical(f.filename)));
+          const kept = existing.history.filter(f =>
+            !incomingNames.has(f.filename) && !incomingCanonicals.has(toCanonical(f.filename)),
+          );
+          return { ...existing, history: [...dSvc.history, ...kept] };
         }));
         setLastRefresh(new Date());
       })
