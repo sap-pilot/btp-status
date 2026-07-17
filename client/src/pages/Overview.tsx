@@ -635,7 +635,7 @@ export default function Overview() {
                   }
                   return (
                     <TabsContent key={ls.name} value={ls.name}>
-                      <Suspense fallback={<div className="text-xs text-muted-foreground p-6 text-center">Loading diagram…</div>}>
+                      <Suspense fallback={<div className="text-xs text-muted-foreground p-4 text-center">Loading diagram…</div>}>
                         <LandscapeDiagram
                           diagramText={ls.diagram}
                           serviceStatuses={lsStatuses}
