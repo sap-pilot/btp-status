@@ -137,22 +137,26 @@ export default function DateRangePicker({ open, onClose, onApply, fromDate: init
           <DialogTitle className="text-sm">Select Date Range</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col sm:flex-row gap-5 sm:gap-6 pt-1">
-          <MonthCalendar
-            label="From"
-            selected={from}
-            onSelect={handleFrom}
-            min=""
-            max={until}
-          />
+          <div className="flex-1">
+            <MonthCalendar
+              label="From"
+              selected={from}
+              onSelect={handleFrom}
+              min=""
+              max={until}
+            />
+          </div>
           <div className="hidden sm:block w-px bg-border self-stretch" />
           <div className="block sm:hidden border-t border-border" />
-          <MonthCalendar
-            label="Until (inclusive)"
-            selected={until}
-            onSelect={handleUntil}
-            min={from}
-            max={today}
-          />
+          <div className="flex-1">
+            <MonthCalendar
+              label="Until (inclusive)"
+              selected={until}
+              onSelect={handleUntil}
+              min={from}
+              max={today}
+            />
+          </div>
         </div>
         <p className="text-[11px] text-muted-foreground mt-1">
           Up to <strong>{maxStorageDays} days</strong> of history is available based on the server&apos;s{' '}
