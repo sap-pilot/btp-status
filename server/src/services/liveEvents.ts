@@ -7,6 +7,43 @@ interface Subscriber {
 
 const subscribers = new Set<Subscriber>();
 
+// One pending payload per topic; first emit within a window wins, duplicates dropped.
+const pendingByTopic = new Map<string, Record<string, unknown>>();
+let flushTimer: NodeJS.Timeout | null = null;
+
+const DEBOUNCE_MS = 1_000;
+
+function flush(): void {
+  flushTimer = null;
+  if (pendingByTopic.size === 0 || subscribers.size === 0) return;
+
+  const pending = new Map(pendingByTopic);
+  pendingByTopic.clear();
+
+  for (const sub of subscribers) {
+    const matched: string[] = [];
+    for (const topic of pending.keys()) {
+      if (sub.topics.has(topic)) matched.push(topic);
+    }
+    if (matched.length === 0) continue;
+
+    // If any service-specific topic matched, skip 'global' for this subscriber —
+    // both fire on every health check and would otherwise cause a duplicate fetch.
+    const specific = matched.filter(t => t !== 'global');
+    const toSend = specific.length > 0 ? specific : matched;
+
+    for (const topic of toSend) {
+      const payload = `event: update\ndata: ${JSON.stringify(pending.get(topic)!)}\n\n`;
+      try {
+        sub.res.write(payload);
+      } catch {
+        subscribers.delete(sub);
+        break;
+      }
+    }
+  }
+}
+
 export function subscribe(res: Response, topics: string[]): () => void {
   const sub: Subscriber = { res, topics: new Set(topics) };
   subscribers.add(sub);
@@ -15,13 +52,10 @@ export function subscribe(res: Response, topics: string[]): () => void {
 
 export function emit(topic: string, data: Record<string, unknown>): void {
   if (subscribers.size === 0) return;
-  const payload = `event: update\ndata: ${JSON.stringify(data)}\n\n`;
-  for (const sub of subscribers) {
-    if (!sub.topics.has(topic)) continue;
-    try {
-      sub.res.write(payload);
-    } catch {
-      subscribers.delete(sub);
-    }
+  if (pendingByTopic.has(topic)) return; // drop duplicate within window
+  pendingByTopic.set(topic, data);
+  if (!flushTimer) {
+    flushTimer = setTimeout(flush, DEBOUNCE_MS);
+    flushTimer.unref();
   }
 }
